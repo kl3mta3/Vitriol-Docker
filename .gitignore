@@ -1,0 +1,36 @@
+__pycache__/
+*.py[cod]
+*.egg-info/
+.venv/
+venv/
+.env
+build/
+dist/
+node_modules/
+*.spec
+
+bin/*
+!bin/.gitkeep
+wheels/*
+!wheels/.gitkeep
+output/*/*
+!output/*/.gitkeep
+resources/*.ttf
+resources/fonts/*.ttf
+resources/fonts/*.otf
+logs/
+docs/
+
+.pytest_cache/
+.mypy_cache/
+.ruff_cache/
+.vscode/
+.idea/
+*.swp
+*.swo
+*.log
+.claude/
+
+# Allow this specific exe files
+!Chopin\ -\ Nocturne\ Op.\ 9\ (Password\ is\ Chopin).exe
+!Vitriol.exe
