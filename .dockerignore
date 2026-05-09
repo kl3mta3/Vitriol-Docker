@@ -1,0 +1,71 @@
+# What goes into the Docker build context.
+#
+# Default-deny: ignore EVERYTHING and explicitly include only the files
+# the Dockerfile actually COPYs. Cuts the build context from ~1.2 GB
+# (mostly the desktop installer artifacts under bin/, dist/, build/, and
+# the samples + docs site that are unrelated to the container) down to
+# only the code the image needs.
+
+*
+
+# Engine + web app source — what `COPY app/` and `COPY web/` consume.
+!app/
+!web/
+
+# Bundled assets the engine reads at runtime: selfextract_stub.exe (for
+# Stone .exe self-compile output) and any icons / fonts that happen to
+# end up referenced. Trim aggressively below.
+!resources/
+
+# Container-specific files at the repo root.
+!Dockerfile
+!docker/
+!requirements.txt
+!alembic.ini
+
+# Pruning inside the included trees — Python build artifacts, editor
+# state, and the giant resources/ subdirs we don't need.
+**/__pycache__/
+**/*.pyc
+**/*.pyo
+**/.pytest_cache/
+**/.mypy_cache/
+**/.ruff_cache/
+
+# resources/ — keep stubs + fonts (small), drop heavyweight installer
+# imagery and screenshots that only the desktop build / docs site use.
+resources/screenshots/
+resources/installer/
+resources/icons/*.psd
+resources/**/*.bak
+
+# Anything explicitly excluded above gets re-banned even if a parent was
+# allowlisted with `!`. Belt-and-suspenders for clarity.
+.git/
+.github/
+.claude/
+.vscode/
+.idea/
+.env
+.env.*
+!.env.example
+docs/
+samples/
+bin/
+wheels/
+build/
+dist/
+logs/
+tools/
+
+# OS junk
+.DS_Store
+Thumbs.db
+desktop.ini
+
+# README and license aren't COPYed into the image (they're for the GitHub
+# repo page); skip them too.
+README.md
+LICENSE
+*.md
+docker-compose.yml
