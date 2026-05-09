@@ -14,6 +14,7 @@ RUN apt-get update && apt-get install -y --no-install-recommends \
         ffmpeg \
         assimp-utils \
         libassimp5 \
+        pandoc \
         libxkbcommon0 \
         libdbus-1-3 \
         libegl1 \
