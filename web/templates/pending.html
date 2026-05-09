@@ -1,0 +1,20 @@
+{% extends "base.html" %}
+{% block title %}Awaiting approval — Vitriol{% endblock %}
+{% block content %}
+<section class="auth-card">
+  <h1 class="display">Awaiting approval</h1>
+  <p>
+    Your account is being reviewed by an administrator. You'll receive an
+    email when the decision is made.
+  </p>
+  <button class="btn btn-ghost" id="logout-btn" type="button">Sign out</button>
+</section>
+{% endblock %}
+{% block scripts %}
+<script>
+  document.getElementById('logout-btn').addEventListener('click', async () => {
+    await fetch('/api/v1/auth/logout', {method: 'POST'});
+    location.href = '/signin';
+  });
+</script>
+{% endblock %}

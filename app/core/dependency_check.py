@@ -1,7 +1,7 @@
 """First-launch dependency check.
 
 Verifies presence of FFmpeg and Assimp DLL. If missing, prompts the user
-(via dialogs.ask_install_dependency) and downloads from official sources
+(via _dialogs().ask_install_dependency) and downloads from official sources
 with checksum verification. Looks in ./bin/ and ./wheels/ first.
 
 This module is intentionally non-fatal: any uncaught error here lets the
@@ -17,8 +17,15 @@ from typing import Optional
 
 from ..utils.logger import get_logger
 from ..utils.paths import bin_dir, wheels_dir
-from ..ui import dialogs
 from .downloader import download_with_progress, ChecksumError
+
+
+def _dialogs():
+    """Lazy import: only desktop launcher (which provides the UI) calls this
+    module. The web app deliberately never calls run_checks(), so the UI
+    package can be absent at runtime without breaking engine imports."""
+    from ..ui import dialogs as d
+    return d
 
 _log = get_logger()
 
@@ -53,7 +60,7 @@ def _ensure_ffmpeg(parent) -> None:
     if find_ffmpeg() is not None:
         _log.info("ffmpeg present")
         return
-    if not dialogs.ask_install_dependency(parent, "FFmpeg", "80MB", "audio and video conversion"):
+    if not _dialogs().ask_install_dependency(parent, "FFmpeg", "80MB", "audio and video conversion"):
         _log.info("user declined ffmpeg install")
         return
     target_zip = bin_dir() / "ffmpeg-download.zip"
@@ -62,10 +69,10 @@ def _ensure_ffmpeg(parent) -> None:
         _extract_ffmpeg(target_zip)
     except ChecksumError as e:
         _log.error("ffmpeg checksum mismatch: %s", e)
-        dialogs.error(parent, "FFmpeg download failed", "Checksum verification failed. Please install FFmpeg manually.")
+        _dialogs().error(parent, "FFmpeg download failed", "Checksum verification failed. Please install FFmpeg manually.")
     except Exception as e:
         _log.exception("ffmpeg install failed")
-        dialogs.error(parent, "FFmpeg download failed", str(e))
+        _dialogs().error(parent, "FFmpeg download failed", str(e))
     finally:
         try:
             if target_zip.exists():
@@ -93,7 +100,7 @@ def _ensure_assimp(parent) -> None:
     if find_assimp() is not None:
         _log.info("assimp present")
         return
-    if not dialogs.ask_install_dependency(parent, "Assimp", "10MB", "3D model conversion"):
+    if not _dialogs().ask_install_dependency(parent, "Assimp", "10MB", "3D model conversion"):
         _log.info("user declined assimp install")
         return
     target_zip = bin_dir() / "assimp-download.zip"
@@ -102,10 +109,10 @@ def _ensure_assimp(parent) -> None:
         _extract_assimp(target_zip)
     except ChecksumError as e:
         _log.error("assimp checksum mismatch: %s", e)
-        dialogs.error(parent, "Assimp download failed", "Checksum verification failed. Please install Assimp manually.")
+        _dialogs().error(parent, "Assimp download failed", "Checksum verification failed. Please install Assimp manually.")
     except Exception as e:
         _log.exception("assimp install failed")
-        dialogs.error(parent, "Assimp download failed", str(e))
+        _dialogs().error(parent, "Assimp download failed", str(e))
     finally:
         try:
             if target_zip.exists():

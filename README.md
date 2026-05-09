@@ -4,9 +4,8 @@
 
 </div>
 
-
 <p align="center">
-<em>Visita Interiora Terrae Rectificando Invenies Occultum Lapidem
+<em>Visita Interiora Terrae Rectificando Invenies Occultum Lapidem</em>
 </p>
 
 <p align="center">
@@ -14,262 +13,103 @@
 </p>
 
 <p align="center">
-<em>Visit the interior of the earth; by rectification you will find the hidden stone.
+<em>Visit the interior of the earth; by rectification you will find the hidden stone.</em>
 </p>
 
 ---
 
 <p align="center">
-  <em>A self-contained, offline-first desktop file converter for text, audio, video, image, and 3D model formats.</em>
+  <em>Self-hostable web port of <a href="https://github.com/kl3mta3/Vitriol">Vitriol</a> — file converter with Philosopher's Stone steganographic mode, plus user accounts, role-based access, and an HTTP API.</em>
 </p>
 
 ---
 
-## What it does
+## What this is
 
-Vitriol converts files between formats across five categories — **text, images, audio, video, and 3D models** — about 60 input formats and 50 output formats covered.
+This repo packages Vitriol's conversion engine behind a FastAPI web UI and a Docker image. The desktop app remains in its [original repo](https://github.com/kl3mta3/Vitriol); this repo is the web/server flavor.
 
-It also includes a feature called **Philosopher's Stone**: drop any lossless file in, get back an output that looks like an ordinary image, audio file, video, archive, or self-extracting script — but contains the original bytes inside, recoverable byte-exact through Vitriol. Optional password protection (AES-256). Optional Verify Round-Trip safety check that refuses to commit an output unless the reverse conversion produces the original.
+You get:
 
-### Format support
+- The same conversion engine (text / images / audio / video / 3D models, ~60 input formats).
+- The same **Philosopher's Stone** mode (cross-format byte-preserving conversions, AES-256 password protection, self-extracting `.py` / `.exe` outputs).
+- A web UI styled to match the desktop app (Cinzel display font, alchemical border, drop-zone playlist).
+- User accounts with five roles — Super Admin / Admin / User / Pending / Viewer.
+- Per-user and per-role rate limits + daily conversion quotas.
+- Email + Discord notifications.
+- Google, GitHub, and generic OpenID Connect SSO (Authentik, Keycloak, Auth0, Okta, Zitadel — any OIDC-compliant IdP).
+- An HTTP API with API keys for CLI and scripting.
+- Per-user theme picker — six built-in themes (default purple, crimson, verdant, cobalt, parchment, obsidian).
+- A single Docker image with a SQLite volume by default (Postgres swap is one env var).
 
-- **Text** — txt, md, html, json, xml, yaml, ini, log, csv, tsv, xlsx, docx, pdf, epub, rtf, pptx, odt
-- **Images** — png, jpg, webp, bmp, tiff, gif, ico, tga, ppm/pgm/pbm, dds, heic, svg
-- **Audio** — mp3, wav, flac, ogg, opus, m4a, aac, wma, aiff, alac, ac3, amr, au, mka
-- **Video** — mp4, mkv, webm, avi, mov, wmv, flv, mpg, 3gp, ts, vob, ogv
-- **3D models** — glb, gltf, obj, stl, fbx, ply, dae, 3ds
+## Quick start
 
-<br></br>
-
-## Install & run
-
----
-
-### From Clone:
-
-_**(Requires Python installed)**_<br>
-
-1. Clone Repo
 ```bash
-git clone https://github.com/kl3mta3/Vitriol.git
+cp .env.example .env
+# Edit .env — set VITRIOL_SECRET_KEY (everything else is optional).
+docker compose up --build
 ```
 
-2. Run
-   
-```
-Vitriol.exe 
-```
-or 
-```
-Launcher.py
-```
+Then open `http://localhost:8000/`. The app routes everything to **/setup** until a super admin exists; fill in the form and you'll be signed in directly to the Server tab where SMTP, OAuth providers, sign-up policy, etc. live.
 
-That's the entire setup. On first launch the launcher installs four Python packages (`PySide6`, `Pillow`, `striprtf`, `cryptography`), downloads FFmpeg + Assimp + bundled fonts to local folders, probes for hardware video encoders, and hands off to the main app. Subsequent launches are instant.
+For automated deployments, you can pre-bake the super admin via env vars (`VITRIOL_SUPERADMIN_*` in `.env.example`); if you do, /setup self-disables and never appears.
 
----
+## CLI
 
-### From Zip:
-_**(NO Python install required)**_<br>
-
-1. Download Vitriol 1.1.0 — Portable Edition.zip here:( [Vitriol 1.1.0 — Portable Edition](https://github.com/kl3mta3/Vitriol/releases/download/Vitriol_1.1.0_Portable_Edition/Vitriol.1.1.0.Portable.Edition.zip)).
-2. Unzip Vitriol 1.1.0 — Portable Edition.zip
-3. Run
-   
-```
-Vitriol.exe
-```
-That's the entire setup. Everything is bundled already!
-
----
-
-### Fron Installer:
-_**(NO Python install required)**_ <br>
-
-1. Download VitriolSetup-1.1.0.exe here:( [VitriolSetup-1.1.0.exe](https://github.com/kl3mta3/Vitriol/releases/download/VitriolSetup_1.1.0_Windows/VitriolSetup-1.1.0.exe)).
-2. Run
-   
-```
-VitriolSetup-1.1.0.exe
+```bash
+python -m web.cli.vitriol_cli login --url http://localhost:8000 --key vit_xxx_yyy
+python -m web.cli.vitriol_cli convert sample.pdf --to .png --stone --password hunter2
+python -m web.cli.vitriol_cli jobs
 ```
 
-That's the entire setup. Everything is bundled already!
+API keys are issued from the Profile tab in the web UI and shown exactly once.
 
----
+## Roles (BARC)
 
-When packaged as the installer (`VitriolSetup-x.y.z.exe` from `tools/build_installer.py`), end users don't need Python at all — everything is bundled.
+| Capability | Super Admin | Admin | User | Pending | Viewer |
+|---|---|---|---|---|---|
+| Run conversions | ✓ | ✓ | ✓ | — | — |
+| Stone mode | ✓ | ✓ | if granted | — | — |
+| Self-compile (.py / .exe) | ✓ | ✓ | if granted | — | — |
+| Server settings | ✓ | — | — | — | — |
+| Manage users | ✓ | ✓ (not other admins) | — | — | — |
+| Create / delete admins | ✓ | — | — | — | — |
+| Restart server | ✓ | ✓ | — | — | — |
+| Suspend / ban | ✓ all | users + suspend admins | — | — | — |
 
----
+Suspensions: 24h / 3d / 7d / 30d.
 
-<br></br>
-
-## Philosopher's Stone
-
-Philosopher's Stone mode enables going above and behyond _**Typical Conversion**_ 
-allowing the conversion of one media type to another, 
-hiding the source file inside one of several host formats. The output is a real, 
-working file of its host type — opens in the appropriate viewer, 
-plays in the appropriate player. Vitriol can recover the original bytes
-from the host file byte-for-byte at any time, so important data can travel disguised as ordinary media.
-
-Unlike most steganography tools, Vitriol does **not** require a user-supplied
-carrier file. For cross-category conversions, the carrier is generated
-deterministically from the source — when the output is an image of a fractal
-or an audio file of generated music, that fractal or music IS Vitriol's
-output, with the source data woven into its lowest bits. For same-category
-conversions, the source itself serves as the carrier.
-
-Optional **AES-256 password protection** encrypts the embedded payload — without
-the password, recovery of the original bytes is computationally infeasible
-even with Vitriol in hand. (See Below)
-
----
-
-<div align="center">
-  
-## 
-**Steganalysis caveat: Vitriol's embedding is not designed to defeat
-adversarial deep-learning steganalyzers.**
-
-**Casual file-content inspection,
-statistical noise comparison, and standard "does this image look like a
-fractal?" sanity checks will not surface the payload, but a determined
-analyst running modern CNN-based detectors tuned to LSB-class embeddings
-may be able to flag that hidden data is present (though not recover it
-without the password). Treat Vitriol as plausible-deniability against
-casual inspection plus strong cryptographic protection of the contents,
-not as forensic-grade undetectability.** 
-
-</div>
-
-
---- 
-
-<br></br>
-
-<div align="center">
-
-## Available Formats
-
-| Host format | What you get |
-|---|---|
-| `.png`, `.bmp` | An image. Same-category sources produce a passthrough image; cross-category sources produce a deterministic colored fractal. |
-| `.wav`, `.aiff`, `.flac`, `.m4a` | An audio file. Same-category sources are normal audio; cross-category sources sound like generated music. |
-| `.mkv` | A video file. Plays in any video player. Requires FFmpeg. |
-| `.txt` | A text file with base64-style content. |
-| `.py` | A self-extracting Python script. Run `python file.py` and it reconstructs the original. |
-| `.exe` | A self-extracting Windows executable. End users don't need Python. |
-| `.zip` | A standard ZIP archive containing the original file. Opens in any unzip tool. |
-| `.ply`, `.obj`, `.glb` | A 3D model file. Opens in Blender, MeshLab, or any glTF viewer. |
-
-</div>
-
-Lossy formats (jpg, mp3, mp4, etc.) cannot be Stone sources — only lossless data round-trips meaningfully. `.zip` and `.exe` sources auto-engage Stone (they have no other purpose in Vitriol). Vitriol refuses `.py` ↔ `.py`, `.py` ↔ `.exe`, and `.exe` ↔ `.exe` conversions to prevent the tool from being used as a malware wrapper.
-
-
-<br></br>
-
-### Password protection
-
-Each row in the playlist has an optional password (🔓 / 🔒 lock icon next to the save path). When set, the embedded payload is encrypted with **AES-256-CTR** under a key derived from your password via **PBKDF2-HMAC-SHA256**. Without the right password, the file does not decode.
-
-Wrong-password behavior depends on the host type. Two distinct designs for two threat models:
-
-- **Image, audio, video, 3D, text, zip outputs** — wrong password produces silent garbage. There is no error message; the file gives no signal that encryption was used at all. Same-format outputs look identical whether they're password-protected or not. This preserves a *no-oracle* property: someone probing files cannot tell "right password produced wrong file" from "wrong password produced garbage."
-- **Self-extracting `.py` and `.exe`** — these are interactive, so they print `Wrong password. X/5 attempts used.` After 5 wrong attempts the file invalidates itself and self-deletes.
-
-**Forgetting a password means the file is unrecoverable.** Vitriol never stores, logs, or persists passwords. They live in the playlist row's memory and are gone the moment you remove the row or close the app.
-
-### Verify Round-Trip
-
-Optional safety toggle in the top bar. With it on, every Stone conversion immediately runs in reverse into a temp folder, and the output is only committed if the reverse produces bytes matching the original input. If they don't match, the output is discarded and the row is marked failed. Catches end-to-end integrity issues before they reach disk.
-
-<br></br>
-
-### Samples
-
-The [`samples/`](samples) folder ships with three source files and the Stone outputs Vitriol produces from them, so you can see/hear/run the round-trip without installing anything. Drop any output back into Vitriol to recover the original.
-
-<p align="center">
-  <a href="samples/Sample%20Music%20Outputs/Sample%20Music%20Zip.png"><img src="samples/Sample%20Music%20Outputs/Sample%20Music%20Zip.png" alt="Stone PNG hiding a zip of audio" width="180"/></a>
-  &nbsp;&nbsp;
-  <a href="samples/The%20Raven%20Outputs/The%20Raven%20By%20Edgar%20Allan%20Poe%20.png"><img src="samples/The%20Raven%20Outputs/The%20Raven%20By%20Edgar%20Allan%20Poe%20.png" alt="Stone PNG hiding The Raven PDF" width="180"/></a>
-  &nbsp;&nbsp;
-  <a href="samples/Chopin%20-%20Nocturne%20Outputs/Chopin%20-%20Nocturne%20Op.%209%20password%20free.png"><img src="samples/Chopin%20-%20Nocturne%20Outputs/Chopin%20-%20Nocturne%20Op.%209%20password%20free.png" alt="Stone PNG hiding a Chopin nocturne (no password)" width="180"/></a>
-  &nbsp;&nbsp;
-  <a href="samples/Chopin%20-%20Nocturne%20Outputs/Chopin%20-%20Nocturne%20Op.%209%20%28Password%20is%20Chopin%29.png"><img src="samples/Chopin%20-%20Nocturne%20Outputs/Chopin%20-%20Nocturne%20Op.%209%20%28Password%20is%20Chopin%29.png" alt="Stone PNG hiding a Chopin nocturne (password-protected)" width="180"/></a>
-</p>
-<p align="center">
-  <sub><em>Four Stone-mode PNGs — a zip of audio, a PDF, and the same Chopin nocturne hidden twice (the third image is unencrypted, the fourth is encrypted with the password <code>Chopin</code>). Same source, different password, completely different image: the encryption is baked into the carrier itself. Click any image to view full size, then drop it into Vitriol to recover the original file.</em></sub>
-</p>
-
-| Source | Stone outputs |
-|---|---|
-| [`Sample Music Zip.zip`](samples/Sample%20Music%20Zip.zip) — a zip archive of audio files | [`.png`](samples/Sample%20Music%20Outputs/Sample%20Music%20Zip.png) · [`.wav`](samples/Sample%20Music%20Outputs/Sample%20Music%20Zip.wav) · [`.py`](samples/Sample%20Music%20Outputs/Sample%20Music%20Zip.py) |
-| [`The Raven By Edgar Allan Poe.pdf`](samples/The%20Raven%20By%20Edgar%20Allan%20Poe%20.pdf) | [`.png`](samples/The%20Raven%20Outputs/The%20Raven%20By%20Edgar%20Allan%20Poe%20.png) · [`.wav`](samples/The%20Raven%20Outputs/The%20Raven%20By%20Edgar%20Allan%20Poe%20.wav) · [`.mkv`](samples/The%20Raven%20Outputs/The%20Raven%20By%20Edgar%20Allan%20Poe%20.mkv) · [`.py`](samples/The%20Raven%20Outputs/The%20Raven%20By%20Edgar%20Allan%20Poe%20.py) |
-| [`Chopin - Nocturne Op. 9, No. 2.m4a`](samples/Chopin%20-%20Nocturne%20Op.%209%2C%20No.%202%20in%20E-flat%20major.m4a) — [🔊 Listen to source](samples/Chopin%20-%20Nocturne%20Op.%209%2C%20No.%202%20in%20E-flat%20major.m4a) | [`.png` (no password)](samples/Chopin%20-%20Nocturne%20Outputs/Chopin%20-%20Nocturne%20Op.%209%20password%20free.png) · [`.png` (password)](samples/Chopin%20-%20Nocturne%20Outputs/Chopin%20-%20Nocturne%20Op.%209%20%28Password%20is%20Chopin%29.png) · [`.py`](samples/Chopin%20-%20Nocturne%20Outputs/Chopin%20-%20Nocturne%20Op.%209%20%28Password%20is%20Chopin%29.py) · [`.exe`](samples/Chopin%20-%20Nocturne%20Outputs/Chopin%20-%20Nocturne%20Op.%209%20%28Password%20is%20Chopin%29.exe) — password: `Chopin` |
-
-Each output is a real working file of its host type — the `.png` opens in any image viewer, the `.wav` plays in any audio player, the `.mkv` plays in any video player, the `.py` runs with `python file.py`, and the `.exe` runs by double-click on Windows.
-
-### Layering
-
-Stone conversions can be chained for additional depth. Save a file as a `.png`, drop the `.png` back in and save it as a `.wav`, then the `.wav` as an `.mkv`, and so on. Each layer can carry its own password — recovering the original means unwrapping every layer in reverse order with the right password at each step. Forgetting any one password breaks the chain. Used sparingly this is a heavy increase in protection at the cost of file size and recovery effort.
-
-<br></br>
-
-## Markdown bundles (rich-format conversions)
-
-When converting docx / pdf / epub / pptx → md, the markdown writer detects embedded images and produces a folder-structured output:
+## Architecture
 
 ```
-desired_output_location/
-   my_document/
-       my_document.md
-       images/
-           image1.png
-           image2.jpg
+docs/        Static landing site at vitriol.rocks (GitHub Pages).
+app/         Conversion engine — UNTOUCHED from the desktop app.
+web/         FastAPI app, Jinja2 templates, JS, CLI, Alembic migrations.
+docker/      Dockerfile + entrypoint.
+resources/   Bundled stubs (selfextract_stub.exe), fonts, icons.
 ```
 
-The `.md` references images by relative paths (`![alt](images/image1.png)`). Pure-text conversions still produce a flat `.md`. The reverse direction (md → docx) reads this structure if present and re-embeds the images.
+The web layer never reimplements conversion logic — it imports `app.core.router.convert_file` directly. Engine bug fixes flow through unchanged.
 
-## Scope notes / known limits
+## Super-admin recovery
 
-- **Read-only formats:** PPTX, ODT, SVG, RTF write (RTF read works via striprtf).
-- **PDF write** supports headings, paragraphs, lists, basic tables, and image placeholders. Bundled DejaVu Sans gives Latin Extended + Cyrillic + Greek coverage.
-- **PDF read** handles uncompressed and FlateDecode streams. Encrypted PDFs and image-only (scanned, non-OCR) PDFs are not supported.
-- **3D conversions** preserve geometry by default. When the source has animation/rig data AND the target format can carry it (`.fbx`, `.dae`, `.glb`, `.gltf`), Vitriol asks once — Yes attempts to preserve animations through the export (best-effort; outcome depends on the format pair), No strips them cleanly for predictable static-geometry output. Targets that can't carry animations by spec (`.obj`, `.stl`, `.ply`, `.3ds`) skip the prompt and always export geometry only.
-- **3D animation export caveats:** Static models convert cleanly between every supported 3D format pair — geometry, materials, and textures preserve correctly in all directions. The caveats apply only to skinned + animated models:
-  - **`.glb → .fbx` produces a structurally complete FBX** with mesh, materials, textures, skeleton, and animation curves all present — but the bind-pose link between mesh and skeleton is dropped (Assimp's FBX exporter doesn't emit the `BindPose` / `PoseNode` chunks for glTF input). The animation plays in any FBX viewer, but the mesh stays in its T-pose while the skeleton animates separately. Useful as an FBX export for static use; not useful for animated playback without further work.
-  - **`.dae → .fbx` is fine for DAEs from other tools** (Blender, Maya, 3ds Max). It only fails for DAEs that Vitriol itself generated from an animated FBX or GLB — Assimp's DAE importer can't re-read the `$AssimpFbx$`-escaped node names that its own FBX importer creates and the DAE exporter writes. So if a user hands you a DAE from Blender, Vitriol → FBX works. Vitriol → DAE → Vitriol → FBX doesn't.
-  - **`.fbx → .glb` (the Sketchfab path), `.fbx → .dae`, and `.glb → .dae` work for typical rigged characters** like Mixamo dances. They preserve skeleton, skin weights, and animation channels well enough that the result plays back correctly in standard viewers.
-  - **Edge cases that can still lose data even on the working paths:** blendshape / morph-target rigs (facial animation), models with multiple FBX "Take" stacks, scenes with multiple skinned meshes sharing a skeleton, materials using newer glTF extensions like `KHR_materials_specular` when bridging through Collada. Bone-roll axis conventions differ between FBX and glTF and can shift subtly through a round-trip — the data is preserved but the visual result may drift a few degrees per joint in strict importers.
-  - **Workaround for getting an animated character into FBX:** convert to `.dae` in Vitriol, then open the resulting `.dae` plus its sibling texture PNGs in Blender (`File → Open` → select the .dae) and export FBX from there. Blender's FBX exporter writes the bind-pose chunks Assimp's doesn't.
-  - The animation-preservation prompt inside Vitriol flags the specific lossy `→ .fbx` case at conversion time so the user isn't surprised mid-batch.
+If you lose access to the super admin account, edit `/data/server_config.json` inside the volume:
 
-<br></br>
+```json
+{
+  "super_admin_recovery": {
+    "username": "superadmin",
+    "email": "[email protected]",
+    "password": "new-password"
+  }
+}
+```
+
+Restart the container; the block is applied once and then wiped.
+
+## TLS
+
+The container serves plain HTTP on `:8000`. Front it with Caddy / Traefik / Nginx for TLS, or wire the SSL cert webhook (Server tab) to drop `fullchain.pem` + `privkey.pem` into `/data/certs/` for your proxy.
 
 ## License
 
-**Elastic License** — see [LICENSE](LICENSE).
-
-The Elastic License is **source-available**, not OSI-approved open source. You may freely use, copy, distribute, and modify the source. You may **not**:
-
-- Provide Vitriol to third parties as a hosted or managed service that exposes substantially the same features.
-- Remove or obscure the licensor's licensing, copyright, or notice text.
-- Move, change, disable, or circumvent any license-key functionality (when added in future versions).
-
-Modifications must be marked as such. See LICENSE for the full text and definitions.
-
-<br></br>
-
-### Third-party components
-
-- [PySide6](https://doc.qt.io/qtforpython-6/) — LGPL v3
-- [Pillow](https://pillow.readthedocs.io/) — MIT-CMU
-- [striprtf](https://github.com/joshy/striprtf) — BSD 3-Clause
-- [cryptography](https://cryptography.io/) — Apache 2.0 / BSD 3-Clause
-- [FFmpeg](https://www.ffmpeg.org/) (auto-fetched) — LGPL v2.1+ for the gyan.dev essentials build; see the FFmpeg README for codec licenses
-- [Assimp](https://www.assimp.org/) (auto-fetched) — BSD 3-Clause
-- [DejaVu Sans](https://dejavu-fonts.github.io/) (auto-fetched) — Bitstream Vera + DejaVu Public Domain
-- [Cinzel](https://fonts.google.com/specimen/Cinzel) (auto-fetched) — SIL Open Font License 1.1
-
-The launcher fetches these from their official upstream sources over HTTPS on first run, if missing. SHA-256 verification is supported per release; see the constants at the top of `launcher.py` to lock specific versions before shipping.
+See [LICENSE](LICENSE).

@@ -1,0 +1,625 @@
+/* Vitriol web — theme port from theme.qss + docs/style.css.
+ *
+ * Default: alchemical purple/blue (matches the desktop app and docs site
+ * exactly). Additional themes are opt-in via [data-theme="..."] on <html>;
+ * the user picks one in the Profile tab and it's persisted on the user
+ * row. New themes only need to override the brand tokens — surface, ink,
+ * and glow tokens are inherited unless a theme explicitly changes them.
+ */
+:root {
+  --bg: #0a0a0f;
+  --surface: #15151f;
+  --surface-2: #0d0d15;
+  --border: #1f1f2e;
+  --border-2: #2a2a3a;
+  --ink: #e8e8f0;
+  --ink-muted: #9090a0;
+  --ink-faint: #6a6a7a;
+  --purple: #8b5cf6;
+  --purple-soft: #a78bfa;
+  --purple-hot: #9d72ff;
+  --blue: #3b82f6;
+  --blue-hot: #5a98f9;
+  --red: #c0392b;
+  --red-hot: #e74c3c;
+  --green: #2ecc71;
+  --amber: #f59e0b;
+  --glow: rgba(139, 92, 246, 0.35);
+  --content-max: 1100px;
+  --gutter: 24px;
+  --radius: 10px;
+  --radius-lg: 16px;
+  --font-display: "Cinzel", "Trajan Pro", "Times New Roman", serif;
+  --font-body: "Inter", -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, Oxygen, Ubuntu, Cantarell, sans-serif;
+}
+
+* { box-sizing: border-box; }
+html, body { margin: 0; padding: 0; }
+body {
+  background: var(--bg);
+  color: var(--ink);
+  font-family: var(--font-body);
+  font-size: 14px;
+  line-height: 1.5;
+  background-image:
+    radial-gradient(ellipse 80% 60% at 50% -10%, rgba(139, 92, 246, 0.10), transparent 70%),
+    radial-gradient(ellipse 60% 40% at 50% 110%, rgba(59, 130, 246, 0.07), transparent 70%);
+  background-attachment: fixed;
+  min-height: 100vh;
+  -webkit-font-smoothing: antialiased;
+}
+
+a { color: var(--purple-soft); text-decoration: none; }
+a:hover { color: var(--purple-hot); }
+::selection { background: var(--purple); color: #fff; }
+
+#alchemy-border { position: fixed; inset: 0; pointer-events: none; z-index: 100; }
+#vignette {
+  position: fixed; inset: 0; pointer-events: none; z-index: 90;
+  background: radial-gradient(ellipse at center, transparent 55%, rgba(0,0,0,0.55) 100%);
+}
+
+/* ---------- Display fonts ---------- */
+.display { font-family: var(--font-display); font-weight: 600; letter-spacing: 1.5px; margin: 0; }
+h1.display { font-size: 32px; }
+h2.display.small, .display.small { font-size: 18px; letter-spacing: 1.2px; }
+
+/* ---------- Nav ----------
+ * The alchemy SVG border (z-index 100) paints planetary glyphs along
+ * the top edge of the viewport. Pushing the sticky nav down by ~48px
+ * keeps its content clear of those glyphs, and `top: 36px` parks it
+ * just below the border line rather than gluing it to viewport edge.
+ */
+.nav {
+  position: sticky; top: 36px; z-index: 60;
+  margin-top: 36px;
+  background: rgba(13, 13, 21, 0.85);
+  border-bottom: 1px solid var(--border);
+  backdrop-filter: blur(8px);
+}
+.nav-inner {
+  max-width: var(--content-max); margin: 0 auto;
+  padding: 12px var(--gutter);
+  display: flex; justify-content: space-between; align-items: center;
+}
+.nav-brand { display: flex; align-items: center; gap: 10px; color: var(--ink); font-family: var(--font-display); font-weight: 600; letter-spacing: 2px; }
+.nav-brand img.nav-logo {
+  width: 28px !important; height: 28px !important;
+  flex: 0 0 28px;
+  display: block; object-fit: contain;
+}
+.nav-links { display: flex; gap: 16px; align-items: center; }
+.nav-links a { color: var(--ink-muted); }
+.nav-links a:hover { color: var(--purple-soft); }
+.nav-user { color: var(--ink-muted); font-size: 12px; }
+.role-tag { font-style: normal; padding: 2px 6px; border: 1px solid var(--border-2); border-radius: 999px; font-size: 10px; text-transform: uppercase; letter-spacing: 1px; }
+.role-super_admin { color: var(--purple-soft); border-color: var(--purple); }
+.role-admin { color: var(--blue); border-color: var(--blue); }
+.role-user { color: var(--ink); }
+.role-pending { color: var(--amber); border-color: var(--amber); }
+.role-viewer { color: var(--ink-faint); }
+
+/* ---------- Page shell ---------- */
+.page { max-width: var(--content-max); margin: 0 auto; padding: 32px var(--gutter) 80px; }
+/* Pages without the nav (signin / signup / pending) need their own
+ * top breathing room so the auth card clears the alchemy border. */
+body:not(:has(.nav)) .page { padding-top: 88px; }
+
+/* ---------- Buttons ---------- */
+.btn {
+  display: inline-flex; align-items: center; gap: 8px;
+  padding: 8px 14px; border-radius: var(--radius);
+  border: 1px solid var(--border-2);
+  background: var(--surface);
+  color: var(--ink);
+  font-family: var(--font-display);
+  font-weight: 600;
+  font-size: 12px;
+  letter-spacing: 1px;
+  text-transform: uppercase;
+  cursor: pointer;
+  transition: background 0.15s, border-color 0.15s, color 0.15s;
+}
+.btn:hover { border-color: var(--blue); }
+.btn-primary { background: var(--purple); border-color: var(--purple); color: #fff; }
+.btn-primary:hover { background: var(--purple-hot); border-color: var(--purple-hot); }
+.btn-secondary { background: var(--surface); border-color: var(--blue); color: var(--blue); }
+.btn-secondary:hover { background: var(--blue); color: #fff; }
+.btn-ghost { background: transparent; border-color: var(--border); color: var(--ink-muted); }
+.btn-ghost:hover { color: var(--ink); border-color: var(--border-2); }
+.btn-danger { background: var(--red); border-color: var(--red); color: #fff; }
+.btn-danger:hover { background: var(--red-hot); }
+.btn:disabled { opacity: 0.5; cursor: not-allowed; }
+
+/* ---------- Forms ---------- */
+.stack { display: flex; flex-direction: column; gap: 12px; }
+.stack label { display: flex; flex-direction: column; gap: 4px; font-size: 12px; color: var(--ink-muted); }
+.stack label > span { font-size: 11px; letter-spacing: 1px; text-transform: uppercase; }
+input[type="text"], input[type="email"], input[type="password"], input[type="number"], select, textarea {
+  background: var(--surface-2);
+  border: 1px solid var(--border-2);
+  color: var(--ink);
+  padding: 8px 10px;
+  border-radius: var(--radius);
+  font: inherit;
+}
+input:focus, select:focus, textarea:focus { outline: none; border-color: var(--purple); }
+.checkbox-row { display: flex !important; flex-direction: row !important; align-items: center; gap: 8px; }
+.error { color: var(--red-hot); font-size: 12px; }
+.ok { color: var(--green); font-size: 12px; }
+.muted { color: var(--ink-muted); }
+.small { font-size: 12px; }
+
+/* ---------- Auth card ---------- */
+.auth-card {
+  max-width: 420px; margin: 80px auto;
+  background: var(--surface);
+  border: 1px solid var(--border);
+  border-radius: var(--radius-lg);
+  padding: 32px;
+  box-shadow: 0 0 60px rgba(139, 92, 246, 0.15);
+}
+.auth-card h1 { text-align: center; margin-bottom: 8px; }
+.auth-card .muted { text-align: center; margin-bottom: 24px; }
+.sso-row { display: flex; flex-direction: column; gap: 8px; margin-top: 16px; }
+.auth-foot { display: flex; justify-content: space-between; margin-top: 20px; font-size: 12px; }
+
+/* The first-run setup card is a bit wider to fit confirm-password without
+   feeling cramped, and gets a subtle accent outline so it reads as a
+   one-shot privileged screen rather than a regular sign-in. */
+.auth-card.setup-card {
+  max-width: 480px;
+  border-color: var(--purple);
+  box-shadow: 0 0 80px rgba(139, 92, 246, 0.18);
+}
+.setup-foot { margin-top: 24px; padding-top: 16px; border-top: 1px solid var(--border); }
+
+/* ---------- App shell ---------- */
+.app-shell {
+  background: var(--surface);
+  border: 1px solid var(--border);
+  border-radius: var(--radius-lg);
+  padding: 24px;
+  display: flex; flex-direction: column; gap: 16px;
+}
+.app-top { display: flex; justify-content: space-between; align-items: center; flex-wrap: wrap; gap: 16px; }
+.app-title { display: flex; align-items: center; gap: 12px; }
+.app-title img.brand-glyph {
+  width: 40px !important; height: 40px !important;
+  flex: 0 0 40px;
+  display: block; object-fit: contain;
+}
+.toggles { display: flex; gap: 16px; align-items: center; }
+.toggle { display: flex; align-items: center; gap: 6px; font-size: 12px; color: var(--ink-muted); }
+.toggle.stone:has(input:checked) span { color: var(--red-hot); text-shadow: 0 0 8px var(--red); }
+.help {
+  display: inline-block; width: 16px; height: 16px; border-radius: 50%;
+  background: var(--surface-2); border: 1px solid var(--border-2);
+  text-align: center; font-size: 10px; line-height: 14px; color: var(--ink-muted);
+  cursor: help;
+}
+.help:hover { color: var(--blue); border-color: var(--blue); }
+
+/* ---------- Drop zone ---------- */
+.dropzone {
+  position: relative;
+  min-height: 120px;
+  border: 2px dashed var(--border-2);
+  border-radius: var(--radius);
+  background: var(--surface-2);
+  display: flex; align-items: center; justify-content: center;
+  cursor: pointer;
+  overflow: hidden;
+  transition: border-color 0.15s;
+}
+.dropzone:hover, .dropzone.drag { border-color: var(--purple); }
+.dropzone.has-files .dz-watermark { opacity: 0.08; }
+.dropzone img.dz-watermark {
+  position: absolute;
+  width: 160px !important; height: 160px !important;
+  max-width: 160px;
+  opacity: 0.18; pointer-events: none;
+  display: block; object-fit: contain;
+  transition: opacity 0.3s, filter 0.3s;
+  /* No tint by default — the SVG already uses purple. */
+}
+.app-shell.stone-on .dz-watermark {
+  filter: drop-shadow(0 0 18px var(--red)) hue-rotate(280deg) saturate(1.4);
+}
+.dz-text { color: var(--ink-muted); position: relative; z-index: 1; }
+
+/* ---------- Playlist ----------
+ * Comfortable but not screen-dominating. min-height keeps the empty
+ * state from collapsing flush with the bulk-actions row; max-height
+ * caps it on tall monitors so the dropzone + toggles stay visible
+ * without having to scroll.
+ */
+.playlist {
+  list-style: none; margin: 0; padding: 0;
+  background: var(--surface-2);
+  border: 1px solid var(--border);
+  border-radius: var(--radius);
+  min-height: 320px;
+  max-height: 48vh;
+  overflow-y: auto;
+}
+.playlist:empty::before {
+  content: "Playlist is empty.";
+  display: flex; align-items: center; justify-content: center;
+  min-height: 320px;
+  text-align: center; color: var(--ink-faint); font-size: 13px;
+}
+.row {
+  display: flex; gap: 12px; align-items: center;
+  padding: 10px 12px;
+  border-bottom: 1px solid var(--border);
+}
+.row:last-child { border-bottom: none; }
+.row-main { flex: 1; min-width: 0; }
+.row-line { display: flex; gap: 8px; align-items: center; flex-wrap: wrap; }
+.filename { font-weight: 500; max-width: 220px; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.src-ext { color: var(--ink-muted); font-family: monospace; font-size: 12px; }
+.arrow { color: var(--ink-faint); }
+.dst-ext { min-width: 110px; flex: 1; }
+.row-lock { background: transparent; border: none; cursor: pointer; font-size: 16px; color: var(--ink-muted); padding: 4px; }
+.row-lock.locked { color: var(--purple); }
+.row-rm { padding: 4px 8px; }
+.status-glyph { width: 16px; text-align: center; font-size: 14px; color: var(--ink-faint); }
+.status-glyph.running { color: var(--blue); animation: spin 1s linear infinite; }
+.status-glyph.done { color: var(--green); }
+.status-glyph.failed { color: var(--red-hot); }
+.progress { height: 4px; background: var(--border); border-radius: 2px; margin-top: 6px; overflow: hidden; }
+.bar { display: block; height: 100%; width: 0%; background: linear-gradient(90deg, var(--purple), var(--blue)); transition: width 0.2s; }
+
+@keyframes spin { to { transform: rotate(360deg); } }
+
+.bulk-actions { display: flex; gap: 8px; flex-wrap: wrap; align-items: center; }
+/* Pushes everything after it to the right edge of the row, so Remove
+   Selected and Clear Playlist sit on the right while the conversion +
+   download buttons stay left-aligned. */
+.bulk-actions .bulk-spacer { flex: 1 1 auto; }
+.status-bar {
+  display: flex; justify-content: space-between; align-items: center;
+  padding: 12px 16px; background: var(--surface-2);
+  border-top: 1px solid var(--border);
+  border-radius: var(--radius);
+  font-size: 12px;
+}
+
+/* ---------- Cards / admin ---------- */
+.card-grid { display: grid; grid-template-columns: repeat(auto-fit, minmax(320px, 1fr)); gap: 20px; }
+.card {
+  background: var(--surface); border: 1px solid var(--border);
+  border-radius: var(--radius-lg); padding: 20px;
+  display: flex; flex-direction: column; gap: 12px;
+}
+.row-form { display: flex; gap: 8px; }
+.row-form input { flex: 1; }
+.list { list-style: none; padding: 0; margin: 0; display: flex; flex-direction: column; gap: 6px; }
+.list li { display: flex; justify-content: space-between; gap: 8px; padding: 6px 8px; background: var(--surface-2); border-radius: var(--radius); font-size: 12px; }
+.api-secret {
+  background: var(--surface-2); border: 1px solid var(--purple);
+  padding: 10px; border-radius: var(--radius);
+  font-family: monospace; word-break: break-all; color: var(--purple-soft);
+}
+
+.admin-page { display: flex; flex-direction: column; gap: 20px; }
+.admin-head { display: flex; justify-content: space-between; align-items: center; }
+.admin-head-actions { display: flex; gap: 8px; align-items: center; }
+
+/* Banner shown above the settings form when something is misconfigured —
+   currently used for "signup on but SMTP empty". */
+.warning-banner {
+  display: flex; flex-wrap: wrap; align-items: center; gap: 12px;
+  background: var(--surface);
+  border: 1px solid var(--amber);
+  border-left: 4px solid var(--amber);
+  border-radius: var(--radius);
+  padding: 12px 16px;
+  color: var(--ink);
+}
+.warning-banner strong { color: var(--amber); font-family: var(--font-display); letter-spacing: 0.5px; }
+.warning-banner span { color: var(--ink-muted); flex: 1; min-width: 200px; }
+
+/* Status pill rendered next to the SMTP <summary>. */
+.status-pill {
+  display: inline-block;
+  padding: 1px 8px;
+  margin-left: 8px;
+  border-radius: 999px;
+  font-size: 10px;
+  letter-spacing: 1px;
+  text-transform: uppercase;
+  font-family: var(--font-body);
+  font-weight: 600;
+}
+.status-pill.ok { background: rgba(46,204,113,0.15); color: var(--green); border: 1px solid var(--green); }
+.status-pill.missing { background: rgba(245,158,11,0.15); color: var(--amber); border: 1px solid var(--amber); }
+.status-pill:empty { display: none; }
+
+/* SMTP test-email row inside the SMTP fieldset. */
+.smtp-test {
+  display: flex; gap: 8px; align-items: center; flex-wrap: wrap;
+  margin-top: 12px; padding-top: 12px; border-top: 1px dashed var(--border);
+}
+.smtp-test input { flex: 1; min-width: 240px; }
+
+/* Max-file-size — value input + unit dropdown side-by-side, with a
+   bytes-equivalent readout to keep the actual stored value transparent. */
+.size-input {
+  display: flex; align-items: center; gap: 8px; flex-wrap: wrap;
+}
+.size-input input[type="number"] {
+  flex: 1; min-width: 120px;
+}
+.size-input select {
+  width: 80px;
+}
+.size-input .muted { flex-basis: 100%; font-size: 11px; }
+
+/* Server secret key row — masked input + reveal/copy/rotate buttons. */
+.secret-key-row {
+  display: flex; gap: 8px; align-items: center; flex-wrap: wrap;
+  margin-top: 10px;
+}
+.secret-key-row input {
+  flex: 1; min-width: 280px;
+  font-family: "JetBrains Mono", "Consolas", monospace;
+  font-size: 12px;
+  letter-spacing: 0.5px;
+}
+.secret-key-row .btn { white-space: nowrap; }
+
+.users-toolbar {
+  display: flex; align-items: center; gap: 12px;
+  margin: 4px 0 12px;
+}
+.users-toolbar input[type="search"] {
+  flex: 1 1 auto;
+  width: 100%;
+  min-width: 320px;
+  background: var(--surface-2);
+  border: 1px solid var(--border-2);
+  border-radius: var(--radius);
+  color: var(--ink);
+  padding: 10px 14px;
+  font: inherit;
+}
+.users-toolbar input[type="search"]:focus { outline: none; border-color: var(--purple); }
+.users-toolbar #users-count { flex: 0 0 auto; white-space: nowrap; }
+.users-table .empty-state { padding: 32px; text-align: center; color: var(--ink-faint); font-size: 13px; }
+
+.users-table { width: 100%; border-collapse: collapse; background: var(--surface); border: 1px solid var(--border); border-radius: var(--radius); overflow: hidden; }
+.users-table th, .users-table td { padding: 10px 12px; border-bottom: 1px solid var(--border); text-align: left; font-size: 12px; }
+.users-table th { background: var(--surface-2); color: var(--ink-muted); text-transform: uppercase; letter-spacing: 1px; font-size: 10px; user-select: none; }
+.users-table th.sortable { cursor: pointer; }
+.users-table th.sortable:hover { color: var(--purple-soft); }
+.users-table th.sorted { color: var(--purple-soft); }
+.users-table th .sort-ind { font-size: 9px; margin-left: 4px; opacity: 0.8; }
+.users-table td.center { text-align: center; }
+.users-table tr.user-row.clickable { cursor: pointer; transition: background 0.1s; }
+.users-table tr.user-row.clickable:hover { background: var(--surface-2); }
+.users-table .btn-manage { padding: 4px 12px; font-size: 10px; }
+/* Pending users get an attention-grabbing button so admins know there's
+   action to take. Same primary style as the row's Manage trigger but
+   with an amber outline that pulses gently. */
+.users-table .btn-pending {
+  background: rgba(245, 158, 11, 0.18);
+  border-color: var(--amber);
+  color: var(--amber);
+  animation: pending-pulse 2.4s ease-in-out infinite;
+}
+.users-table .btn-pending:hover {
+  background: var(--amber); color: #15151f;
+}
+@keyframes pending-pulse {
+  0%, 100% { box-shadow: 0 0 0 0 rgba(245, 158, 11, 0.0); }
+  50%      { box-shadow: 0 0 0 4px rgba(245, 158, 11, 0.15); }
+}
+.users-table .row-manage-cell { text-align: right; white-space: nowrap; }
+
+/* ---------- Manage user dialog ---------- */
+dialog.manage-dialog {
+  min-width: 520px;
+  max-width: 640px;
+  width: calc(100vw - 48px);
+  max-height: calc(100vh - 48px);
+  overflow-y: auto;
+}
+.manage-head {
+  display: flex; align-items: center; gap: 12px;
+  margin-bottom: 16px;
+}
+.manage-head h2 { margin: 0; }
+#manage-form details {
+  background: var(--surface-2); border: 1px solid var(--border);
+  border-radius: var(--radius); padding: 12px 16px; margin-bottom: 10px;
+}
+#manage-form details summary {
+  cursor: pointer; font-family: var(--font-display);
+  letter-spacing: 1px; font-size: 12px; color: var(--ink-muted);
+  padding: 2px 0;
+}
+#manage-form details[open] summary { color: var(--purple-soft); }
+#manage-form details.danger { border-color: var(--red); }
+#manage-form details.danger summary { color: var(--red-hot); }
+#manage-form details.danger[open] summary { color: var(--red-hot); }
+#manage-form .grid-2 { margin-top: 10px; }
+.status-actions {
+  display: flex; gap: 6px; flex-wrap: wrap; margin-top: 10px;
+}
+.status-actions .btn { padding: 6px 10px; font-size: 10px; }
+#manage-form footer.dialog-actions { margin-top: 16px; }
+
+/* Pending-review dialog: read-only key/value table for submitted info,
+   then the role picker + approve/deny actions. */
+#pending-form .kv-table {
+  width: 100%; border-collapse: collapse; margin-top: 10px; font-size: 12px;
+}
+#pending-form .kv-table th {
+  text-align: left; padding: 6px 10px; width: 140px;
+  color: var(--ink-muted); font-weight: 600; vertical-align: top;
+}
+#pending-form .kv-table td {
+  padding: 6px 10px; color: var(--ink); vertical-align: top;
+}
+#pending-form .kv-table tr + tr th,
+#pending-form .kv-table tr + tr td { border-top: 1px solid var(--border); }
+.pending-actions { justify-content: space-between !important; }
+.pending-actions .btn-danger { margin-right: auto; }
+
+#server-form details {
+  background: var(--surface); border: 1px solid var(--border);
+  border-radius: var(--radius-lg); padding: 12px 16px; margin-bottom: 12px;
+}
+#server-form summary {
+  cursor: pointer; font-family: var(--font-display);
+  letter-spacing: 1px; padding: 4px 0; color: var(--ink-muted);
+}
+#server-form details[open] summary { color: var(--purple-soft); }
+.grid-2 { display: grid; grid-template-columns: repeat(2, 1fr); gap: 12px; margin-top: 12px; }
+.grid-2 label.full, label.full { grid-column: 1 / -1; }
+.form-actions { display: flex; gap: 12px; align-items: center; margin-top: 16px; }
+
+dialog {
+  background: var(--surface); color: var(--ink);
+  border: 1px solid var(--border); border-radius: var(--radius-lg);
+  padding: 24px; min-width: 360px;
+}
+dialog::backdrop { background: rgba(0,0,0,0.6); backdrop-filter: blur(4px); }
+.dialog-actions { display: flex; gap: 8px; justify-content: flex-end; margin-top: 12px; }
+
+@media (max-width: 720px) {
+  .nav-links { display: none; }
+  .grid-2 { grid-template-columns: 1fr; }
+  .row-line { flex-direction: column; align-items: stretch; }
+  .filename { max-width: none; }
+}
+
+/* ------------------------------------------------------------------
+ * Theme variants — pick one in Profile. The default theme above
+ * already paints the alchemical purple/blue look; these override the
+ * brand tokens for users who want a different vibe.
+ *
+ * Theme IDs map 1:1 with the User.theme column. Add new theme blocks
+ * here and to THEMES in profile.js — that's the whole contract.
+ * ------------------------------------------------------------------ */
+
+/* Crimson — blood ritual. Stone red is the primary accent. */
+html[data-theme="crimson"] {
+  --purple: #c0392b;
+  --purple-soft: #e74c3c;
+  --purple-hot: #ff6f61;
+  --blue: #d4a017;
+  --blue-hot: #f5c518;
+  --glow: rgba(231, 76, 60, 0.35);
+}
+
+/* Verdant — emerald + brass. */
+html[data-theme="verdant"] {
+  --bg: #0a120e;
+  --surface: #15201a;
+  --surface-2: #0d1612;
+  --border: #1f2a24;
+  --border-2: #2a3a32;
+  --purple: #2ecc71;
+  --purple-soft: #5be09a;
+  --purple-hot: #6effb0;
+  --blue: #d4a017;
+  --blue-hot: #f5c518;
+  --glow: rgba(46, 204, 113, 0.30);
+}
+
+/* Cobalt — deep navy + ice. Cooler than the default. */
+html[data-theme="cobalt"] {
+  --bg: #06080f;
+  --surface: #0e1422;
+  --surface-2: #080d18;
+  --border: #1a2236;
+  --border-2: #243152;
+  --purple: #3b82f6;
+  --purple-soft: #60a5fa;
+  --purple-hot: #93c5fd;
+  --blue: #c4b5fd;
+  --blue-hot: #ddd6fe;
+  --glow: rgba(59, 130, 246, 0.32);
+}
+
+/* Parchment — light theme. The only theme that flips ink/surface. */
+html[data-theme="parchment"] {
+  --bg: #f4ecd8;
+  --surface: #fbf6e8;
+  --surface-2: #ece1c4;
+  --border: #d8c89c;
+  --border-2: #b8a378;
+  --ink: #2a221a;
+  --ink-muted: #5a4a3a;
+  --ink-faint: #8a7a6a;
+  --purple: #6b3fa0;
+  --purple-soft: #8a5cd6;
+  --purple-hot: #5a2f8a;
+  --blue: #1f4ea0;
+  --blue-hot: #2d6cd0;
+  --red: #8a2417;
+  --red-hot: #b03020;
+  --glow: rgba(107, 63, 160, 0.20);
+}
+html[data-theme="parchment"] body {
+  background-image:
+    radial-gradient(ellipse 80% 60% at 50% -10%, rgba(107, 63, 160, 0.10), transparent 70%),
+    radial-gradient(ellipse 60% 40% at 50% 110%, rgba(31, 78, 160, 0.08), transparent 70%);
+}
+html[data-theme="parchment"] #vignette {
+  background: radial-gradient(ellipse at center, transparent 60%, rgba(40, 30, 10, 0.18) 100%);
+}
+
+/* Obsidian — pure dark with no accent gradients. Minimalist option. */
+html[data-theme="obsidian"] {
+  --bg: #050507;
+  --surface: #0f0f14;
+  --surface-2: #08080c;
+  --border: #16161e;
+  --border-2: #20202a;
+  --purple: #d4d4dc;
+  --purple-soft: #e8e8f0;
+  --purple-hot: #ffffff;
+  --blue: #909098;
+  --blue-hot: #a8a8b0;
+  --glow: rgba(232, 232, 240, 0.10);
+}
+html[data-theme="obsidian"] body { background-image: none; }
+
+/* ---------- Theme picker swatches ---------- */
+.theme-picker {
+  display: grid;
+  grid-template-columns: repeat(auto-fit, minmax(96px, 1fr));
+  gap: 10px;
+}
+.theme-swatch {
+  display: flex; flex-direction: column; align-items: center; gap: 6px;
+  padding: 10px;
+  background: var(--surface-2);
+  border: 1px solid var(--border-2);
+  border-radius: var(--radius);
+  cursor: pointer;
+  font-family: var(--font-display);
+  font-size: 11px;
+  letter-spacing: 1px;
+  color: var(--ink-muted);
+  transition: border-color 0.15s, color 0.15s;
+}
+.theme-swatch:hover { color: var(--ink); border-color: var(--border-2); }
+.theme-swatch.active { border-color: var(--purple); color: var(--ink); box-shadow: 0 0 0 1px var(--purple) inset; }
+.theme-swatch em { font-style: normal; }
+.theme-swatch .sw {
+  width: 56px; height: 32px; border-radius: 6px;
+  border: 1px solid rgba(255,255,255,0.05);
+}
+.bg-default   { background: linear-gradient(135deg, #0a0a0f 0%, #15151f 50%, #8b5cf6 100%); }
+.bg-crimson   { background: linear-gradient(135deg, #0a0a0f 0%, #15151f 50%, #c0392b 100%); }
+.bg-verdant   { background: linear-gradient(135deg, #0a120e 0%, #15201a 50%, #2ecc71 100%); }
+.bg-cobalt    { background: linear-gradient(135deg, #06080f 0%, #0e1422 50%, #3b82f6 100%); }
+.bg-parchment { background: linear-gradient(135deg, #f4ecd8 0%, #ece1c4 50%, #6b3fa0 100%); }
+.bg-obsidian  { background: linear-gradient(135deg, #050507 0%, #0f0f14 50%, #d4d4dc 100%); }
+
+

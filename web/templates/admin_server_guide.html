@@ -1,0 +1,410 @@
+{% extends "base.html" %}
+{% block title %}Server settings guide — Vitriol{% endblock %}
+{% block head_extra %}{# guide page has no JS of its own — version block is enough via base.html #}
+<style>
+  .guide { display: flex; flex-direction: column; gap: 18px; }
+  .guide .lede { color: var(--ink-muted); }
+  .guide details {
+    background: var(--surface); border: 1px solid var(--border);
+    border-radius: var(--radius-lg); padding: 14px 18px;
+  }
+  .guide details summary {
+    cursor: pointer; font-family: var(--font-display);
+    letter-spacing: 1px; padding: 4px 0; color: var(--ink-muted);
+    font-size: 14px;
+  }
+  .guide details[open] summary { color: var(--purple-soft); }
+  .guide h3 {
+    font-family: var(--font-display); letter-spacing: 1px;
+    font-size: 13px; color: var(--ink); margin: 18px 0 8px;
+  }
+  .guide h4 {
+    font-family: var(--font-display); letter-spacing: 1px;
+    font-size: 12px; color: var(--purple-soft); margin: 14px 0 6px;
+  }
+  .guide p, .guide li { color: var(--ink-muted); font-size: 13px; line-height: 1.55; }
+  .guide ul, .guide ol { padding-left: 22px; }
+  .guide code, .guide pre {
+    font-family: "JetBrains Mono", "Consolas", monospace;
+    font-size: 12px;
+  }
+  .guide code {
+    background: var(--surface-2); border: 1px solid var(--border);
+    padding: 1px 6px; border-radius: 4px; color: var(--ink);
+  }
+  .guide pre {
+    background: var(--surface-2); border: 1px solid var(--border);
+    padding: 12px 14px; border-radius: var(--radius);
+    overflow-x: auto; line-height: 1.55; color: var(--ink);
+    margin: 8px 0;
+  }
+  .guide table { width: 100%; border-collapse: collapse; margin: 8px 0; font-size: 12px; }
+  .guide th, .guide td { padding: 6px 10px; border-bottom: 1px solid var(--border); text-align: left; vertical-align: top; }
+  .guide th { color: var(--ink-muted); font-weight: 600; }
+  .guide .field-name { font-family: monospace; color: var(--ink); }
+  .guide .callout {
+    background: var(--surface-2); border-left: 3px solid var(--purple);
+    padding: 10px 14px; margin: 10px 0; border-radius: 0 var(--radius) var(--radius) 0;
+    color: var(--ink);
+  }
+  .guide .callout.warn { border-left-color: var(--red); }
+  .guide a { color: var(--purple-soft); }
+  .guide .toc {
+    background: var(--surface-2); border: 1px solid var(--border);
+    border-radius: var(--radius); padding: 14px 18px;
+  }
+  .guide .toc ul { list-style: none; padding: 0; margin: 8px 0 0; columns: 2; gap: 24px; }
+  .placeholder { color: var(--purple-hot); font-style: italic; }
+</style>
+{% endblock %}
+{% block content %}
+<section class="admin-page guide">
+  <header class="admin-head">
+    <h1 class="display">Server settings — setup guide</h1>
+    <a href="/admin/server" class="btn btn-ghost">← Back to settings</a>
+  </header>
+
+  <p class="lede">
+    Each section below maps directly to a panel on the
+    <a href="/admin/server">Server settings</a> page. Configure as much or as little as
+    your deployment needs — most sections are optional and can be filled in later.
+    Replace <span class="placeholder">italic-purple values</span> with your own.
+  </p>
+
+  <div class="toc">
+    <strong>Sections</strong>
+    <ul>
+      <li><a href="#network">Network</a></li>
+      <li><a href="#limits">Limits</a></li>
+      <li><a href="#signup">Sign-up &amp; format toggles</a></li>
+      <li><a href="#smtp">SMTP</a></li>
+      <li><a href="#discord">Discord webhook</a></li>
+      <li><a href="#sso">SSO providers</a></li>
+      <li><a href="#oidc">OpenID Connect</a></li>
+      <li><a href="#ssl">SSL cert pull webhook</a></li>
+      <li><a href="#self-compile">Self-compile defaults</a></li>
+    </ul>
+  </div>
+
+  <!-- ============================================== Network -->
+  <details id="network" open>
+    <summary>Network</summary>
+    <p>Where the app listens and what hostnames it accepts.</p>
+
+    <table>
+      <tr><th>Field</th><th>What it does</th><th>Example</th></tr>
+      <tr><td class="field-name">Bind host</td><td>The interface uvicorn listens on inside the container. Don't change unless you know why.</td><td><code>0.0.0.0</code></td></tr>
+      <tr><td class="field-name">Bind port</td><td>Container-internal port. The published port (Docker Desktop / compose) is what you actually expose.</td><td><code>8000</code></td></tr>
+      <tr><td class="field-name">Public base URL</td><td>The URL users hit in their browser. Used in verification emails, OIDC redirect URIs, and the Discord notifications. <strong>Set this before turning on email or SSO.</strong></td><td><code>https://app.vitriol.rocks</code></td></tr>
+      <tr><td class="field-name">Allowed origin</td><td>Optional <code>Host</code>-header lock. If set, requests with any other Host return <code>403</code>. Adds defense-in-depth when behind a misconfigured proxy. Leave blank in dev.</td><td><code>app.vitriol.rocks</code></td></tr>
+    </table>
+
+    <div class="callout warn">
+      Public base URL must <em>match what users type in the browser</em>, including the
+      scheme. If users reach you via <code>https://</code> but you set
+      <code>http://</code>, OAuth callbacks will silently fail and verification email
+      links will go to the wrong scheme.
+    </div>
+  </details>
+
+  <!-- ============================================== Limits -->
+  <details id="limits" open>
+    <summary>Limits</summary>
+    <p>Per-user and per-role caps. Per-user values (set in the Users tab) override these.</p>
+
+    <table>
+      <tr><th>Field</th><th>What it does</th><th>Example</th></tr>
+      <tr><td class="field-name">Global rate limit / min</td><td>HTTP requests per minute across all users. Catch-all backstop.</td><td><code>600</code></td></tr>
+      <tr><td class="field-name">Max file size</td><td>In bytes. Anything bigger gets <code>413</code> on upload.</td><td>100 MB = <code>104857600</code><br>1 GB = <code>1073741824</code></td></tr>
+      <tr><td class="field-name">Default user — daily limit</td><td>Conversions per day for users with no per-user override. <code>0</code> blocks all conversions; leave at default for "moderate".</td><td><code>50</code></td></tr>
+      <tr><td class="field-name">Default user — rate / min</td><td>Per-user request rate cap.</td><td><code>30</code></td></tr>
+      <tr><td class="field-name">Default admin — daily limit</td><td>Conversions per day for admins.</td><td><code>500</code></td></tr>
+      <tr><td class="field-name">Default admin — rate / min</td><td>Per-admin request rate cap.</td><td><code>120</code></td></tr>
+    </table>
+    <p>Super admins have no daily cap.</p>
+  </details>
+
+  <!-- ============================================== Signup -->
+  <details id="signup" open>
+    <summary>Sign-up &amp; format toggles</summary>
+
+    <h4>Allow self sign-up</h4>
+    <p>When on, the sign-in page shows a "Create an account" link. New accounts are created with the role you pick below.</p>
+
+    <h4>Default role on sign-up</h4>
+    <ul>
+      <li><strong>Viewer</strong> — read-only. They see the UI but can't run conversions. They can request access from their profile.</li>
+      <li><strong>Pending</strong> — locked-out screen until an admin approves. Sends notifications to admins via email + Discord.</li>
+      <li><strong>User</strong> — full conversion access immediately (no approval).</li>
+    </ul>
+    <div class="callout">
+      Recommended: <strong>Pending</strong> if you have working SMTP + Discord, otherwise <strong>Viewer</strong> so users at least land somewhere usable.
+    </div>
+
+    <h4>Disabled input / output formats</h4>
+    <p>Comma-separated extension list (with leading dot). Disabled formats won't appear in the UI dropdown and will be rejected at the API.</p>
+    <pre>.exe,.iso,.dmg</pre>
+  </details>
+
+  <!-- ============================================== SMTP -->
+  <details id="smtp">
+    <summary>SMTP (verification + admin notifications)</summary>
+    <p>Required for email verification, password resets, and pending-approval notifications. Without SMTP, sign-ups still work but users won't receive verification mail and the email_verified_at flag will never be set.</p>
+
+    <h4>Common providers</h4>
+
+    <h4>Purelymail</h4>
+    <ol>
+      <li>Sign in to <a href="https://purelymail.com/" target="_blank" rel="noopener">purelymail.com</a> and make sure the address you want to send from is configured under your domain.</li>
+      <li>Open <strong>Account Settings → SMTP / IMAP</strong> and copy the SMTP password (this is separate from your account password — generate one here).</li>
+      <li>Use these settings:</li>
+    </ol>
+    <pre>Host:     smtp.purelymail.com
+Port:     587
+User:     <span class="placeholder">support&#64;yourdomain</span>
+Password: <span class="placeholder">SMTP password from Purelymail settings</span>
+From:     <span class="placeholder">support&#64;yourdomain</span>
+STARTTLS: ✓</pre>
+    <p class="muted small">Purelymail also supports implicit TLS on port 465. If you prefer that, set Port to 465 and uncheck STARTTLS.</p>
+
+    <h4>Gmail (personal account)</h4>
+    <ol>
+      <li>Enable 2-step verification on your Google account.</li>
+      <li>Visit <a href="https://myaccount.google.com/apppasswords" target="_blank" rel="noopener">myaccount.google.com/apppasswords</a> and create an "App password" (16 random characters).</li>
+      <li>Use these settings:</li>
+    </ol>
+    <pre>Host:     smtp.gmail.com
+Port:     587
+User:     <span class="placeholder">you&#64;gmail.com</span>
+Password: <span class="placeholder">app-password-from-step-2</span>
+From:     <span class="placeholder">you&#64;gmail.com</span>
+STARTTLS: ✓</pre>
+
+    <h4>SendGrid</h4>
+    <pre>Host:     smtp.sendgrid.net
+Port:     587
+User:     apikey
+Password: <span class="placeholder">SG.xxxxxxxx (your SendGrid API key)</span>
+From:     <span class="placeholder">noreply&#64;yourdomain</span>
+STARTTLS: ✓</pre>
+
+    <h4>Mailgun</h4>
+    <pre>Host:     smtp.mailgun.org
+Port:     587
+User:     <span class="placeholder">postmaster&#64;mg.yourdomain</span>
+Password: <span class="placeholder">SMTP password from Mailgun dashboard</span>
+From:     <span class="placeholder">noreply&#64;yourdomain</span>
+STARTTLS: ✓</pre>
+
+    <h4>Amazon SES</h4>
+    <pre>Host:     email-smtp.<span class="placeholder">us-east-1</span>.amazonaws.com
+Port:     587
+User:     <span class="placeholder">SMTP username from SES → SMTP credentials</span>
+Password: <span class="placeholder">SMTP password (different from your AWS secret key)</span>
+From:     <span class="placeholder">noreply&#64;yourdomain</span>
+STARTTLS: ✓</pre>
+
+    <div class="callout warn">
+      <strong>From address</strong> must be a domain you've verified with the provider, or
+      mail will be rejected by recipient servers. Gmail is the exception — your account email is fine.
+    </div>
+  </details>
+
+  <!-- ============================================== Discord -->
+  <details id="discord">
+    <summary>Discord webhook</summary>
+    <p>Sends a notification when someone signs up as Pending or a Viewer requests access.</p>
+    <ol>
+      <li>In your Discord server: <strong>Server Settings → Integrations → Webhooks → New Webhook</strong>.</li>
+      <li>Pick the channel notifications should land in.</li>
+      <li>Click <strong>Copy Webhook URL</strong> — it looks like:
+        <pre>https://discord.com/api/webhooks/<span class="placeholder">123456789012345678</span>/<span class="placeholder">long-token</span></pre>
+      </li>
+      <li>Paste it into the <strong>Discord webhook URL</strong> field. Save.</li>
+    </ol>
+    <p>Test it: have someone sign up with self-signup set to "Pending". The channel should get a message within a second or two.</p>
+  </details>
+
+  <!-- ============================================== SSO -->
+  <details id="sso">
+    <summary>SSO providers — Google &amp; GitHub</summary>
+
+    <h3>Google</h3>
+    <ol>
+      <li>Open <a href="https://console.cloud.google.com/" target="_blank" rel="noopener">console.cloud.google.com</a>, create or pick a project.</li>
+      <li><strong>APIs &amp; Services → OAuth consent screen</strong>. Pick <em>External</em>, fill in app name, support email, developer email. Add the <code>email</code> and <code>profile</code> scopes.</li>
+      <li><strong>Credentials → Create credentials → OAuth client ID → Web application</strong>.</li>
+      <li><strong>Authorized redirect URI</strong>:
+        <pre><span class="placeholder">YOUR_PUBLIC_BASE_URL</span>/api/v1/auth/sso/google/callback</pre>
+      </li>
+      <li>Save. Copy the <strong>Client ID</strong> and <strong>Client secret</strong> into the matching fields. Save settings.</li>
+    </ol>
+
+    <h3>GitHub</h3>
+    <ol>
+      <li>GitHub: <strong>Settings → Developer settings → OAuth Apps → New OAuth App</strong>.</li>
+      <li>Fill in:
+        <pre>Application name:    <span class="placeholder">Vitriol</span>
+Homepage URL:        <span class="placeholder">YOUR_PUBLIC_BASE_URL</span>
+Authorization URL:   <span class="placeholder">YOUR_PUBLIC_BASE_URL</span>/api/v1/auth/sso/github/callback</pre>
+      </li>
+      <li>Click <strong>Register application</strong>, then <strong>Generate a new client secret</strong>.</li>
+      <li>Copy the <strong>Client ID</strong> and the just-generated <strong>secret</strong> into the form. Save.</li>
+    </ol>
+
+    <div class="callout">
+      The buttons on the sign-in page are rendered <em>only</em> for providers that have
+      both a client ID and a secret saved. Until both are set, that provider stays
+      hidden — no need to disable anything.
+    </div>
+  </details>
+
+  <!-- ============================================== OIDC -->
+  <details id="oidc">
+    <summary>OpenID Connect — Authentik / Keycloak / Auth0 / Okta / Zitadel</summary>
+    <p>One generic OIDC slot. As long as your IdP serves a valid <code>.well-known/openid-configuration</code> document, it works. The server form shows the absolute redirect URI on page load — register that with your IdP first.</p>
+
+    <p>Common redirect URI to register:</p>
+    <pre><span class="placeholder">YOUR_PUBLIC_BASE_URL</span>/api/v1/auth/sso/oidc/callback</pre>
+
+    <h3>Authentik</h3>
+    <ol>
+      <li>Admin interface → <strong>Applications → Providers → Create</strong>.</li>
+      <li>Pick <strong>OAuth2/OpenID Provider</strong>. Name it <code>vitriol</code>.</li>
+      <li>Authorization flow: <code>default-provider-authorization-implicit-consent</code> (or explicit).</li>
+      <li>Client type: <strong>Confidential</strong>. Authentik will generate the client ID + secret — note them.</li>
+      <li><strong>Redirect URIs</strong>: paste the URI above.</li>
+      <li>Signing key: pick the default RS256 key.</li>
+      <li>Save the provider.</li>
+      <li><strong>Applications → Create</strong>. Slug <code>vitriol</code>, link to the provider.</li>
+      <li>Back in Vitriol, fill in:
+        <pre>Display name:  Authentik
+Issuer URL:    https://<span class="placeholder">authentik.example.com</span>/application/o/vitriol/
+Client ID:     <span class="placeholder">from step 4</span>
+Client secret: <span class="placeholder">from step 4</span>
+Scopes:        openid email profile</pre>
+      </li>
+      <li>Tick <strong>Enable OIDC sign-in</strong>, save.</li>
+    </ol>
+
+    <h3>Keycloak</h3>
+    <ol>
+      <li>Pick / create a realm.</li>
+      <li><strong>Clients → Create client</strong>. Type: <code>OpenID Connect</code>. Client ID: <code>vitriol</code>.</li>
+      <li>Client authentication: <strong>On</strong> (so Keycloak issues a secret).</li>
+      <li><strong>Valid redirect URIs</strong>: paste the URI above.</li>
+      <li>Save. Open the <strong>Credentials</strong> tab → copy the secret.</li>
+      <li>In Vitriol:
+        <pre>Issuer URL:    https://<span class="placeholder">keycloak.example.com</span>/realms/<span class="placeholder">your-realm</span>
+Client ID:     vitriol
+Client secret: <span class="placeholder">from credentials tab</span></pre>
+      </li>
+    </ol>
+
+    <h3>Auth0</h3>
+    <ol>
+      <li>Auth0 dashboard → <strong>Applications → Create Application</strong> → <em>Regular Web Application</em>.</li>
+      <li>Settings tab → <strong>Allowed Callback URLs</strong>: paste the URI above.</li>
+      <li>Copy <strong>Domain</strong>, <strong>Client ID</strong>, and <strong>Client Secret</strong>.</li>
+      <li>In Vitriol:
+        <pre>Issuer URL:    https://<span class="placeholder">your-tenant</span>.auth0.com/
+Client ID:     <span class="placeholder">from Auth0</span>
+Client secret: <span class="placeholder">from Auth0</span></pre>
+      </li>
+    </ol>
+
+    <h3>Okta</h3>
+    <ol>
+      <li>Okta admin → <strong>Applications → Create App Integration</strong> → <em>OIDC – Web Application</em>.</li>
+      <li><strong>Sign-in redirect URIs</strong>: paste the URI above.</li>
+      <li>Copy <strong>Client ID</strong> and <strong>Client secret</strong> from the General tab.</li>
+      <li>In Vitriol, issuer URL is your Okta org domain:
+        <pre>Issuer URL:    https://<span class="placeholder">your-org</span>.okta.com</pre>
+      </li>
+    </ol>
+
+    <div class="callout">
+      The Issuer URL field accepts either form — bare (<code>https://idp/realms/x</code>) or
+      with the suffix (<code>.../.well-known/openid-configuration</code>). Vitriol normalizes
+      it on save.
+    </div>
+  </details>
+
+  <!-- ============================================== SSL -->
+  <details id="ssl">
+    <summary>SSL cert pull webhook</summary>
+    <p>
+      Vitriol itself doesn't terminate TLS — front it with a reverse proxy
+      (Caddy / Traefik / Nginx). This webhook lets Vitriol <em>pull</em> renewed certs
+      from a server you control and drop them into <code>/data/certs/</code> for the proxy
+      to pick up. Useful when your cert authority is somewhere the container can't reach
+      directly (private CA, internal step-ca, etc.).
+    </p>
+
+    <h4>Fields</h4>
+    <ul>
+      <li><strong>Webhook URL</strong> — your endpoint. Vitriol POSTs JSON to it.</li>
+      <li><strong>Shared secret</strong> — used as HMAC-SHA256 key. Vitriol sends an <code>X-Vitriol-Signature: sha256=&lt;hex&gt;</code> header. Verify it on your side.</li>
+    </ul>
+
+    <h4>Request Vitriol sends</h4>
+    <pre>POST <span class="placeholder">your-webhook-url</span>
+Content-Type: application/json
+X-Vitriol-Signature: sha256=&lt;hmac of body using shared secret&gt;
+
+{"action": "pull-certs"}</pre>
+
+    <h4>Response Vitriol expects</h4>
+    <pre>HTTP 200
+Content-Type: application/json
+
+{
+  "fullchain": "-----BEGIN CERTIFICATE-----\n...\n-----END CERTIFICATE-----\n",
+  "privkey":   "-----BEGIN PRIVATE KEY-----\n...\n-----END PRIVATE KEY-----\n"
+}</pre>
+
+    <h4>Tiny Flask example</h4>
+    <pre>import hmac, hashlib
+from flask import Flask, request, jsonify, abort
+
+SECRET = b"<span class="placeholder">same-shared-secret</span>"
+app = Flask(__name__)
+
+@app.post("/pull-certs")
+def pull():
+    sig = request.headers.get("X-Vitriol-Signature", "")
+    expected = "sha256=" + hmac.new(SECRET, request.data, hashlib.sha256).hexdigest()
+    if not hmac.compare_digest(sig, expected):
+        abort(401)
+    return jsonify(
+        fullchain=open("/etc/letsencrypt/live/<span class="placeholder">your.host</span>/fullchain.pem").read(),
+        privkey=open("/etc/letsencrypt/live/<span class="placeholder">your.host</span>/privkey.pem").read(),
+    )</pre>
+
+    <p>Trigger a pull manually with the <strong>Pull certs now</strong> button on the settings page, or from the API:</p>
+    <pre>POST /api/v1/server/refresh-certs</pre>
+  </details>
+
+  <!-- ============================================== Self-compile -->
+  <details id="self-compile">
+    <summary>Self-compile defaults</summary>
+    <p>Whether each role can produce self-extracting <code>.py</code> or <code>.exe</code> outputs by default. Per-user grants in the Users tab override these.</p>
+    <ul>
+      <li><strong>Super admin can self-compile</strong> — usually leave on. The super admin always has Stone access regardless.</li>
+      <li><strong>Admins can self-compile</strong> — turn off if you want self-compile to be an explicit per-user grant rather than implied by the admin role.</li>
+    </ul>
+    <div class="callout warn">
+      Self-compile produces native <code>.exe</code> output that runs your input file when
+      executed. There's no malware-pipeline path (.py↔.exe is blocked at the engine level),
+      but the resulting file can still be misused. Treat self-compile as a privileged
+      capability — don't grant it to untrusted users.
+    </div>
+  </details>
+
+  <p class="lede">
+    Looking for the API reference instead? See
+    <a href="https://vitriol.rocks/api.html" target="_blank" rel="noopener">vitriol.rocks/api.html</a>
+    or your deployment's auto-generated <a href="/docs" target="_blank" rel="noopener">/docs</a> (Swagger).
+  </p>
+</section>
+{% endblock %}

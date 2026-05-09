@@ -1,0 +1,83 @@
+{% extends "base.html" %}
+{% block title %}Vitriol{% endblock %}
+{% block content %}
+<section class="app-shell">
+  <header class="app-top">
+    <div class="app-title">
+      <img class="brand-glyph" src="/static/img/logo.svg" alt="" width="36" height="36" />
+      <h1 class="display">Vitriol</h1>
+    </div>
+    <div class="toggles">
+      <label class="toggle stone" title="Cross-format byte-preserving conversion">
+        <input id="toggle-stone" type="checkbox" {% if 'use_stone' not in caps %}disabled{% endif %} />
+        <span>Philosopher's Stone</span>
+        <span class="help" data-help="Hides the source bytes inside the target so the original is recoverable byte-perfect by reversing the conversion.">?</span>
+      </label>
+      <label class="toggle">
+        <input id="toggle-verify" type="checkbox" />
+        <span>Verify Round-Trip</span>
+        <span class="help" data-help="After conversion, run the inverse and confirm bytes match. Stone-only.">?</span>
+      </label>
+    </div>
+  </header>
+
+  <div id="dropzone" class="dropzone">
+    <img class="dz-watermark" src="/static/img/logo.svg" aria-hidden="true" alt="" width="140" height="140" />
+    <p class="dz-text">Drag &amp; drop files here, or click to browse.</p>
+    <input id="file-input" type="file" multiple hidden />
+  </div>
+
+  <ul id="playlist" class="playlist"></ul>
+
+  <div class="bulk-actions">
+    <button id="convert-all" class="btn btn-primary">Convert All</button>
+    <button id="convert-selected" class="btn btn-secondary">Convert Selected</button>
+    <button id="download-selected" class="btn btn-secondary">Download Selected</button>
+    <span class="bulk-spacer"></span>
+    <button id="remove-selected" class="btn btn-ghost">Remove Selected</button>
+    <button id="clear-all" class="btn btn-ghost">Clear Playlist</button>
+  </div>
+
+  <footer id="status-bar" class="status-bar">
+    <span id="status-text">Ready.</span>
+    <span id="status-version" class="muted small">v{{ ''.join(['1.1.1']) }}</span>
+  </footer>
+</section>
+
+<template id="row-template">
+  <li class="row" data-row>
+    <input type="checkbox" class="row-check" />
+    <div class="row-main">
+      <div class="row-line">
+        <span class="filename" data-filename></span>
+        <span class="src-ext" data-src-ext></span>
+        <span class="arrow">→</span>
+        <select class="dst-ext" data-dst-ext></select>
+        <button class="row-lock" data-lock title="Set Stone password">🔓</button>
+        <span class="status-glyph" data-status>·</span>
+        <button class="btn btn-primary row-go" data-go>Convert</button>
+        <button class="btn btn-ghost row-rm" data-rm>×</button>
+      </div>
+      <div class="progress" data-progress><span class="bar" data-bar></span></div>
+    </div>
+  </li>
+</template>
+
+<dialog id="stone-dialog">
+  <form method="dialog" class="stack">
+    <h2 class="display small">Stone password</h2>
+    <p class="muted small">Set or clear the per-file Stone password. Empty = no password.</p>
+    <input id="stone-password" type="password" placeholder="password" />
+    <label class="checkbox-row">
+      <input id="stone-show" type="checkbox" /> <span>Show password</span>
+    </label>
+    <div class="dialog-actions">
+      <button value="cancel" class="btn btn-ghost">Cancel</button>
+      <button value="set" class="btn btn-primary">Set</button>
+    </div>
+  </form>
+</dialog>
+{% endblock %}
+{% block scripts %}
+<script src="/static/js/playlist.js?v={{ v }}"></script>
+{% endblock %}

@@ -1,0 +1,50 @@
+<!DOCTYPE html>
+<html lang="en"{% if user and user.theme and user.theme != 'default' %} data-theme="{{ user.theme }}"{% endif %}>
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+  <title>{% block title %}Vitriol{% endblock %}</title>
+  <link rel="icon" href="/static/favicon.ico" />
+  <link rel="preconnect" href="https://fonts.googleapis.com" />
+  <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin />
+  <link href="https://fonts.googleapis.com/css2?family=Cinzel:wght@400;500;600;700&family=Inter:wght@400;500;600;700&display=swap" rel="stylesheet" />
+  {# Append the app version to every static asset URL so a code update
+     forces clients to fetch fresh CSS/JS instead of running stale code
+     against fresh templates. #}
+  {% set v = '1.1.1' %}
+  <link rel="stylesheet" href="/static/css/theme.css?v={{ v }}" />
+  {% block head_extra %}{% endblock %}
+</head>
+<body>
+  <svg id="alchemy-border" aria-hidden="true"></svg>
+  <div id="vignette" aria-hidden="true"></div>
+
+  {% if user %}
+  <nav class="nav">
+    <div class="nav-inner">
+      <a href="/" class="nav-brand">
+        <img class="nav-logo" src="/static/img/logo.svg" alt="" width="28" height="28" />
+        <span>VITRIOL</span>
+      </a>
+      <div class="nav-links">
+        <a href="/">App</a>
+        <a href="/profile">Profile</a>
+        {% if show_users_tab %}<a href="/admin/users">Users</a>{% endif %}
+        {% if show_server_tab %}<a href="/admin/server">Server</a>{% endif %}
+        <span class="nav-user">{{ user.username }} <em class="role-tag role-{{ user.role.value }}">{{ user.role.value }}</em></span>
+        <button class="btn btn-ghost" id="logout-btn" type="button">Sign out</button>
+      </div>
+    </div>
+  </nav>
+  {% endif %}
+
+  <main class="page">
+    {% block content %}{% endblock %}
+  </main>
+
+  <script>window.VITRIOL_CAPS = {{ caps|tojson }}; window.VITRIOL_VERSION = "{{ v }}";</script>
+  <script src="/static/js/border.js?v={{ v }}"></script>
+  <script src="/static/js/api.js?v={{ v }}"></script>
+  {% block scripts %}{% endblock %}
+</body>
+</html>

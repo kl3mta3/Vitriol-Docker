@@ -1,0 +1,62 @@
+{% extends "base.html" %}
+{% block title %}Profile — Vitriol{% endblock %}
+{% block content %}
+<section class="card-grid">
+  <div class="card">
+    <h2 class="display small">Account</h2>
+    <form id="profile-form" class="stack">
+      <label><span>Username</span><input name="username" value="{{ user.username }}" /></label>
+      <label><span>Email</span><input name="email" type="email" value="{{ user.email or '' }}" /></label>
+      <button class="btn btn-primary" type="submit">Save</button>
+      <p id="profile-msg" class="ok" hidden></p>
+    </form>
+  </div>
+
+  <div class="card">
+    <h2 class="display small">Theme</h2>
+    <p class="muted small">Pick a look. Applies immediately and saves to your account.</p>
+    <div class="theme-picker" id="theme-picker" data-current="{{ user.theme or 'default' }}">
+      <button class="theme-swatch" data-theme="default" title="Default — alchemical purple"><span class="sw bg-default"></span><em>Default</em></button>
+      <button class="theme-swatch" data-theme="crimson" title="Crimson — blood ritual"><span class="sw bg-crimson"></span><em>Crimson</em></button>
+      <button class="theme-swatch" data-theme="verdant" title="Verdant — emerald & brass"><span class="sw bg-verdant"></span><em>Verdant</em></button>
+      <button class="theme-swatch" data-theme="cobalt" title="Cobalt — deep navy"><span class="sw bg-cobalt"></span><em>Cobalt</em></button>
+      <button class="theme-swatch" data-theme="parchment" title="Parchment — light"><span class="sw bg-parchment"></span><em>Parchment</em></button>
+      <button class="theme-swatch" data-theme="obsidian" title="Obsidian — minimalist dark"><span class="sw bg-obsidian"></span><em>Obsidian</em></button>
+    </div>
+    <p id="theme-msg" class="ok" hidden></p>
+  </div>
+
+  <div class="card">
+    <h2 class="display small">Password</h2>
+    <form id="password-form" class="stack">
+      <label><span>Current</span><input name="current_password" type="password" /></label>
+      <label><span>New password</span><input name="new_password" type="password" minlength="8" required /></label>
+      <button class="btn btn-primary" type="submit">Change password</button>
+      <p id="password-msg" class="ok" hidden></p>
+    </form>
+  </div>
+
+  <div class="card">
+    <h2 class="display small">API keys</h2>
+    <p class="muted small">For CLI / scripted access. Treat them like passwords.</p>
+    <form id="apikey-form" class="row-form">
+      <input name="name" placeholder="Key name (e.g. cli-laptop)" required />
+      <button class="btn btn-secondary" type="submit">Create</button>
+    </form>
+    <p id="apikey-secret" class="api-secret" hidden></p>
+    <ul id="apikey-list" class="list"></ul>
+  </div>
+
+  {% if user.role.value == 'viewer' %}
+  <div class="card">
+    <h2 class="display small">Request access</h2>
+    <p>Ask an admin to upgrade you from Viewer to User.</p>
+    <button id="request-access" class="btn btn-primary">Request access</button>
+    <p id="request-msg" class="ok" hidden></p>
+  </div>
+  {% endif %}
+</section>
+{% endblock %}
+{% block scripts %}
+<script src="/static/js/profile.js?v={{ v }}"></script>
+{% endblock %}

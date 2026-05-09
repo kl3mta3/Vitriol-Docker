@@ -1,0 +1,17 @@
+services:
+  vitriol:
+    build:
+      context: .
+      dockerfile: docker/Dockerfile
+    image: vitriol-web:latest
+    container_name: vitriol
+    restart: unless-stopped
+    ports:
+      - "8000:8000"
+    volumes:
+      - vitriol-data:/data
+    env_file:
+      - .env
+
+volumes:
+  vitriol-data:

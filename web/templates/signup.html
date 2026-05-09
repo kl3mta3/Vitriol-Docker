@@ -1,0 +1,19 @@
+{% extends "base.html" %}
+{% block title %}Sign up — Vitriol{% endblock %}
+{% block content %}
+<section class="auth-card">
+  <h1 class="display">Create an account</h1>
+  <form id="signup-form" class="stack">
+    <label><span>Username</span><input name="username" type="text" required minlength="3" maxlength="64" /></label>
+    <label><span>Email</span><input name="email" type="email" required /></label>
+    <label><span>Password</span><input name="password" type="password" required minlength="8" /></label>
+    <button type="submit" class="btn btn-primary">Sign up</button>
+    <p id="signup-error" class="error" hidden></p>
+    <p id="signup-ok" class="ok" hidden></p>
+  </form>
+  <div class="auth-foot"><a href="/signin">Already have an account?</a></div>
+</section>
+{% endblock %}
+{% block scripts %}
+<script src="/static/js/signup.js?v={{ v }}"></script>
+{% endblock %}

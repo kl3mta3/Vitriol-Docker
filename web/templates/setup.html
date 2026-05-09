@@ -1,0 +1,42 @@
+{% extends "base.html" %}
+{% block title %}First-run setup — Vitriol{% endblock %}
+{% block content %}
+<section class="auth-card setup-card">
+  <h1 class="display">First-run setup</h1>
+  <p class="muted">
+    No super admin exists yet. Create one now — this account can only be created here on
+    a fresh deployment, and the form disables itself the moment it's done.
+  </p>
+
+  <form id="setup-form" class="stack" autocomplete="off">
+    <label>
+      <span>Username</span>
+      <input name="username" type="text" required minlength="3" maxlength="64" autofocus autocomplete="off" />
+    </label>
+    <label>
+      <span>Email (optional, used for password resets)</span>
+      <input name="email" type="email" autocomplete="off" />
+    </label>
+    <label>
+      <span>Password</span>
+      <input name="password" type="password" required minlength="8" autocomplete="new-password" />
+    </label>
+    <label>
+      <span>Confirm password</span>
+      <input name="password_confirm" type="password" required minlength="8" autocomplete="new-password" />
+    </label>
+    <button type="submit" class="btn btn-primary">Create super admin</button>
+    <p id="setup-error" class="error" hidden></p>
+  </form>
+
+  <div class="setup-foot">
+    <p class="muted small">
+      Lost access later? Edit <code>/data/server_config.json</code> on the host with a
+      <code>super_admin_recovery</code> block and restart the container.
+    </p>
+  </div>
+</section>
+{% endblock %}
+{% block scripts %}
+<script src="/static/js/setup.js?v={{ v }}"></script>
+{% endblock %}

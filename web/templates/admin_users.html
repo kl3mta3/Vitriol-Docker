@@ -1,0 +1,269 @@
+{% extends "base.html" %}
+{% block title %}Users — Vitriol{% endblock %}
+{% block content %}
+<section class="admin-page">
+  <header class="admin-head">
+    <h1 class="display">Users</h1>
+    <div class="admin-head-actions">
+      {% if user.role.value == 'super_admin' %}
+        <button id="manage-roles-btn" class="btn btn-secondary">Manage roles</button>
+      {% endif %}
+      <button id="invite-btn" class="btn btn-primary">+ Create user</button>
+    </div>
+  </header>
+
+  <div class="users-toolbar">
+    <input id="users-search" type="search" placeholder="Search by username or email…" autocomplete="off" />
+    <span id="users-count" class="muted small"></span>
+  </div>
+
+  <table class="users-table" id="users-table">
+    <thead>
+      <tr>
+        <th data-sort="username" class="sortable">Username <span class="sort-ind"></span></th>
+        <th data-sort="email" class="sortable">Email <span class="sort-ind"></span></th>
+        <th data-sort="role" class="sortable">Role <span class="sort-ind"></span></th>
+        <th data-sort="status" class="sortable">Status <span class="sort-ind"></span></th>
+        <th>Stone</th>
+        <th>SC</th>
+        <th></th>
+      </tr>
+    </thead>
+    <tbody id="users-tbody"></tbody>
+  </table>
+</section>
+
+<!-- Create-user dialog -->
+<dialog id="invite-dialog">
+  <form id="invite-form" class="stack">
+    <h2 class="display small">Create user</h2>
+    <label><span>Username</span><input name="username" required /></label>
+    <label><span>Email</span><input name="email" type="email" /></label>
+    <label><span>Temporary password</span><input name="password" type="password" minlength="8" /></label>
+    <label><span>Role</span>
+      <select name="role">
+        <option value="user">User</option>
+        <option value="viewer">Viewer</option>
+        <option value="pending">Pending</option>
+        {% if user.role.value == 'super_admin' %}<option value="admin">Admin</option>{% endif %}
+      </select>
+    </label>
+    <div class="dialog-actions">
+      <button type="button" class="btn btn-ghost" data-close>Cancel</button>
+      <button type="submit" class="btn btn-primary">Create</button>
+    </div>
+  </form>
+</dialog>
+
+<!-- ============================================================== -->
+<!-- Manage roles dialog (super admin only) — list + create/edit -->
+<!-- ============================================================== -->
+{% if user.role.value == 'super_admin' %}
+<dialog id="roles-dialog" class="manage-dialog">
+  <header class="manage-head">
+    <h2 class="display small">Custom roles</h2>
+    <button type="button" id="roles-new-btn" class="btn btn-primary">+ New role</button>
+  </header>
+
+  <p class="muted small">
+    Define named permission profiles ("an admin with modifications, or less"). Each
+    role inherits a ceiling from its base role; flags below let you dial individual
+    powers up within that ceiling. Server-settings access can never be granted —
+    that stays super-admin-only.
+  </p>
+
+  <table class="users-table" id="roles-table">
+    <thead>
+      <tr><th>Name</th><th>Base</th><th>Stone</th><th>SC</th><th>Users</th><th></th></tr>
+    </thead>
+    <tbody id="roles-tbody"></tbody>
+  </table>
+
+  <footer class="dialog-actions">
+    <button type="button" class="btn btn-ghost" data-close>Close</button>
+  </footer>
+</dialog>
+
+<!-- Role create/edit form dialog -->
+<dialog id="role-form-dialog" class="manage-dialog">
+  <form id="role-form">
+    <header class="manage-head">
+      <h2 class="display small" id="role-form-title">New role</h2>
+    </header>
+    <input type="hidden" name="id" />
+
+    <details open>
+      <summary>Identity</summary>
+      <div class="grid-2">
+        <label><span>Name</span><input name="name" required minlength="1" maxlength="64" placeholder="e.g. moderator, trusted-user" /></label>
+        <label><span>Base role (ceiling)</span>
+          <select name="base_role">
+            <option value="user">User</option>
+            <option value="viewer">Viewer</option>
+            <option value="pending">Pending</option>
+            <option value="admin">Admin</option>
+          </select>
+        </label>
+        <label class="full"><span>Description</span><input name="description" maxlength="255" /></label>
+      </div>
+      <p class="muted small" id="role-base-hint"></p>
+    </details>
+
+    <details open>
+      <summary>Default user grants</summary>
+      <div class="grid-2">
+        <label class="checkbox-row"><input type="checkbox" name="stone_enabled" /> <span>Philosopher's Stone</span></label>
+        <label class="checkbox-row"><input type="checkbox" name="self_compile_enabled" /> <span>Self-compile (.py / .exe)</span></label>
+        <label><span>Daily conversion limit (blank = base default)</span><input name="daily_conversion_limit" type="number" min="0" /></label>
+        <label><span>Rate limit / minute (blank = base default)</span><input name="rate_limit_per_minute" type="number" min="0" /></label>
+      </div>
+    </details>
+
+    <details class="role-admin-block">
+      <summary>Admin-tier capabilities <span class="muted small">(only when base is Admin)</span></summary>
+      <div class="grid-2">
+        <label class="checkbox-row"><input type="checkbox" name="can_view_users_tab" /> <span>View Users tab</span></label>
+        <label class="checkbox-row"><input type="checkbox" name="can_create_user" /> <span>Create users</span></label>
+        <label class="checkbox-row"><input type="checkbox" name="can_suspend_user" /> <span>Suspend / unsuspend users</span></label>
+        <label class="checkbox-row"><input type="checkbox" name="can_ban_user" /> <span>Ban / unban users</span></label>
+        <label class="checkbox-row"><input type="checkbox" name="can_approve_pending" /> <span>Approve pending sign-ups</span></label>
+        <label class="checkbox-row"><input type="checkbox" name="can_grant_stone" /> <span>Grant Stone to others</span></label>
+        <label class="checkbox-row"><input type="checkbox" name="can_grant_self_compile" /> <span>Grant Self-compile to others</span></label>
+        <label class="checkbox-row"><input type="checkbox" name="can_reset_other_creds" /> <span>Reset other users' credentials</span></label>
+        <label class="checkbox-row"><input type="checkbox" name="can_restart_server" /> <span>Restart the server</span></label>
+      </div>
+      <p class="muted small">
+        Server settings, secret-key access, and admin-account lifecycle (create / delete / ban) stay locked to the super admin and can never be granted from here.
+      </p>
+    </details>
+
+    <footer class="dialog-actions">
+      <button type="button" id="role-delete-btn" class="btn btn-danger" hidden>Delete role</button>
+      <span style="flex:1;"></span>
+      <button type="button" class="btn btn-ghost" data-close>Cancel</button>
+      <button type="submit" class="btn btn-primary">Save role</button>
+    </footer>
+    <p id="role-form-msg" class="ok small" hidden></p>
+  </form>
+</dialog>
+{% endif %}
+
+<!-- Pending-review dialog (only opened for role='pending' users) -->
+<dialog id="pending-dialog" class="manage-dialog">
+  <form id="pending-form">
+    <header class="manage-head">
+      <h2 class="display small">Review pending sign-up</h2>
+      <span class="role-tag role-pending">pending</span>
+    </header>
+    <input type="hidden" name="user_id" />
+
+    <details open>
+      <summary>Submitted info</summary>
+      <table class="kv-table">
+        <tr><th>Username</th><td id="pending-username"></td></tr>
+        <tr><th>Email</th><td id="pending-email"></td></tr>
+        <tr><th>Email verified</th><td id="pending-email-verified"></td></tr>
+        <tr><th>Submitted</th><td id="pending-created"></td></tr>
+      </table>
+    </details>
+
+    <details open>
+      <summary>Approve as</summary>
+      <label><span>Role</span>
+        <select name="role">
+          <option value="viewer">Viewer — read-only access</option>
+          <option value="user" selected>User — can run conversions</option>
+          <option value="admin" data-superadmin-only>Admin — can manage users (super admin only)</option>
+        </select>
+      </label>
+      <p id="pending-msg" class="ok small" hidden></p>
+    </details>
+
+    <footer class="dialog-actions pending-actions">
+      <button type="button" class="btn btn-ghost" data-close>Close</button>
+      <button type="button" id="pending-deny" class="btn btn-danger">Deny &amp; remove</button>
+      <button type="submit" class="btn btn-primary">Approve</button>
+    </footer>
+  </form>
+</dialog>
+
+<!-- Manage-user dialog (shared across all rows; populated on open) -->
+<dialog id="manage-dialog" class="manage-dialog">
+  <form id="manage-form">
+    <header class="manage-head">
+      <h2 class="display small" id="manage-title">Manage user</h2>
+      <span id="manage-role-tag" class="role-tag"></span>
+    </header>
+
+    <input type="hidden" name="user_id" />
+    <p id="manage-readonly-note" class="muted small" hidden></p>
+
+    <details open>
+      <summary>Account</summary>
+      <div class="grid-2">
+        <label><span>Username</span><input name="username" minlength="3" maxlength="64" /></label>
+        <label><span>Email</span><input name="email" type="email" /></label>
+        <label><span>Role</span>
+          <select name="role">
+            <option value="viewer">Viewer</option>
+            <option value="pending">Pending</option>
+            <option value="user">User</option>
+            <option value="admin" data-superadmin-only>Admin</option>
+          </select>
+        </label>
+      </div>
+    </details>
+
+    <details>
+      <summary>Reset password</summary>
+      <p class="muted small">Sets a new password immediately. The user will not be notified — share it through a side channel.</p>
+      <div class="grid-2">
+        <label><span>New password (leave blank to skip)</span><input name="new_password" type="password" minlength="8" autocomplete="new-password" /></label>
+        <label class="checkbox-row"><input type="checkbox" id="show-new-password" /> <span>Show</span></label>
+      </div>
+    </details>
+
+    <details>
+      <summary>Capabilities &amp; limits</summary>
+      <div class="grid-2">
+        <label class="checkbox-row"><input type="checkbox" name="stone_enabled" /> <span>Philosopher's Stone mode</span></label>
+        <label class="checkbox-row"><input type="checkbox" name="self_compile_enabled" /> <span>Self-compile (.py / .exe)</span></label>
+        <label><span>Daily conversion limit (blank = role default)</span><input name="daily_conversion_limit" type="number" min="0" /></label>
+        <label><span>Rate limit / minute (blank = role default)</span><input name="rate_limit_per_minute" type="number" min="0" /></label>
+      </div>
+    </details>
+
+    <details>
+      <summary>Status</summary>
+      <p id="manage-status-current" class="muted small"></p>
+      <div class="status-actions">
+        <button type="button" class="btn btn-ghost" data-status-action="active">Set active</button>
+        <button type="button" class="btn" data-status-action="suspend-24h">Suspend 24h</button>
+        <button type="button" class="btn" data-status-action="suspend-3d">Suspend 3d</button>
+        <button type="button" class="btn" data-status-action="suspend-7d">Suspend 7d</button>
+        <button type="button" class="btn" data-status-action="suspend-30d">Suspend 30d</button>
+        <button type="button" class="btn btn-danger" data-status-action="ban">Ban</button>
+      </div>
+      <p id="manage-status-msg" class="ok" hidden></p>
+    </details>
+
+    <details class="danger">
+      <summary>Danger zone</summary>
+      <p class="muted small">Permanent. The user's jobs and API keys are deleted with the account.</p>
+      <button type="button" id="manage-delete" class="btn btn-danger">Delete user</button>
+    </details>
+
+    <footer class="dialog-actions">
+      <button type="button" class="btn btn-ghost" data-close>Close</button>
+      <button type="submit" class="btn btn-primary">Save changes</button>
+    </footer>
+  </form>
+</dialog>
+{% endblock %}
+{% block scripts %}
+<script>
+  window.VITRIOL_IS_SUPERADMIN = {{ 'true' if user.role.value == 'super_admin' else 'false' }};
+  window.VITRIOL_ACTOR_ID = {{ user.id }};
+</script>
+<script src="/static/js/admin_users.js?v={{ v }}"></script>
+{% endblock %}

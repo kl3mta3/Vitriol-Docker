@@ -1,0 +1,34 @@
+{% extends "base.html" %}
+{% block title %}Sign in — Vitriol{% endblock %}
+{% block content %}
+<section class="auth-card">
+  <h1 class="display">Vitriol</h1>
+  <p class="muted">Sign in to continue.</p>
+
+  <form id="signin-form" class="stack" autocomplete="on">
+    <label>
+      <span>Username or email</span>
+      <input name="identifier" type="text" required autofocus />
+    </label>
+    <label>
+      <span>Password</span>
+      <input name="password" type="password" required />
+    </label>
+    <button type="submit" class="btn btn-primary">Sign in</button>
+    <p id="signin-error" class="error" hidden></p>
+  </form>
+
+  <div class="sso-row" id="sso-row" hidden></div>
+
+  <div class="auth-foot">
+    <a href="/forgot">Forgot password?</a>
+    {# Render server-side when the DB already says signup is on, AND keep the
+       JS path in signin.js as a runtime fallback. Belt + suspenders means
+       a stale browser cache can't hide the link from new users. #}
+    <a href="/signup" id="signup-link"{% if not allow_signup %} hidden{% endif %}>Create an account</a>
+  </div>
+</section>
+{% endblock %}
+{% block scripts %}
+<script src="/static/js/signin.js?v={{ v }}"></script>
+{% endblock %}

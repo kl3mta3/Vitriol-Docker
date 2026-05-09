@@ -1,0 +1,149 @@
+{% extends "base.html" %}
+{% block title %}Server settings — Vitriol{% endblock %}
+{% block content %}
+<section class="admin-page">
+  <header class="admin-head">
+    <h1 class="display">Server settings</h1>
+    <div class="admin-head-actions">
+      <a href="/admin/server/guide" target="_blank" rel="noopener" class="btn btn-ghost">Guide</a>
+      <button id="restart-btn" class="btn btn-secondary">Restart server</button>
+    </div>
+  </header>
+
+  <div id="smtp-warning" class="warning-banner" hidden>
+    <strong>Self sign-up is enabled, but SMTP isn't configured.</strong>
+    <span>New users won't receive verification emails until you fill in the SMTP section below.</span>
+    <a href="#smtp" class="btn btn-secondary">Configure SMTP</a>
+  </div>
+
+  <form id="server-form">
+    <details open><summary>Network</summary>
+      <div class="grid-2">
+        <label><span>Bind host</span><input name="bind_host" /></label>
+        <label><span>Bind port</span><input name="bind_port" type="number" min="1" max="65535" /></label>
+        <label><span>Public base URL</span><input name="public_base_url" placeholder="https://app.vitriol.rocks" /></label>
+        <label><span>Allowed origin (Host header lock)</span><input name="allowed_origin" /></label>
+      </div>
+    </details>
+
+    <details open><summary>Limits</summary>
+      <div class="grid-2">
+        <label><span>Global rate limit / min</span><input name="global_rate_limit_per_minute" type="number" /></label>
+        <label>
+          <span>Max file size</span>
+          <div class="size-input">
+            <input id="max-file-size-value" type="number" min="1" step="1" />
+            <select id="max-file-size-unit">
+              <option value="MB">MB</option>
+              <option value="GB">GB</option>
+            </select>
+            <span id="max-file-size-bytes-display" class="muted small"></span>
+          </div>
+        </label>
+        <label><span>Default user — daily limit</span><input name="default_user_daily_limit" type="number" /></label>
+        <label><span>Default user — rate / min</span><input name="default_user_rate_limit" type="number" /></label>
+        <label><span>Default admin — daily limit</span><input name="default_admin_daily_limit" type="number" /></label>
+        <label><span>Default admin — rate / min</span><input name="default_admin_rate_limit" type="number" /></label>
+      </div>
+    </details>
+
+    <details><summary>Sign-up &amp; format toggles</summary>
+      <div class="grid-2">
+        <label class="checkbox-row"><input type="checkbox" name="allow_signup" /> <span>Allow self sign-up</span></label>
+        <label><span>Default role on sign-up</span>
+          <select id="signup-role-select">
+            <option value="builtin:viewer">Viewer</option>
+            <option value="builtin:pending">Pending</option>
+            <option value="builtin:user">User</option>
+            <!-- custom roles populated by admin_server.js -->
+          </select>
+        </label>
+        <label class="checkbox-row full">
+          <input type="checkbox" name="require_email_verification" />
+          <span>Require email verification on sign-up <em class="muted small">(turn off for SMTP-less or closed-network deployments — accounts are accepted immediately)</em></span>
+        </label>
+      </div>
+      <label class="full"><span>Disabled input formats (comma-separated, e.g. .pdf,.docx)</span><input name="disabled_input_formats" /></label>
+      <label class="full"><span>Disabled output formats</span><input name="disabled_output_formats" /></label>
+    </details>
+
+    <details id="smtp"><summary>SMTP (verification + admin notifications) <span id="smtp-status-pill" class="status-pill"></span></summary>
+      <p class="muted small">Required for self-signup verification emails, password resets, and pending-approval notifications. See the <a href="/admin/server/guide#smtp" target="_blank" rel="noopener">Guide</a> for provider-specific examples (Gmail, SendGrid, Mailgun, SES).</p>
+      <div class="grid-2">
+        <label><span>Host</span><input name="smtp_host" placeholder="smtp.example.com" /></label>
+        <label><span>Port</span><input name="smtp_port" type="number" placeholder="587" /></label>
+        <label><span>User</span><input name="smtp_user" /></label>
+        <label><span>Password</span><input name="smtp_password" type="password" placeholder="(unchanged)" /></label>
+        <label><span>From address</span><input name="smtp_from" placeholder="[email protected]" /></label>
+        <label class="checkbox-row"><input type="checkbox" name="smtp_use_tls" /> <span>STARTTLS</span></label>
+      </div>
+      <div class="smtp-test">
+        <input id="smtp-test-to" type="email" placeholder="Send test to (e.g. your address)" />
+        <button type="button" id="smtp-test-btn" class="btn btn-secondary">Send test email</button>
+        <p id="smtp-test-msg" class="ok" hidden></p>
+      </div>
+    </details>
+
+    <details><summary>Discord webhook</summary>
+      <label class="full"><span>Webhook URL</span><input name="discord_webhook_url" /></label>
+    </details>
+
+    <details><summary>SSO providers</summary>
+      <div class="grid-2">
+        <label><span>Google client ID</span><input name="oauth_google_client_id" /></label>
+        <label><span>Google secret</span><input name="oauth_google_client_secret" type="password" placeholder="(unchanged)" /></label>
+        <label><span>GitHub client ID</span><input name="oauth_github_client_id" /></label>
+        <label><span>GitHub secret</span><input name="oauth_github_client_secret" type="password" placeholder="(unchanged)" /></label>
+      </div>
+
+      <h3 class="display small" style="margin-top:18px;">OpenID Connect (Authentik / Keycloak / Auth0 / Okta)</h3>
+      <p class="muted small">Generic OIDC. Paste your provider's issuer URL (with or without <code>/.well-known/openid-configuration</code>) — discovery handles the rest. Redirect URI: <code id="oidc-redirect-uri">/api/v1/auth/sso/oidc/callback</code></p>
+      <div class="grid-2">
+        <label class="checkbox-row"><input type="checkbox" name="oidc_enabled" /> <span>Enable OIDC sign-in</span></label>
+        <label><span>Display name (button label)</span><input name="oidc_display_name" placeholder="Authentik" /></label>
+        <label class="full"><span>Issuer URL</span><input name="oidc_issuer" placeholder="https://auth.example.com/application/o/vitriol/" /></label>
+        <label><span>Client ID</span><input name="oidc_client_id" /></label>
+        <label><span>Client secret</span><input name="oidc_client_secret" type="password" placeholder="(unchanged)" /></label>
+        <label class="full"><span>Scopes (space-separated)</span><input name="oidc_scopes" placeholder="openid email profile" /></label>
+      </div>
+    </details>
+
+    <details><summary>Server secret key</summary>
+      <p class="muted small">
+        Used to sign session tokens and encrypt SMTP / OAuth / SSL secrets at rest.
+        Generated automatically on first run and persisted to <code>/data/.secret_key</code>.
+        Rotating invalidates all sessions and re-encrypts stored secrets in place.
+      </p>
+      <div class="secret-key-row">
+        <input id="secret-key-display" type="password" value="••••••••••••••••••••••••••••••••" readonly />
+        <button type="button" id="secret-key-reveal" class="btn btn-secondary">Reveal</button>
+        <button type="button" id="secret-key-copy" class="btn btn-ghost" hidden>Copy</button>
+        <button type="button" id="secret-key-rotate" class="btn btn-danger">Regenerate</button>
+      </div>
+      <p id="secret-key-msg" class="muted small" hidden></p>
+    </details>
+
+    <details><summary>SSL cert pull webhook</summary>
+      <p class="muted small">Server calls this webhook (HMAC-SHA256 signed) to fetch <code>fullchain.pem</code> and <code>privkey.pem</code>; they're written to <code>/data/certs/</code> for your reverse proxy.</p>
+      <div class="grid-2">
+        <label><span>Webhook URL</span><input name="ssl_cert_pull_webhook_url" /></label>
+        <label><span>Shared secret</span><input name="ssl_cert_pull_webhook_secret" type="password" placeholder="(unchanged)" /></label>
+      </div>
+      <button type="button" id="refresh-certs" class="btn btn-secondary">Pull certs now</button>
+    </details>
+
+    <details><summary>Self-compile defaults</summary>
+      <label class="checkbox-row"><input type="checkbox" name="super_admin_can_self_compile" /> <span>Super admin can self-compile</span></label>
+      <label class="checkbox-row"><input type="checkbox" name="admin_can_self_compile" /> <span>Admins can self-compile</span></label>
+    </details>
+
+    <div class="form-actions">
+      <button type="submit" class="btn btn-primary">Save settings</button>
+      <p id="server-msg" class="ok" hidden></p>
+    </div>
+  </form>
+</section>
+{% endblock %}
+{% block scripts %}
+<script src="/static/js/admin_server.js?v={{ v }}"></script>
+{% endblock %}
