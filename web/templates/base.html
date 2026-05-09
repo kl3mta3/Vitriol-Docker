@@ -31,7 +31,11 @@
         <a href="/profile">Profile</a>
         {% if show_users_tab %}<a href="/admin/users">Users</a>{% endif %}
         {% if show_server_tab %}<a href="/admin/server">Server</a>{% endif %}
-        <span class="nav-user">{{ user.username }} <em class="role-tag role-{{ user.role.value }}">{{ user.role.value }}</em></span>
+        {# Show the custom role's name when one is assigned. The CSS
+           role-* class still tracks the ceiling so the visual tier
+           (admin = blue, user = neutral, etc.) matches what powers the
+           user actually has. #}
+        <span class="nav-user">{{ user.username }} <em class="role-tag role-{{ user.role.value }}" title="base: {{ user.role.value }}">{{ user.custom_role.name if user.custom_role else user.role.value }}</em></span>
         <button class="btn btn-ghost" id="logout-btn" type="button">Sign out</button>
       </div>
     </div>

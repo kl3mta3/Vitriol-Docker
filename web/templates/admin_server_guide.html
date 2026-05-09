@@ -89,14 +89,20 @@
   <!-- ============================================== Network -->
   <details id="network" open>
     <summary>Network</summary>
-    <p>Where the app listens and what hostnames it accepts.</p>
+    <p>What the app does and doesn't control.</p>
+
+    <p class="muted">
+      The container <strong>always</strong> listens on <code>0.0.0.0:3825</code> internally
+      — that's set by the Dockerfile and isn't editable from the UI. The public address
+      is decided by the orchestrator (Coolify domain config, the <code>ports:</code>
+      line in <code>docker-compose.yml</code>, or your reverse proxy). Only two fields
+      below take effect at runtime:
+    </p>
 
     <table>
       <tr><th>Field</th><th>What it does</th><th>Example</th></tr>
-      <tr><td class="field-name">Bind host</td><td>The interface uvicorn listens on inside the container. Don't change unless you know why.</td><td><code>0.0.0.0</code></td></tr>
-      <tr><td class="field-name">Bind port</td><td>Container-internal port. The published port (Docker Desktop / compose) is what you actually expose.</td><td><code>8000</code></td></tr>
-      <tr><td class="field-name">Public base URL</td><td>The URL users hit in their browser. Used in verification emails, OIDC redirect URIs, and the Discord notifications. <strong>Set this before turning on email or SSO.</strong></td><td><code>https://app.vitriol.rocks</code></td></tr>
-      <tr><td class="field-name">Allowed origin</td><td>Optional <code>Host</code>-header lock. If set, requests with any other Host return <code>403</code>. Adds defense-in-depth when behind a misconfigured proxy. Leave blank in dev.</td><td><code>app.vitriol.rocks</code></td></tr>
+      <tr><td class="field-name">Public base URL</td><td>The URL users hit in their browser. Used in verification emails, OIDC redirect URIs, and Discord notifications. <strong>Set this before turning on email or SSO.</strong></td><td><code>https://app.vitriol.rocks</code></td></tr>
+      <tr><td class="field-name">Allowed origin</td><td>Optional <code>Host</code>-header lock. If set, requests with any other Host return <code>403</code>. Defense-in-depth behind a misconfigured proxy. Leave blank in dev.</td><td><code>app.vitriol.rocks</code></td></tr>
     </table>
 
     <div class="callout warn">

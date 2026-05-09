@@ -8,7 +8,9 @@
       {% if user.role.value == 'super_admin' %}
         <button id="manage-roles-btn" class="btn btn-secondary">Manage roles</button>
       {% endif %}
-      <button id="invite-btn" class="btn btn-primary">+ Create user</button>
+      {% if 'create_user' in caps %}
+        <button id="invite-btn" class="btn btn-primary">+ Create user</button>
+      {% endif %}
     </div>
   </header>
 

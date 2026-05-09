@@ -7,7 +7,8 @@ from fastapi.responses import HTMLResponse, RedirectResponse
 from fastapi.templating import Jinja2Templates
 from sqlalchemy.orm import Session
 
-from ..auth.permissions import has_capability, role_capabilities, CAN_VIEW_USERS_TAB, CAN_VIEW_SERVER_TAB
+from ..auth import permissions as _perms
+from ..auth.permissions import has_capability, CAN_VIEW_USERS_TAB, CAN_VIEW_SERVER_TAB
 from ..deps import get_current_user_optional, get_db
 from ..models import Role, ServerSettings, User
 
@@ -15,15 +16,20 @@ router = APIRouter()
 templates = Jinja2Templates(directory="web/templates")
 
 
+# Capability constants the template might want to gate on. Computed
+# once at import; each is fed through has_capability() per request so
+# custom-role overlays + per-user grants are reflected accurately.
+_TEMPLATE_CAPS: tuple[str, ...] = tuple(
+    v for k, v in vars(_perms).items()
+    if isinstance(v, str) and k.startswith("CAN_")
+)
+
+
 def _common_ctx(request: Request, user: Optional[User], db: Session) -> dict:
     s: Optional[ServerSettings] = db.query(ServerSettings).get(1)
     caps: list[str] = []
     if user is not None:
-        caps = sorted(role_capabilities(user.role) | (
-            {"use_stone"} if user.stone_enabled else set()
-        ) | (
-            {"use_self_compile"} if user.self_compile_enabled else set()
-        ))
+        caps = sorted(c for c in _TEMPLATE_CAPS if has_capability(user, c))
     return {
         "request": request,
         "user": user,

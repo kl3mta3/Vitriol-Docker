@@ -96,7 +96,7 @@ def consume_password_reset_token(db: Session, raw: str) -> Optional[PasswordRese
 
 def public_url(db: Session, path: str) -> str:
     s = _settings_row(db)
-    base = (s.public_base_url if s else None) or "http://localhost:8000"
+    base = (s.public_base_url if s else None) or "http://localhost:3825"
     return base.rstrip("/") + "/" + path.lstrip("/")
 
 

@@ -18,12 +18,24 @@
 
   <form id="server-form">
     <details open><summary>Network</summary>
+      <div class="callout">
+        <p class="muted small" style="margin: 0;">
+          The container always listens on <code>0.0.0.0:3825</code> internally — that's set by the Dockerfile and can't be changed from inside the app. Your <em>public</em> address is decided by the orchestrator:
+        </p>
+        <ul class="muted small">
+          <li><strong>Coolify / similar PaaS</strong> — set the domain in the Coolify resource; its reverse proxy handles TLS + routing.</li>
+          <li><strong>Direct <code>docker compose up</code></strong> — edit the <code>ports:</code> line in <code>docker-compose.yml</code> and redeploy.</li>
+          <li><strong>Reverse proxy (Caddy / nginx / Traefik)</strong> — point it at the container's <code>:3825</code>.</li>
+        </ul>
+      </div>
       <div class="grid-2">
-        <label><span>Bind host</span><input name="bind_host" /></label>
-        <label><span>Bind port</span><input name="bind_port" type="number" min="1" max="65535" /></label>
         <label><span>Public base URL</span><input name="public_base_url" placeholder="https://app.vitriol.rocks" /></label>
         <label><span>Allowed origin (Host header lock)</span><input name="allowed_origin" /></label>
       </div>
+      <p class="muted small">
+        <strong>Public base URL</strong> is what shows up in verification emails and OIDC redirect URIs — set it to whatever users type in the browser.
+        <strong>Allowed origin</strong>, if set, rejects any request whose <code>Host</code> header doesn't match — useful as a defense-in-depth layer behind a misconfigured proxy.
+      </p>
     </details>
 
     <details open><summary>Limits</summary>

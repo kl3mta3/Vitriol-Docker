@@ -82,7 +82,11 @@ def patch_server_settings(
         raise HTTPException(status_code=500, detail="Settings row missing")
 
     plain_fields = {
-        "bind_host", "bind_port",
+        # bind_host / bind_port are intentionally NOT here. The container's
+        # listener is set by the Dockerfile CMD, and the public address by
+        # the orchestrator (Coolify domain / docker compose ports / reverse
+        # proxy) — neither path reads from this table. Patching them
+        # silently does nothing, which is worse UX than rejecting them.
         "global_rate_limit_per_minute", "max_file_size_bytes",
         "default_user_daily_limit", "default_user_rate_limit",
         "default_admin_daily_limit", "default_admin_rate_limit",

@@ -43,20 +43,71 @@ You get:
 
 ## Quick start
 
+Pick whichever path matches your setup. They all converge on the same first-run wizard.
+
+### One-liner (zero-config, prebuilt image from GHCR)
+
 ```bash
-cp .env.example .env
-# Edit .env — set VITRIOL_SECRET_KEY (everything else is optional).
-docker compose up --build
+curl -fsSL https://vitriol.rocks/install.sh | bash
 ```
 
-Then open `http://localhost:8000/`. The app routes everything to **/setup** until a super admin exists; fill in the form and you'll be signed in directly to the Server tab where SMTP, OAuth providers, sign-up policy, etc. live.
+Pulls `ghcr.io/kl3mta3/vitriol-docker:latest`, creates a persistent named volume, starts the container on port 3825. Re-running upgrades to the latest image without touching your data. Customize via env vars:
 
-For automated deployments, you can pre-bake the super admin via env vars (`VITRIOL_SUPERADMIN_*` in `.env.example`); if you do, /setup self-disables and never appears.
+```bash
+VITRIOL_PORT=4242 VITRIOL_VOLUME=my-vitriol curl -fsSL https://vitriol.rocks/install.sh | bash
+```
+
+### Plain `docker run`
+
+```bash
+docker run -d \
+  --name vitriol \
+  --restart unless-stopped \
+  -p 3825:3825 \
+  -v vitriol-data:/data \
+  ghcr.io/kl3mta3/vitriol-docker:latest
+```
+
+### From source (compose)
+
+```bash
+git clone https://github.com/kl3mta3/Vitriol-Docker
+cd Vitriol-Docker
+# .env is optional — every var has a sensible default. Generate a SECRET_KEY
+# only if you want to share it across replicas; otherwise the app makes one.
+docker compose up -d --build
+```
+
+### Then…
+
+Open `http://localhost:3825/`. The app routes everything to **/setup** until a super admin exists; fill in the form and you'll land on the Server tab to configure SMTP, OAuth, sign-up policy, etc.
+
+For automated provisioning (CI / IaC), pre-bake the super admin via the optional `VITRIOL_SUPERADMIN_*` env vars in [.env.example](.env.example); if you set them, `/setup` self-disables and never appears.
+
+## Deploy on Coolify
+
+Coolify reads this repo's `docker-compose.yml` as-is — no fork, no edits required.
+
+1. **Coolify → New Resource → Public (or Private) Repository.** Paste the GitHub URL, pick the branch.
+2. **Build pack: Docker Compose.** Coolify auto-detects [docker-compose.yml](docker-compose.yml) at the repo root and uses [docker/Dockerfile](docker/Dockerfile) as the build context.
+3. **Domain.** Set the public URL Coolify should route to the container (e.g. `vitriol.yourdomain.com`). Coolify provisions Let's Encrypt + Traefik labels automatically.
+4. **Environment variables (all optional):**
+   - `VITRIOL_SECRET_KEY` — leave blank, Coolify will auto-generate one on first boot and persist it inside the volume at `/data/.secret_key`. Set it explicitly only if you want to provision it from infrastructure-as-code or share a key across replicas.
+   - `VITRIOL_DATABASE_URL` — defaults to SQLite in the volume. Set to a Postgres/Neon URL for managed-DB deploys.
+   - `VITRIOL_SUPERADMIN_*` — leave unset; the in-browser `/setup` wizard runs on first visit. Set them only for fully-automated provisioning where you don't want a manual setup step.
+5. **Persistent storage.** The compose file declares `vitriol-data` as a named volume mounted at `/data` — Coolify will persist it across redeploys (this holds the SQLite DB, the secret-key file, uploads, outputs, and the certs directory if you use the SSL webhook).
+6. **Deploy.** First request to your domain redirects to `/setup`. Fill in the super-admin form, you're in.
+
+After bootstrap, configure SMTP, OAuth providers, custom roles, etc. from `Server settings`. The container exposes a healthcheck that pings `/api/v1/health` so Coolify can tell when redeploys are actually serving traffic.
+
+### Updating
+
+In Coolify: click **Redeploy**. The image rebuilds, the volume persists, the SQLite DB and secret-key file survive untouched. The `ensure_schema()` startup hook applies any new column additions automatically — no manual migration step.
 
 ## CLI
 
 ```bash
-python -m web.cli.vitriol_cli login --url http://localhost:8000 --key vit_xxx_yyy
+python -m web.cli.vitriol_cli login --url http://localhost:3825 --key vit_xxx_yyy
 python -m web.cli.vitriol_cli convert sample.pdf --to .png --stone --password hunter2
 python -m web.cli.vitriol_cli jobs
 ```
@@ -108,7 +159,7 @@ Restart the container; the block is applied once and then wiped.
 
 ## TLS
 
-The container serves plain HTTP on `:8000`. Front it with Caddy / Traefik / Nginx for TLS, or wire the SSL cert webhook (Server tab) to drop `fullchain.pem` + `privkey.pem` into `/data/certs/` for your proxy.
+The container serves plain HTTP on `:3825`. Front it with Caddy / Traefik / Nginx for TLS, or wire the SSL cert webhook (Server tab) to drop `fullchain.pem` + `privkey.pem` into `/data/certs/` for your proxy.
 
 ## License
 

@@ -564,6 +564,11 @@ function updateRoleAdminBlockVisibility() {
     ? 'Admin base — admin-tier capabilities below are unlocked.'
     : `Base "${roleForm.base_role.value}" — admin-tier capabilities are disabled. Switch base to Admin to enable them.`;
 }
+// Everything below operates on the role-form dialog, which only exists
+// in the DOM when the actor is a super admin (the template hides it for
+// everyone else). Guard the whole block so admin / custom-role users
+// don't blow up on load.
+if (roleForm) {
 roleForm.base_role.addEventListener('change', updateRoleAdminBlockVisibility);
 
 roleForm.addEventListener('submit', async (e) => {
@@ -618,6 +623,7 @@ document.getElementById('role-delete-btn').addEventListener('click', async () =>
     msg.hidden = false;
   }
 });
+} // end if (roleForm) — see comment above the block
 
 async function refresh() {
   try {

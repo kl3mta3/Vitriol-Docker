@@ -273,7 +273,7 @@ class ServerSettings(Base):
     id = Column(Integer, primary_key=True)  # always 1
 
     bind_host = Column(String(64), nullable=False, default="0.0.0.0")
-    bind_port = Column(Integer, nullable=False, default=8000)
+    bind_port = Column(Integer, nullable=False, default=3825)
 
     global_rate_limit_per_minute = Column(Integer, nullable=False, default=600)
     max_file_size_bytes = Column(Integer, nullable=False, default=1024 * 1024 * 1024)  # 1 GiB

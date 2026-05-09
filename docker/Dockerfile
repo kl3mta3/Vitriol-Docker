@@ -40,8 +40,11 @@ RUN chmod +x /entrypoint.sh && \
     chown -R vitriol:vitriol /app /data
 
 USER vitriol
-EXPOSE 8000
+# Default listening port. 3825 picked as a clean unused IANA range port to
+# minimize collision with other self-hosted services (8000, 8080, 3000 etc.
+# get reused everywhere). Override at the orchestrator layer if needed.
+EXPOSE 3825
 VOLUME ["/data"]
 
 ENTRYPOINT ["/entrypoint.sh"]
-CMD ["uvicorn", "web.main:app", "--host", "0.0.0.0", "--port", "8000", "--proxy-headers"]
+CMD ["uvicorn", "web.main:app", "--host", "0.0.0.0", "--port", "3825", "--proxy-headers"]
