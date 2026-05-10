@@ -365,6 +365,13 @@ async def test_email(
     )
     from datetime import datetime as _dt
     try:
+        # Hard 15s budget for the entire SMTP round trip. aiosmtplib's
+        # default is 60s for both connection and per-command timeouts;
+        # behind a Cloudflare/Coolify proxy chain that's longer than the
+        # proxy's own request timeout, so a hung SMTP server (purelymail
+        # rate-limit, network glitch, etc.) surfaces as "502 Bad Gateway"
+        # with no actionable detail. 15s lets us beat the proxy and
+        # return a real error message.
         await aiosmtplib.send(
             msg,
             hostname=s.smtp_host,
@@ -372,12 +379,19 @@ async def test_email(
             username=s.smtp_user or None,
             password=decrypt(s.smtp_password_enc) or None,
             start_tls=bool(s.smtp_use_tls),
+            timeout=15,
         )
     except Exception as e:
         s.smtp_last_test_at = _dt.utcnow()
         s.smtp_last_test_ok = False
         db.commit()
-        raise HTTPException(status_code=502, detail=f"SMTP delivery failed: {e}")
+        # Include exception class in the detail so 421/535/timeout look
+        # different in the UI. Helps the operator distinguish auth fail
+        # vs. rate-limit vs. network hang vs. STARTTLS failure.
+        raise HTTPException(
+            status_code=502,
+            detail=f"SMTP delivery failed ({type(e).__name__}): {e}",
+        )
     s.smtp_last_test_at = _dt.utcnow()
     s.smtp_last_test_ok = True
     db.commit()
