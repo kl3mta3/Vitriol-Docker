@@ -507,34 +507,79 @@ async def sso_callback(
         .filter(OAuthIdentity.provider == provider, OAuthIdentity.subject == sub)
         .one_or_none()
     )
-    if identity is None:
-        s: Optional[ServerSettings] = db.query(ServerSettings).get(1)
-        default_role = (s.signup_default_role if s else Role.viewer) or Role.viewer
-        username = (name or f"{provider}_{sub}")[:64]
-        # Disambiguate username collisions.
-        i = 1
-        while db.query(User).filter(User.username == username).count():
-            username = f"{(name or provider)[:60]}_{i}"
-            i += 1
-        user = User(
-            username=username, email=email,
-            password_hash=None,
-            role=default_role,
-            status=Status.active,
-            email_verified_at=datetime.utcnow() if email else None,
-        )
-        db.add(user)
-        db.commit()
-        db.refresh(user)
-        identity = OAuthIdentity(user_id=user.id, provider=provider, subject=sub, email=email)
-        db.add(identity)
-        db.commit()
-    else:
+    if identity is not None:
+        # Existing identity row — sign in as the linked user.
         user = db.query(User).get(identity.user_id)
         if user is None:
             raise HTTPException(status_code=500, detail="Orphaned OAuth identity")
         if user.status == Status.banned:
             raise HTTPException(status_code=403, detail="Account banned")
+    else:
+        # No identity row yet for this (provider, sub). CRITICAL: before
+        # creating a brand-new account, see if this email already belongs
+        # to a registered user — if so, link the SSO identity to THAT
+        # account instead of duplicating it as a pending signup. This is
+        # what prevents the "I logged in via Google with my super-admin
+        # email and got bounced into a pending limbo account" footgun.
+        # We only do this lookup when the IdP gave us a usable email
+        # (Google always does; GitHub only does when the OAuth app has
+        # the user:email scope) — without an email there's nothing to
+        # match against.
+        existing: Optional[User] = None
+        if email:
+            existing = (
+                db.query(User)
+                .filter(User.email == email)
+                .filter(User.status != Status.banned)
+                .one_or_none()
+            )
+
+        if existing is not None:
+            # Link the new SSO identity to the existing user. The IdP has
+            # already proven the email belongs to whoever just authed —
+            # treat them as the rightful owner of that account.
+            user = existing
+            identity = OAuthIdentity(
+                user_id=user.id, provider=provider, subject=sub, email=email,
+            )
+            db.add(identity)
+            # If the existing user wasn't email-verified yet, the IdP
+            # vouching is good enough — flip the flag so they don't get
+            # nagged on next sign-in.
+            if user.email_verified_at is None:
+                user.email_verified_at = datetime.utcnow()
+            # Promote out of `unverified` status the same way the verify
+            # endpoint does — IdP attestation is equivalent to clicking
+            # the verification link.
+            if user.status == Status.unverified:
+                user.status = Status.active
+            db.commit()
+        else:
+            # Truly new — create a fresh account with the configured
+            # signup default role. (This path is what makes "Sign up via
+            # Google" work for first-time users.)
+            s: Optional[ServerSettings] = db.query(ServerSettings).get(1)
+            default_role = (s.signup_default_role if s else Role.viewer) or Role.viewer
+            username = (name or f"{provider}_{sub}")[:64]
+            i = 1
+            while db.query(User).filter(User.username == username).count():
+                username = f"{(name or provider)[:60]}_{i}"
+                i += 1
+            user = User(
+                username=username, email=email,
+                password_hash=None,
+                role=default_role,
+                status=Status.active,
+                email_verified_at=datetime.utcnow() if email else None,
+            )
+            db.add(user)
+            db.commit()
+            db.refresh(user)
+            identity = OAuthIdentity(
+                user_id=user.id, provider=provider, subject=sub, email=email,
+            )
+            db.add(identity)
+            db.commit()
 
     user.last_login_at = datetime.utcnow()
     db.commit()

@@ -4,13 +4,23 @@ Anything in this module is operator-set (env vars, .env file). User-facing
 runtime settings (rate limits, allow_signup, SMTP creds, etc.) live in the
 `server_settings` table and are edited by the super admin in the UI.
 
-Secret key resolution:
-  1. /data/.secret_key file (highest priority — persists rotations)
-  2. VITRIOL_SECRET_KEY env var (used to seed the file on first boot)
-  3. Auto-generated and persisted to /data/.secret_key
+Secret key resolution (first hit wins):
+  1. ``SECRET_KEY`` / ``VITRIOL_SECRET_KEY`` env var, when set explicitly.
+  2. ``/data/.secret_key`` file (the historical primary location).
+  3. ``_key_storage`` row inside ``vitriol.db`` (a deliberate fallback —
+     the application database is the most reliably-persistent thing on
+     any orchestrator that ships, so storing a copy of the key there
+     guarantees the encrypted columns stay readable even if the dotfile
+     is wiped between restarts. Yes, this means a stolen DB file
+     contains the key needed to decrypt its own secrets — encryption at
+     rest becomes more of a "don't-leak-a-half-dump" property than a
+     true secret-from-DB-thief property. The trade is intentional: it
+     means a fresh ``docker compose up`` "just works" with zero env
+     config and survives any reasonable volume hiccup.)
+  4. Auto-generated and persisted to BOTH the file and the DB.
 
-This means a fresh `docker compose up` "just works" without any env config,
-and the super admin can rotate the key from the UI without touching env files.
+When generating a new key, both locations are written. When found in
+just one location, the other is back-filled, so the two stay in sync.
 """
 from __future__ import annotations
 import os
@@ -141,25 +151,29 @@ class Settings(BaseSettings):
         def _fingerprint(k: str) -> str:
             return _hashlib.sha256(k.encode("utf-8")).hexdigest()[:8]
 
-        # 1. Explicit env var wins. Mirror it to the file so the in-UI
-        #    rotation / settings export still see the live value.
+        # 1. Explicit env var wins. Mirror it to BOTH the file and the
+        #    DB so the in-UI rotation / settings export still see the
+        #    live value, and so a future boot without the env var can
+        #    recover from either location.
         if has_explicit_env:
             try:
                 _write_secret_key(f, env_val)
             except OSError:
                 pass  # read-only volume is fine — env wins regardless
+            _write_key_to_db(self, env_val)
             _log.info(
                 "SECRET_KEY source: env var (fingerprint=%s) — deterministic across restarts",
                 _fingerprint(env_val),
             )
             return env_val
 
-        # 2. Persisted file wins next — that's how rotation survives
-        #    restarts on hosts where /data is genuinely persistent.
+        # 2. Persisted file. Back-fill the DB mirror so the next boot
+        #    after a dotfile loss can still recover from the same DB.
         if f.exists():
             try:
                 k = f.read_text(encoding="utf-8").strip()
                 if k:
+                    _write_key_to_db(self, k)
                     _log.info(
                         "SECRET_KEY source: %s (fingerprint=%s)",
                         f, _fingerprint(k),
@@ -168,42 +182,39 @@ class Settings(BaseSettings):
             except OSError as e:
                 _log.warning("Could not read %s: %s — falling through", f, e)
 
-        # 3. Auto-generate. 64 url-safe bytes = ~86 chars; plenty for HS256
-        #    + PBKDF2.
-        # Consistency check: if the application DB exists but the secret
-        # file doesn't, the volume was reset between deploys. Silently
-        # generating a new key would invalidate every encrypted secret in
-        # the DB — operator sees mysterious "SMTP auth failed", "Google
-        # SSO 500", etc. with no obvious cause. Auto-clear the now-garbage
-        # encrypted columns so the misconfiguration is visible (admin
-        # sees empty SMTP password, etc.) instead of broken.
-        db_path = self.data_dir / "vitriol.db"
-        had_prior_data = db_path.exists() and db_path.stat().st_size > 0
-        new_key = _secrets.token_urlsafe(64)
-        _write_secret_key(f, new_key)
-        if had_prior_data:
-            _log.error(
-                "VOLUME RESET DETECTED: vitriol.db exists but .secret_key "
-                "was missing. A new SECRET_KEY has been generated, which "
-                "means every encrypted secret in the DB (SMTP password, "
-                "OAuth client secrets, OIDC client secrets, cert-pull "
-                "webhook secret) is now unrecoverable. The matching "
-                "columns will be auto-cleared on boot so the admin UI "
-                "shows them as empty — re-enter them once and set a "
-                "SECRET_KEY env var so this can't happen again."
-            )
+        # 3. DB fallback — the file is missing but the app's SQLite DB
+        #    has a persisted copy. Restore the file from the DB so future
+        #    boots are fast and rotations work normally.
+        db_key = _read_key_from_db(self)
+        if db_key:
             try:
-                _clear_encrypted_columns_after_reset(self)
-            except Exception:
-                _log.exception("Failed to clear encrypted columns after volume reset")
-            return new_key
+                _write_secret_key(f, db_key)
+            except OSError as e:
+                _log.warning("Recovered key from DB but could not rewrite %s: %s", f, e)
+            _log.info(
+                "SECRET_KEY source: vitriol.db _key_storage (fingerprint=%s) — "
+                "recovered after .secret_key file loss; mirrored back to %s",
+                _fingerprint(db_key), f,
+            )
+            return db_key
 
-        _log.warning(
-            "SECRET_KEY source: AUTO-GENERATED at %s (first run, fingerprint=%s). "
-            "If this fingerprint differs on the next restart, .secret_key "
-            "is NOT persisting — set VITRIOL_SECRET_KEY (or SECRET_KEY) in "
-            "your orchestrator so encrypted DB secrets survive restarts.",
-            f, _fingerprint(new_key),
+        # 4. No env, no file, no DB row — first run on a fresh volume.
+        #    Generate a new key and write to both locations so the next
+        #    boot can recover from either. (Previously this logged a
+        #    VOLUME RESET ERROR and auto-cleared encrypted columns; now
+        #    the DB fallback above handles that case transparently —
+        #    encrypted columns survive a missing .secret_key file as
+        #    long as the DB itself persists.)
+        new_key = _secrets.token_urlsafe(64)
+        try:
+            _write_secret_key(f, new_key)
+        except OSError as e:
+            _log.warning("Could not write %s: %s — relying on DB-only storage", f, e)
+        _write_key_to_db(self, new_key)
+        _log.info(
+            "SECRET_KEY source: AUTO-GENERATED (first run, fingerprint=%s) — "
+            "persisted to %s and vitriol.db _key_storage",
+            _fingerprint(new_key), f,
         )
         return new_key
 
@@ -218,6 +229,62 @@ def _write_secret_key(path: Path, key: str) -> None:
     except OSError:
         pass
     os.replace(tmp, path)
+
+
+def _key_storage_db_path(settings) -> Path:
+    return settings.data_dir / "vitriol.db"
+
+
+def _read_key_from_db(settings) -> Optional[str]:
+    """Read the persisted secret key from the `_key_storage` table inside
+    the application's SQLite DB. Returns None when the DB doesn't exist
+    yet (first boot) or the table/row is missing.
+
+    Uses raw sqlite3 — this runs before SQLAlchemy + the rest of the app
+    are wired up.
+    """
+    import sqlite3
+    db_path = _key_storage_db_path(settings)
+    if not db_path.exists():
+        return None
+    try:
+        with sqlite3.connect(str(db_path)) as conn:
+            cur = conn.cursor()
+            cur.execute(
+                "CREATE TABLE IF NOT EXISTS _key_storage ("
+                "id INTEGER PRIMARY KEY CHECK (id = 1), "
+                "key TEXT NOT NULL)"
+            )
+            cur.execute("SELECT key FROM _key_storage WHERE id = 1")
+            row = cur.fetchone()
+            return row[0] if row and row[0] else None
+    except sqlite3.Error:
+        return None
+
+
+def _write_key_to_db(settings, key: str) -> None:
+    """Mirror the secret key into ``_key_storage`` so a missing dotfile
+    on the next boot can be recovered. Best-effort — startup must not
+    block on a write failure here (the file copy is still authoritative)."""
+    import sqlite3
+    db_path = _key_storage_db_path(settings)
+    db_path.parent.mkdir(parents=True, exist_ok=True)
+    try:
+        with sqlite3.connect(str(db_path)) as conn:
+            cur = conn.cursor()
+            cur.execute(
+                "CREATE TABLE IF NOT EXISTS _key_storage ("
+                "id INTEGER PRIMARY KEY CHECK (id = 1), "
+                "key TEXT NOT NULL)"
+            )
+            cur.execute(
+                "INSERT INTO _key_storage (id, key) VALUES (1, ?) "
+                "ON CONFLICT(id) DO UPDATE SET key = excluded.key",
+                (key,),
+            )
+            conn.commit()
+    except sqlite3.Error:
+        pass  # file copy is authoritative; DB mirror is just a safety net
 
 
 def _clear_encrypted_columns_after_reset(settings) -> None:
