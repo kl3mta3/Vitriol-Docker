@@ -277,16 +277,33 @@ def auth_policy(db: Session = Depends(get_db)):
 def _sso_redirect_uri(request: Request, db: Session, provider: str) -> str:
     """Build the redirect URI Google/GitHub/OIDC must redirect back to.
 
-    Prefers the operator-configured ``public_base_url`` so the URL exactly
-    matches what was registered with the IdP. Falls back to
-    ``request.url_for()`` only when no public URL is set (dev/localhost).
-    Behind a proxy ``request.url_for`` can produce ``http://internal-host``
-    which never matches the IdP's registered URI.
+    Resolution order (first hit wins):
+      1. ``public_base_url`` from server settings — operator-configured,
+         most authoritative source. Set it to the URL users actually type
+         in the browser (e.g. ``https://app.vitriol.rocks``).
+      2. ``X-Forwarded-Host`` + ``X-Forwarded-Proto`` from the request —
+         what Coolify / Caddy / Traefik / nginx forward when terminating
+         TLS for us. The ``ProxyHeadersMiddleware`` (uvicorn ``--proxy-headers``)
+         normally rewrites ``request.url`` from these, so reading them
+         directly is just belt-and-suspenders for misconfigured stacks.
+      3. ``request.url_for(...)``. This is last because behind a proxy
+         it can produce ``http://internal-host:3825/...`` which never
+         matches the IdP's registered URI.
     """
     s = db.query(ServerSettings).filter(ServerSettings.id == 1).first()
     base = (s.public_base_url if s and s.public_base_url else "").strip().rstrip("/")
     if base:
         return f"{base}/api/v1/auth/sso/{provider}/callback"
+
+    fwd_host = request.headers.get("x-forwarded-host") or request.headers.get("host")
+    fwd_proto = request.headers.get("x-forwarded-proto") or request.url.scheme
+    if fwd_host:
+        # Strip any accidental "https://" prefix the proxy might forward.
+        if "://" in fwd_host:
+            fwd_host = fwd_host.split("://", 1)[1]
+        fwd_host = fwd_host.split(",", 1)[0].strip()  # XFH can be a chain
+        return f"{fwd_proto}://{fwd_host}/api/v1/auth/sso/{provider}/callback"
+
     return str(request.url_for("sso_callback", provider=provider))
 
 
@@ -298,11 +315,36 @@ async def sso_start(provider: str, request: Request, db: Session = Depends(get_d
     OIDC slugs the super admin defined under Server settings. The
     `oauth.<slug>.authorize_redirect` call generates the IdP-specific
     authorization URL and 302s the browser there.
+
+    Diagnostic mode: when ``?debug=1`` is passed, returns a plain-text
+    page showing the exact redirect_uri that would be sent to the IdP
+    plus the public_base_url it was derived from — invaluable for
+    diagnosing redirect_uri_mismatch errors without round-tripping to
+    Google.
     """
     oauth, registered = build_oauth(db)
     if provider not in registered:
         raise HTTPException(status_code=404, detail="SSO provider not configured")
     redirect_uri = _sso_redirect_uri(request, db, provider)
+
+    if request.query_params.get("debug") == "1":
+        s = db.query(ServerSettings).filter(ServerSettings.id == 1).first()
+        body = (
+            "Vitriol SSO debug — no redirect performed.\n\n"
+            f"provider:                {provider}\n"
+            f"public_base_url (DB):    {s.public_base_url if s else '(no settings row)'!r}\n"
+            f"redirect_uri (sent):     {redirect_uri}\n"
+            f"request.url_for fallback: {str(request.url_for('sso_callback', provider=provider))!r}\n"
+            f"request Host header:     {request.headers.get('host')!r}\n"
+            f"request scheme:          {request.url.scheme!r}\n"
+            "\n"
+            "Paste the 'redirect_uri (sent)' line into the IdP's allowed\n"
+            "redirect URIs list verbatim — character-for-character — and\n"
+            "the redirect_uri_mismatch error will go away.\n"
+        )
+        from fastapi.responses import PlainTextResponse
+        return PlainTextResponse(body)
+
     return await getattr(oauth, provider).authorize_redirect(request, redirect_uri)
 
 
