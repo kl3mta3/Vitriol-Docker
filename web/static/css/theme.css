@@ -389,6 +389,20 @@ input:focus, select:focus, textarea:focus { outline: none; border-color: var(--p
 .users-toolbar #users-count { flex: 0 0 auto; white-space: nowrap; }
 .users-table .empty-state { padding: 32px; text-align: center; color: var(--ink-faint); font-size: 13px; }
 
+/* Files page per-row actions — three compact icon buttons (download /
+   replay / delete) on the right of each row. */
+.file-row-actions {
+  display: flex; gap: 4px; justify-content: flex-end;
+}
+.file-row-actions .btn-row {
+  padding: 4px 10px;
+  font-size: 14px;
+  font-family: var(--font-body);
+  letter-spacing: 0;
+  text-transform: none;
+  min-width: 32px;
+}
+
 /* Per-role retention grid in admin_server.html. Compact 3×5 table —
    role label on the left, then numbers + unit + delete-on-download. */
 .retention-table {

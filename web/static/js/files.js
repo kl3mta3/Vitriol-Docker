@@ -129,13 +129,36 @@ function buildRow(f) {
     <td>${fmtBytes(f.bytes_out)}</td>
     <td>${fmtDate(f.finished_at)}</td>
     <td>${f.is_own ? '<em class="muted">you</em>' : escapeHtml(f.owner_username)}</td>
-    <td class="row-manage-cell">
-      <a class="btn btn-secondary btn-manage" href="/api/v1/jobs/${f.id}/result" target="_blank" rel="noopener">Download</a>
+    <td class="row-manage-cell file-row-actions">
+      <a class="btn btn-secondary btn-row" href="/api/v1/jobs/${f.id}/result" target="_blank" rel="noopener" title="Download this file">⬇</a>
+      <button class="btn btn-ghost btn-row" data-row-replay title="Add to playlist as new conversion source">↺</button>
+      <button class="btn btn-danger btn-row" data-row-delete title="Delete this file">×</button>
     </td>
   `;
+
+  // Per-row Add to Playlist — same flow as the bulk action but for one
+  // entry. Stash, redirect, App page replays.
+  tr.querySelector('[data-row-replay]').addEventListener('click', (e) => {
+    e.stopPropagation();
+    const queue = [{ id: f.id, name: f.dst_filename, ext: f.dst_ext }];
+    localStorage.setItem('vitriol_replay_queue', JSON.stringify(queue));
+    location.href = '/';
+  });
+
+  // Per-row delete — confirms then DELETEs and refreshes the list.
+  tr.querySelector('[data-row-delete]').addEventListener('click', async (e) => {
+    e.stopPropagation();
+    if (!confirm(`Delete ${f.dst_filename}? This cannot be undone.`)) return;
+    try {
+      await api.del(`/files/${f.id}`);
+      await refresh();
+    } catch (ex) {
+      alert((ex && ex.detail) || 'Delete failed');
+    }
+  });
+
   // Clicking the row toggles its checkbox (but not when the user clicks
-  // the inline Download link — we don't want a single click to
-  // accidentally tick a hidden box AND open a download tab).
+  // a button / link / checkbox — those have their own handlers).
   tr.addEventListener('click', (e) => {
     if (e.target.closest('a, button, input')) return;
     const cb = tr.querySelector('.row-check');

@@ -30,9 +30,25 @@ function targetsFor(srcExt) {
 }
 
 function applyStoneClass() {
-  appShell.classList.toggle('stone-on', stoneToggle.checked);
-  // Recompute targets for all rows since list changes with stone.
-  for (const row of playlist.children) refreshTargets(row);
+  const on = stoneToggle.checked;
+  appShell.classList.toggle('stone-on', on);
+  // Lock icon + per-row password only make sense for Stone conversions
+  // — the non-Stone code paths in the engine ignore the password byte
+  // string entirely. Hide the lock when Stone is off and clear any
+  // stashed password on each row so a stale value can't sneak through
+  // if the user later flips Stone back on for an unrelated file.
+  for (const row of playlist.children) {
+    refreshTargets(row);
+    const lock = row.querySelector('[data-lock]');
+    if (lock) lock.hidden = !on;
+    if (!on) {
+      row._password = '';
+      if (lock) {
+        lock.textContent = '🔓';
+        lock.classList.remove('locked');
+      }
+    }
+  }
 }
 
 function refreshTargets(row) {
@@ -62,6 +78,10 @@ function addFile(file) {
 
   refreshTargets(row);
   bindRow(row);
+  // If Stone isn't on at row-create time, hide the lock icon up front
+  // — applyStoneClass keeps it in sync from then on.
+  const lock = row.querySelector('[data-lock]');
+  if (lock) lock.hidden = !stoneToggle.checked;
   playlist.appendChild(row);
   dz.classList.add('has-files');
 }
@@ -125,21 +145,53 @@ async function convertRow(row) {
   }
 }
 
+function flipToDone(row, jobId) {
+  setStatus(row, 'done', 'Done');
+  row.querySelector('[data-bar]').style.width = '100%';
+  const go = row.querySelector('[data-go]');
+  go.textContent = 'Download';
+  go.disabled = false;
+  // Replace the existing click listener (which calls convertRow) with
+  // the download navigation. addEventListener doesn't replace the old
+  // listener, so clone-and-replace the node to drop it cleanly.
+  const fresh = go.cloneNode(true);
+  fresh.addEventListener('click', () => { location.href = `/api/v1/jobs/${jobId}/result`; });
+  go.parentNode.replaceChild(fresh, go);
+}
+
 function openWebsocket(row, jobId) {
   const proto = location.protocol === 'https:' ? 'wss:' : 'ws:';
   const ws = new WebSocket(`${proto}//${location.host}/ws/jobs/${jobId}`);
   ws.onmessage = (ev) => {
     const msg = JSON.parse(ev.data);
-    if (msg.type === 'progress' || msg.type === 'snapshot') {
+    if (msg.type === 'snapshot') {
+      // The snapshot is the *current* job state at the moment the WS
+      // opened — for fast conversions (small images, etc.) the engine
+      // can finish before the browser's WS handshake completes, so a
+      // snapshot with a terminal status is normal and must be treated
+      // as the matching terminal event. Without this branch the UI
+      // would be stuck at "100% running" forever waiting for a `done`
+      // event that already fired before anyone subscribed.
+      const pct = msg.progress || 0;
+      row.querySelector('[data-bar]').style.width = pct + '%';
+      if (msg.status === 'done') { flipToDone(row, jobId); ws.close(); return; }
+      if (msg.status === 'failed') {
+        setStatus(row, 'failed', 'Failed');
+        row.querySelector('[data-go]').disabled = false;
+        ws.close(); return;
+      }
+      if (msg.status === 'cancelled') {
+        setStatus(row, 'cancelled', 'Cancelled');
+        row.querySelector('[data-go]').disabled = false;
+        ws.close(); return;
+      }
+      setStatus(row, 'running', `${pct}%`);
+    } else if (msg.type === 'progress') {
       const pct = msg.progress || 0;
       row.querySelector('[data-bar]').style.width = pct + '%';
       setStatus(row, 'running', `${pct}%`);
     } else if (msg.type === 'done') {
-      setStatus(row, 'done', 'Done');
-      row.querySelector('[data-bar]').style.width = '100%';
-      row.querySelector('[data-go]').textContent = 'Download';
-      row.querySelector('[data-go]').disabled = false;
-      row.querySelector('[data-go]').onclick = () => location.href = `/api/v1/jobs/${jobId}/result`;
+      flipToDone(row, jobId);
       ws.close();
     } else if (msg.type === 'failed') {
       setStatus(row, 'failed', msg.error || 'Failed');

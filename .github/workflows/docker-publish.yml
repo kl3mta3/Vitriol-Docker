@@ -75,6 +75,11 @@ jobs:
         with:
           context: .
           file: Dockerfile
+          # Multi-arch — amd64 covers most cloud / Coolify deploys; arm64
+          # covers Apple Silicon dev machines, Raspberry Pi self-hosters,
+          # Hetzner CAX, Oracle Cloud A1 free tier, AWS Graviton. Doubles
+          # GHCR storage but it's free for public packages and the wider
+          # compatibility matters more than the disk cost.
           platforms: linux/amd64,linux/arm64
           push: true
           tags: ${{ steps.meta.outputs.tags }}

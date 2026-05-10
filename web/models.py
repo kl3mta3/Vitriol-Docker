@@ -352,7 +352,10 @@ class ServerSettings(Base):
     # Optional static-header auth for the webhook mode (e.g. SphereSSL's
     # X-Api-Key). When set, takes precedence over HMAC body signing — they
     # rarely make sense together. Header value is encrypted at rest.
-    ssl_cert_pull_webhook_method = Column(String(8), nullable=False, default="POST", server_default="POST")
+    # GET is the more common shape for cert-fetch APIs (SphereSSL, custom
+    # REST CAs, acme.sh wrappers). POST stays available for the legacy
+    # HMAC-signed-body Vitriol webhook example, which expects POST.
+    ssl_cert_pull_webhook_method = Column(String(8), nullable=False, default="GET", server_default="GET")
     ssl_cert_pull_webhook_header_name = Column(String(64), nullable=True)
     ssl_cert_pull_webhook_header_value_enc = Column(Text, nullable=True)
     # Configurable JSON field names so we can speak SphereSSL's
