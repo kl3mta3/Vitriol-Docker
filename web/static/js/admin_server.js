@@ -55,8 +55,28 @@ const SECRET_FIELD_MAP = {
   ssl_cert_pull_webhook_header_value_set:       'ssl_cert_pull_webhook_header_value',
 };
 
+// Track which password fields the user has *actually* typed into during
+// this page session. We only persist a password field's value on Save
+// if this set contains it — defends against browser autofill silently
+// dropping a saved credential into a password input on page load and
+// then having form-wide submit ship that to the server as the new
+// secret. (That was the root cause of "my SMTP password keeps getting
+// clobbered after navigating between tabs.")
+const _userTypedPasswordFields = new Set();
+function _trackPasswordTyping() {
+  document.querySelectorAll('#server-form input[type="password"]').forEach(el => {
+    if (!el.name) return;
+    el.addEventListener('input', () => _userTypedPasswordFields.add(el.name));
+  });
+}
+_trackPasswordTyping();
+
 async function load() {
   const s = await api.get('/server/settings');
+  // Each call to load() repaints the form — clear the typing-tracker so
+  // a stale "the user typed before" flag from before the reload doesn't
+  // cause the next save to send autofill garbage.
+  _userTypedPasswordFields.clear();
   for (const [k, v] of Object.entries(s)) {
     const el = form.elements[k];
     if (!el) continue;
@@ -65,11 +85,17 @@ async function load() {
   }
   // Reflect "this secret is saved" visually on every password slot whose
   // matching `<field>_set` flag is true. Field stays empty (so blank =
-  // unchanged on next save) — only the placeholder changes.
+  // unchanged on next save) — only the placeholder changes, AND a small
+  // green "✓ saved" badge becomes visible next to the field's label so
+  // it's unambiguous whether the column has a value (the placeholder
+  // text alone was missable).
   for (const [setFlag, fieldName] of Object.entries(SECRET_FIELD_MAP)) {
     const el = form.elements[fieldName];
     if (!el) continue;
-    el.placeholder = s[setFlag] ? SAVED_SECRET_PLACEHOLDER : EMPTY_SECRET_PLACEHOLDER;
+    const isSet = !!s[setFlag];
+    el.placeholder = isSet ? SAVED_SECRET_PLACEHOLDER : EMPTY_SECRET_PLACEHOLDER;
+    const mark = document.querySelector(`.saved-mark[data-saved-mark-for="${fieldName}"]`);
+    if (mark) mark.hidden = !isSet;
   }
   // Signup default role select takes the encoded form 'builtin:<role>'
   // or 'custom:<id>'. Populate the custom options first, then select
@@ -195,9 +221,16 @@ form.addEventListener('submit', async (e) => {
     if (!el.name) continue;
     if (el.type === 'checkbox') {
       data[el.name] = el.checked;
-    } else if (el.value === '' && el.type === 'password') {
-      // blank password = unchanged
-      continue;
+    } else if (el.type === 'password') {
+      // Only ship a password field if the user typed into it *this session*.
+      // Defends against browser autofill silently filling a password
+      // input with a stored credential on page load; without this guard,
+      // clicking Save (or any auto-save flow) would persist that autofill
+      // garbage as the new secret.
+      if (el.value && _userTypedPasswordFields.has(el.name)) {
+        data[el.name] = el.value;
+      }
+      // Otherwise: skip → server treats as "unchanged".
     } else if (el.value === '') {
       data[el.name] = null;
     } else if (el.type === 'number') {
@@ -1410,7 +1443,13 @@ if (importForm) importForm.addEventListener('submit', async (e) => {
   }
 });
 
-// Send a test email through the saved SMTP settings — no DB writes.
+// Send a test email using the SMTP settings already saved in the DB.
+// No auto-save before the test — that path was the root cause of the
+// "password keeps getting clobbered" bug: browser autofill would silently
+// drop a stored value into the smtp_password field on page load, and a
+// pre-test PATCH would then persist that autofill garbage as the new
+// password. If the operator wants to test newly typed credentials, they
+// click "Save settings" first, then "Send test email".
 const testBtn = document.getElementById('smtp-test-btn');
 if (testBtn) testBtn.addEventListener('click', async () => {
   const msg = document.getElementById('smtp-test-msg');
@@ -1420,21 +1459,6 @@ if (testBtn) testBtn.addEventListener('click', async () => {
   testBtn.disabled = true;
   testBtn.textContent = 'Sending…';
   try {
-    // Persist ONLY the SMTP fields — never dispatch a form-wide submit.
-    // (A full submit risks browser autofill silently overwriting unrelated
-    // fields like `allowed_origin`.) Empty password = leave saved value
-    // alone, matching the convention everywhere else in this form.
-    const smtpPatch = {
-      smtp_host:    (form.elements['smtp_host']    || {}).value || null,
-      smtp_port:    (form.elements['smtp_port']    || {}).value
-                       ? Number(form.elements['smtp_port'].value) : null,
-      smtp_user:    (form.elements['smtp_user']    || {}).value || null,
-      smtp_from:    (form.elements['smtp_from']    || {}).value || null,
-      smtp_use_tls: !!(form.elements['smtp_use_tls'] && form.elements['smtp_use_tls'].checked),
-    };
-    const pw = (form.elements['smtp_password'] || {}).value;
-    if (pw) smtpPatch.smtp_password = pw;
-    await api.patch('/server/settings', smtpPatch);
     const r = await api.post('/server/test-email', { to });
     msg.textContent = r.message;
     msg.className = 'ok';
@@ -1445,9 +1469,6 @@ if (testBtn) testBtn.addEventListener('click', async () => {
     msg.hidden = false;
     testBtn.disabled = false;
     testBtn.textContent = 'Send test email';
-    // Refresh pill state from server so the banner + pill reflect the
-    // new last_test_ok flag persisted by the test endpoint.
-    try { await load(); } catch {}
   }
 });
 

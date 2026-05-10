@@ -111,6 +111,25 @@ body:not(:has(.nav)) .page { padding-top: 88px; }
    leaving "hidden" buttons (e.g. the OIDC Delete button on Add) visible. */
 [hidden] { display: none !important; }
 
+/* Inline "✓ saved" pill rendered next to a secret field's label when
+   the matching column is populated. Lighter visual than a status pill
+   so it doesn't compete with the section-level pills. */
+.saved-mark {
+  display: inline-block;
+  margin-left: 8px;
+  padding: 1px 6px;
+  font-family: var(--font-body);
+  font-size: 10px;
+  font-weight: 600;
+  letter-spacing: 0.5px;
+  color: #4ade80;
+  background: rgba(74, 222, 128, 0.1);
+  border: 1px solid rgba(74, 222, 128, 0.4);
+  border-radius: 999px;
+  text-transform: none;
+  vertical-align: middle;
+}
+
 .btn {
   display: inline-flex; align-items: center; gap: 8px;
   padding: 8px 14px; border-radius: var(--radius);

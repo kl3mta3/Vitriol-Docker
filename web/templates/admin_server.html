@@ -110,7 +110,7 @@
         <label><span>Host</span><input name="smtp_host" placeholder="smtp.example.com" /></label>
         <label><span>Port</span><input name="smtp_port" type="number" placeholder="587" /></label>
         <label><span>User</span><input name="smtp_user" /></label>
-        <label><span>Password</span><input name="smtp_password" type="password" placeholder="(unchanged)" /></label>
+        <label><span>Password <span class="saved-mark" data-saved-mark-for="smtp_password" hidden>✓ saved</span></span><input name="smtp_password" type="password" autocomplete="new-password" placeholder="(unchanged)" /></label>
         <label><span>From address</span><input name="smtp_from" placeholder="[email protected]" /></label>
         <label class="checkbox-row"><input type="checkbox" name="smtp_use_tls" /> <span>STARTTLS</span></label>
       </div>
@@ -142,7 +142,7 @@
     <details name="server-settings"><summary>SSO providers <span id="sso-status-pill" class="status-pill"></span></summary>
       <div class="grid-2">
         <label><span>Google client ID</span><input name="oauth_google_client_id" /></label>
-        <label><span>Google secret</span><input name="oauth_google_client_secret" type="password" placeholder="(unchanged)" /></label>
+        <label><span>Google secret <span class="saved-mark" data-saved-mark-for="oauth_google_client_secret" hidden>✓ saved</span></span><input name="oauth_google_client_secret" type="password" autocomplete="new-password" placeholder="(unchanged)" /></label>
       </div>
       <div class="smtp-test">
         <button type="button" id="google-test-btn" class="btn btn-secondary">Test Google sign-in</button>
@@ -150,7 +150,7 @@
       </div>
       <div class="grid-2" style="margin-top: 12px;">
         <label><span>GitHub client ID</span><input name="oauth_github_client_id" /></label>
-        <label><span>GitHub secret</span><input name="oauth_github_client_secret" type="password" placeholder="(unchanged)" /></label>
+        <label><span>GitHub secret <span class="saved-mark" data-saved-mark-for="oauth_github_client_secret" hidden>✓ saved</span></span><input name="oauth_github_client_secret" type="password" autocomplete="new-password" placeholder="(unchanged)" /></label>
       </div>
       <div class="smtp-test">
         <button type="button" id="github-test-btn" class="btn btn-secondary">Test GitHub sign-in</button>
@@ -223,8 +223,8 @@
             </select>
           </label>
           <label><span>Auth header name (e.g. X-Api-Key) <a class="field-help" href="/admin/server/guide#ssl-webhook-header" target="_blank" rel="noopener">?</a></span><input name="ssl_cert_pull_webhook_header_name" placeholder="X-Api-Key" /></label>
-          <label><span>Auth header value</span><input name="ssl_cert_pull_webhook_header_value" type="password" placeholder="(unchanged)" /></label>
-          <label><span>HMAC shared secret (POST only, ignored if header is set) <a class="field-help" href="/admin/server/guide#ssl-webhook-hmac" target="_blank" rel="noopener">?</a></span><input name="ssl_cert_pull_webhook_secret" type="password" placeholder="(unchanged)" /></label>
+          <label><span>Auth header value</span><input name="ssl_cert_pull_webhook_header_value" type="password" autocomplete="new-password" placeholder="(unchanged)" /></label>
+          <label><span>HMAC shared secret (POST only, ignored if header is set) <a class="field-help" href="/admin/server/guide#ssl-webhook-hmac" target="_blank" rel="noopener">?</a></span><input name="ssl_cert_pull_webhook_secret" type="password" autocomplete="new-password" placeholder="(unchanged)" /></label>
           <label><span>Response cert field <a class="field-help" href="/admin/server/guide#ssl-response-fields" target="_blank" rel="noopener">?</a></span><input name="ssl_cert_pull_response_cert_field" placeholder="fullchain" /></label>
           <label><span>Response key field</span><input name="ssl_cert_pull_response_key_field" placeholder="privkey" /></label>
         </div>
