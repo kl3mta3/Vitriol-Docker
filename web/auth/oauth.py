@@ -32,9 +32,17 @@ def list_providers(db: Session) -> list[dict]:
     out: list[dict] = []
     s: Optional[ServerSettings] = db.query(ServerSettings).get(1)
     if s is not None:
-        if s.oauth_google_client_id and s.oauth_google_client_secret_enc:
+        if (
+            bool(s.oauth_google_enabled)
+            and s.oauth_google_client_id
+            and s.oauth_google_client_secret_enc
+        ):
             out.append({"id": "google", "label": "Continue with Google", "kind": "google"})
-        if s.oauth_github_client_id and s.oauth_github_client_secret_enc:
+        if (
+            bool(s.oauth_github_enabled)
+            and s.oauth_github_client_id
+            and s.oauth_github_client_secret_enc
+        ):
             out.append({"id": "github", "label": "Continue with GitHub", "kind": "github"})
 
     rows = (
@@ -68,7 +76,12 @@ def build_oauth(db: Session) -> tuple[OAuth, dict]:
 
     s: Optional[ServerSettings] = db.query(ServerSettings).get(1)
 
-    if s is not None and s.oauth_google_client_id and s.oauth_google_client_secret_enc:
+    if (
+        s is not None
+        and bool(s.oauth_google_enabled)
+        and s.oauth_google_client_id
+        and s.oauth_google_client_secret_enc
+    ):
         oauth.register(
             name="google",
             client_id=s.oauth_google_client_id,
@@ -78,7 +91,12 @@ def build_oauth(db: Session) -> tuple[OAuth, dict]:
         )
         registered["google"] = "google"
 
-    if s is not None and s.oauth_github_client_id and s.oauth_github_client_secret_enc:
+    if (
+        s is not None
+        and bool(s.oauth_github_enabled)
+        and s.oauth_github_client_id
+        and s.oauth_github_client_secret_enc
+    ):
         oauth.register(
             name="github",
             client_id=s.oauth_github_client_id,

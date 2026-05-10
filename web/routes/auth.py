@@ -418,8 +418,28 @@ async def sso_start(provider: str, request: Request, db: Session = Depends(get_d
 async def sso_callback(
     provider: str, request: Request, response: Response, db: Session = Depends(get_db),
 ):
+    """Outer wrapper: catch *anything* the inner handler doesn't and
+    return a 502 with the real exception text. Previously some failure
+    paths (e.g. issue_access_token, _record_session, session cookie
+    issues) escaped as a bare 500 "Internal Server Error" that gave
+    the operator nothing to debug against."""
     import logging as _logging
     _sso_log = _logging.getLogger("vitriol.sso")
+    try:
+        return await _sso_callback_inner(provider, request, response, db, _sso_log)
+    except HTTPException:
+        raise
+    except Exception as e:
+        _sso_log.exception("SSO callback failed for provider=%s (uncaught)", provider)
+        raise HTTPException(
+            status_code=502,
+            detail=f"SSO callback failed ({type(e).__name__}): {e}",
+        )
+
+
+async def _sso_callback_inner(
+    provider: str, request: Request, response: Response, db: Session, _sso_log,
+):
 
     # build_oauth decrypts every client secret on the way out. If the
     # secrets were encrypted with a previous SECRET_KEY (e.g. saved

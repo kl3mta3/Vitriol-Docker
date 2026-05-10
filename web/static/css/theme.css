@@ -111,6 +111,42 @@ body:not(:has(.nav)) .page { padding-top: 88px; }
    leaving "hidden" buttons (e.g. the OIDC Delete button on Add) visible. */
 [hidden] { display: none !important; }
 
+/* Inline enable toggle inside OIDC / notification-channel tables.
+   Visually distinct from a vanilla checkbox so it reads as "switch the
+   row on/off" at a glance — pill-shaped track + colored fill when
+   active. The actual <input type="checkbox"> stays accessible for
+   keyboard + screen readers; we just hide its native rendering. */
+.row-toggle { display: inline-flex; cursor: pointer; align-items: center; }
+.row-toggle input[type="checkbox"] {
+  appearance: none; -webkit-appearance: none;
+  width: 36px; height: 20px;
+  border-radius: 999px;
+  background: var(--border-2);
+  border: 1px solid var(--border);
+  position: relative;
+  cursor: pointer;
+  transition: background 0.15s, border-color 0.15s;
+  margin: 0;
+}
+.row-toggle input[type="checkbox"]::after {
+  content: "";
+  position: absolute;
+  top: 2px; left: 2px;
+  width: 14px; height: 14px;
+  border-radius: 50%;
+  background: var(--ink-muted);
+  transition: left 0.15s, background 0.15s;
+}
+.row-toggle input[type="checkbox"]:checked {
+  background: rgba(74, 222, 128, 0.25);
+  border-color: rgba(74, 222, 128, 0.6);
+}
+.row-toggle input[type="checkbox"]:checked::after {
+  left: 18px;
+  background: #4ade80;
+}
+.row-toggle-cell { white-space: nowrap; }
+
 /* Inline "✓ saved" pill rendered next to a secret field's label when
    the matching column is populated. Lighter visual than a status pill
    so it doesn't compete with the section-level pills. */

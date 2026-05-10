@@ -421,6 +421,10 @@ class ServerSettings(Base):
     # demos and for closed networks where email isn't reachable.
     require_email_verification = Column(Boolean, nullable=False, default=True, server_default="1")
 
+    # Master enable flag — when False, all outbound SMTP is skipped even
+    # if credentials are set. Lets the operator pause email without
+    # clearing the saved credentials.
+    smtp_enabled = Column(Boolean, nullable=False, default=True, server_default="1")
     smtp_host = Column(String(255), nullable=True)
     smtp_port = Column(Integer, nullable=True)
     smtp_user = Column(String(255), nullable=True)
@@ -437,8 +441,14 @@ class ServerSettings(Base):
     discord_last_test_at = Column(DateTime, nullable=True)
     discord_last_test_ok = Column(Boolean, nullable=True)
 
+    # Master enable flags for the singleton OAuth providers. Setting to
+    # False hides the button from /signin and prevents the SSO callback
+    # from registering the client, even when credentials are saved —
+    # operator can pause an integration without wiping creds.
+    oauth_google_enabled = Column(Boolean, nullable=False, default=True, server_default="1")
     oauth_google_client_id = Column(String(255), nullable=True)
     oauth_google_client_secret_enc = Column(Text, nullable=True)
+    oauth_github_enabled = Column(Boolean, nullable=False, default=True, server_default="1")
     oauth_github_client_id = Column(String(255), nullable=True)
     oauth_github_client_secret_enc = Column(Text, nullable=True)
 

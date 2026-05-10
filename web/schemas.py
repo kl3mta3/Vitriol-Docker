@@ -161,6 +161,7 @@ class ServerSettingsOut(BaseModel):
     signup_default_role: str
     signup_default_custom_role_id: Optional[int] = None
     require_email_verification: bool = True
+    smtp_enabled: bool = True
     smtp_host: Optional[str]
     smtp_port: Optional[int]
     smtp_user: Optional[str]
@@ -172,8 +173,10 @@ class ServerSettingsOut(BaseModel):
     discord_webhook_url: Optional[str]
     discord_last_test_at: Optional[datetime] = None
     discord_last_test_ok: Optional[bool] = None
+    oauth_google_enabled: bool = True
     oauth_google_client_id: Optional[str]
     oauth_google_secret_set: bool = False
+    oauth_github_enabled: bool = True
     oauth_github_client_id: Optional[str]
     oauth_github_secret_set: bool = False
     oidc_enabled: bool = False
@@ -220,6 +223,7 @@ class ServerSettingsPatch(BaseModel):
     signup_default_role: Optional[str] = None
     signup_default_custom_role_id: Optional[int] = None
     require_email_verification: Optional[bool] = None
+    smtp_enabled: Optional[bool] = None
     smtp_host: Optional[str] = None
     smtp_port: Optional[int] = None
     smtp_user: Optional[str] = None
@@ -227,8 +231,10 @@ class ServerSettingsPatch(BaseModel):
     smtp_from: Optional[str] = None
     smtp_use_tls: Optional[bool] = None
     discord_webhook_url: Optional[str] = None
+    oauth_google_enabled: Optional[bool] = None
     oauth_google_client_id: Optional[str] = None
     oauth_google_client_secret: Optional[str] = None
+    oauth_github_enabled: Optional[bool] = None
     oauth_github_client_id: Optional[str] = None
     oauth_github_client_secret: Optional[str] = None
     oidc_enabled: Optional[bool] = None

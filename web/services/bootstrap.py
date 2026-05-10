@@ -103,6 +103,14 @@ def migrate_legacy_oidc(db: Session) -> None:
 _ADDITIVE_COLUMNS: list[tuple[str, str, str]] = [
     ("server_settings", "require_email_verification",
      "ALTER TABLE server_settings ADD COLUMN require_email_verification BOOLEAN NOT NULL DEFAULT 1"),
+    # Master enable toggles for the singleton integrations — let the
+    # operator pause an integration without nulling out saved credentials.
+    ("server_settings", "smtp_enabled",
+     "ALTER TABLE server_settings ADD COLUMN smtp_enabled BOOLEAN NOT NULL DEFAULT 1"),
+    ("server_settings", "oauth_google_enabled",
+     "ALTER TABLE server_settings ADD COLUMN oauth_google_enabled BOOLEAN NOT NULL DEFAULT 1"),
+    ("server_settings", "oauth_github_enabled",
+     "ALTER TABLE server_settings ADD COLUMN oauth_github_enabled BOOLEAN NOT NULL DEFAULT 1"),
     ("server_settings", "oidc_enabled",
      "ALTER TABLE server_settings ADD COLUMN oidc_enabled BOOLEAN NOT NULL DEFAULT 0"),
     ("server_settings", "oidc_display_name",

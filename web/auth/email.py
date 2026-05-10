@@ -33,6 +33,14 @@ async def _send(db: Session, to: str, subject: str, body: str) -> bool:
             to, subject, bool(s and s.smtp_host), bool(s and s.smtp_from),
         )
         return False
+    # Respect the operator's master enable toggle. Credentials may be
+    # saved but the integration is paused — no outbound mail.
+    if not bool(s.smtp_enabled):
+        logger.info(
+            "SMTP disabled by master toggle — skipping email to %s (subject=%r).",
+            to, subject,
+        )
+        return False
     msg = EmailMessage()
     msg["From"] = s.smtp_from
     msg["To"] = to

@@ -470,6 +470,9 @@ async function loadOidcProviders() {
   let rows = [];
   try { rows = await api.get('/server/oidc-providers'); } catch (_) { rows = []; }
   oidcTbody.innerHTML = '';
+  // Paint the SSO summary pill regardless of how many providers there
+  // are — depends on Google + GitHub + the OIDC enabled count.
+  paintSsoSummaryPill(rows);
   if (!Array.isArray(rows) || rows.length === 0) {
     const tr = document.createElement('tr');
     tr.innerHTML = '<td colspan="5" class="empty-state">No OIDC providers yet. Click "+ Add OIDC provider" below.</td>';
@@ -480,15 +483,59 @@ async function loadOidcProviders() {
     const tr = document.createElement('tr');
     tr.className = 'user-row clickable';
     tr.dataset.id = p.id;
+    // Inline enable checkbox: PATCH on change, no need to open the
+    // edit form. stopPropagation prevents the row-click handler from
+    // also opening the form when the checkbox is the click target.
     tr.innerHTML = `
       <td>${escapeHtmlSimple(p.display_name)}</td>
       <td><code>${escapeHtmlSimple(p.slug)}</code></td>
       <td class="muted small" style="max-width: 320px; overflow: hidden; text-overflow: ellipsis; white-space: nowrap;">${escapeHtmlSimple(p.issuer)}</td>
-      <td>${p.enabled ? '<span class="status-pill ok">on</span>' : '<span class="status-pill missing">off</span>'}</td>
+      <td class="row-toggle-cell"><label class="row-toggle"><input type="checkbox" data-oidc-toggle="${p.id}" ${p.enabled ? 'checked' : ''} /></label></td>
       <td class="row-manage-cell"><button type="button" class="btn btn-secondary btn-manage">Edit</button></td>
     `;
-    tr.addEventListener('click', () => openOidcForm(p));
+    tr.addEventListener('click', (e) => {
+      // Ignore clicks that land on the toggle checkbox or its label.
+      if (e.target.closest('[data-oidc-toggle], .row-toggle')) return;
+      openOidcForm(p);
+    });
+    const toggle = tr.querySelector('[data-oidc-toggle]');
+    toggle.addEventListener('change', async (e) => {
+      e.stopPropagation();
+      const next = toggle.checked;
+      try {
+        await api.patch(`/server/oidc-providers/${p.id}`, { enabled: next });
+        // Refresh the table + pill so the summary count stays accurate.
+        await loadOidcProviders();
+      } catch (ex) {
+        toggle.checked = !next;
+        alert((ex && ex.detail) || 'Failed to toggle provider.');
+      }
+    });
     oidcTbody.appendChild(tr);
+  }
+}
+
+function paintSsoSummaryPill(oidcRows) {
+  const pill = document.getElementById('sso-status-pill');
+  if (!pill) return;
+  // Read the saved Google/GitHub state from the form-elements that
+  // load() just populated. Falls back to false if the elements aren't
+  // in the DOM yet (very early call before load completes).
+  const googleEn = !!(form.elements['oauth_google_enabled'] && form.elements['oauth_google_enabled'].checked);
+  const googleCfg = !!(form.elements['oauth_google_client_id'] && form.elements['oauth_google_client_id'].value);
+  const githubEn = !!(form.elements['oauth_github_enabled'] && form.elements['oauth_github_enabled'].checked);
+  const githubCfg = !!(form.elements['oauth_github_client_id'] && form.elements['oauth_github_client_id'].value);
+  const oidcCount = Array.isArray(oidcRows) ? oidcRows.filter(r => r.enabled).length : 0;
+  const active =
+    (googleEn && googleCfg ? 1 : 0) +
+    (githubEn && githubCfg ? 1 : 0) +
+    oidcCount;
+  if (active === 0) {
+    pill.textContent = 'none';
+    pill.className = 'status-pill missing';
+  } else {
+    pill.textContent = `${active} active`;
+    pill.className = 'status-pill ok';
   }
 }
 
@@ -520,9 +567,37 @@ function openOidcForm(p) {
   oidcForm.enabled.checked = p ? !!p.enabled : true;
   document.getElementById('oidc-form-title').textContent = p ? `Edit — ${p.display_name}` : 'Add OIDC provider';
   document.getElementById('oidc-form-delete').hidden = !p;
+  // Test button only makes sense for a saved provider — Authlib needs
+  // a registered client to dispatch the round-trip, and that only
+  // exists after Save. Stash the slug so the click handler knows
+  // where to point the popup.
+  const testBtn = document.getElementById('oidc-form-test');
+  if (testBtn) {
+    testBtn.hidden = !p;
+    testBtn.dataset.slug = p ? p.slug : '';
+  }
   document.getElementById('oidc-form-msg').hidden = true;
   updateOidcRedirectPreview();
   oidcDialog.showModal();
+}
+
+// OIDC Test button — opens /api/v1/auth/sso/<slug>/start?test=1 in a
+// popup. The start endpoint stamps session["sso_test"] so the callback
+// renders the SSO test-result page (no user creation, no session
+// cookies) rather than signing the operator in. Same pattern as the
+// Google/GitHub Test buttons in the SSO providers section.
+const _oidcTestBtn = document.getElementById('oidc-form-test');
+if (_oidcTestBtn) {
+  _oidcTestBtn.addEventListener('click', () => {
+    const slug = _oidcTestBtn.dataset.slug || '';
+    if (!slug) return;
+    const url = `/api/v1/auth/sso/${encodeURIComponent(slug)}/start?test=1`;
+    window.open(url, '_blank', 'noopener,width=600,height=700');
+    const msg = document.getElementById('oidc-form-msg');
+    msg.textContent = 'Opened sign-in window — complete it there to verify config.';
+    msg.className = 'muted small';
+    msg.hidden = false;
+  });
 }
 
 function updateOidcRedirectPreview() {
@@ -852,14 +927,32 @@ async function loadNotificationChannels() {
         ? `<span class="status-pill ok">ok</span> <span class="muted small">${when}</span>`
         : `<span class="status-pill failed">failed</span> <span class="muted small">${when}</span>`;
     }
+    // Inline enable checkbox — PATCH on change, no need to open the
+    // edit form. stopPropagation on the input keeps the row-click
+    // handler from also opening the form when the toggle is clicked.
     tr.innerHTML = `
       <td>${escapeHtmlSimple(ch.name)}</td>
       <td><code>${escapeHtmlSimple(ch.kind)}</code></td>
-      <td>${ch.enabled ? '<span class="status-pill ok">on</span>' : '<span class="status-pill missing">off</span>'}</td>
+      <td class="row-toggle-cell"><label class="row-toggle"><input type="checkbox" data-notif-toggle="${ch.id}" ${ch.enabled ? 'checked' : ''} /></label></td>
       <td>${lastTest}</td>
       <td class="row-manage-cell"><button type="button" class="btn btn-secondary btn-manage">Edit</button></td>
     `;
-    tr.addEventListener('click', () => openNotifForm(ch));
+    tr.addEventListener('click', (e) => {
+      if (e.target.closest('[data-notif-toggle], .row-toggle')) return;
+      openNotifForm(ch);
+    });
+    const toggle = tr.querySelector('[data-notif-toggle]');
+    toggle.addEventListener('change', async (e) => {
+      e.stopPropagation();
+      const next = toggle.checked;
+      try {
+        await api.patch(`/server/notification-channels/${ch.id}`, { enabled: next });
+        await loadNotificationChannels();
+      } catch (ex) {
+        toggle.checked = !next;
+        alert((ex && ex.detail) || 'Failed to toggle channel.');
+      }
+    });
     notifTbody.appendChild(tr);
   }
   paintNotifSummaryPill(rows);
