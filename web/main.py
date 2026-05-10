@@ -18,6 +18,7 @@ from .routes import auth as auth_routes
 from .routes import convert as convert_routes
 from .routes import jobs_ws
 from .routes import me as me_routes
+from .routes import files as files_routes
 from .routes import roles as roles_routes
 from .routes import server as server_routes
 from .routes import setup as setup_routes
@@ -90,12 +91,37 @@ async def lifespan(app: FastAPI):
                 _log.exception("Cert-pull scheduler hiccup; continuing")
 
     cert_task = asyncio.create_task(_cert_pull_loop())
+
+    # Output retention cleanup: every 30 minutes, prune by max_age and
+    # max_files per the role policy in server settings. Cheap — a couple
+    # of joined queries plus filesystem unlinks.
+    from .services.cleanup import run_once as cleanup_once
+
+    async def _cleanup_loop():
+        while True:
+            try:
+                await asyncio.sleep(1800)  # 30 min
+                db_ = SessionLocal()
+                try:
+                    # Run sync function on a thread so we don't block the
+                    # event loop on filesystem unlinks for a big sweep.
+                    await asyncio.to_thread(cleanup_once, db_)
+                finally:
+                    db_.close()
+            except asyncio.CancelledError:
+                raise
+            except Exception:
+                _log.exception("Output cleanup hiccup; continuing")
+
+    cleanup_task = asyncio.create_task(_cleanup_loop())
+
     yield
-    cert_task.cancel()
-    try:
-        await cert_task
-    except (asyncio.CancelledError, Exception):
-        pass
+    for t in (cert_task, cleanup_task):
+        t.cancel()
+        try:
+            await t
+        except (asyncio.CancelledError, Exception):
+            pass
     _log.info("Vitriol web shutting down")
 
 
@@ -179,6 +205,7 @@ def create_app() -> FastAPI:
     app.include_router(roles_routes.router, prefix="/api/v1")
     app.include_router(server_routes.router, prefix="/api/v1")
     app.include_router(convert_routes.router, prefix="/api/v1")
+    app.include_router(files_routes.router, prefix="/api/v1")
 
     # WebSocket
     app.include_router(jobs_ws.router)

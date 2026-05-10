@@ -68,6 +68,25 @@ async function load() {
     ru.textContent = `${base}/api/v1/auth/sso/oidc/callback`;
   }
 
+  // ---- Output retention (per role) — populate the 3-row grid ----
+  const retention = (s.output_retention && typeof s.output_retention === 'object')
+    ? s.output_retention
+    : {};
+  document.querySelectorAll('.retention-table tr[data-role]').forEach(tr => {
+    const role = tr.dataset.role;
+    const cfg = retention[role] || {};
+    const setVal = (field, val) => {
+      const el = tr.querySelector(`[data-field="${field}"]`);
+      if (!el) return;
+      if (el.type === 'checkbox') el.checked = !!val;
+      else if (val != null) el.value = val;
+    };
+    setVal('max_files', cfg.max_files ?? 0);
+    setVal('max_age', cfg.max_age ?? 0);
+    setVal('age_unit', cfg.age_unit || 'days');
+    setVal('delete_on_download', cfg.delete_on_download);
+  });
+
   // ---- SSL cert-pull mode wiring ----
   const sslMode = document.getElementById('ssl-mode-select');
   if (sslMode) {
@@ -147,6 +166,21 @@ form.addEventListener('submit', async (e) => {
   // is nothing, since the inputs have no `name`) with the computed bytes.
   const bytes = readableToBytes();
   if (bytes != null) data.max_file_size_bytes = bytes;
+
+  // Output retention — read the per-role grid into the JSON payload
+  // the server expects.
+  const retention = {};
+  document.querySelectorAll('.retention-table tr[data-role]').forEach(tr => {
+    const role = tr.dataset.role;
+    const get = (field) => tr.querySelector(`[data-field="${field}"]`);
+    retention[role] = {
+      max_files: Number(get('max_files').value || 0),
+      max_age:   Number(get('max_age').value || 0),
+      age_unit:  get('age_unit').value || 'days',
+      delete_on_download: get('delete_on_download').checked,
+    };
+  });
+  if (Object.keys(retention).length) data.output_retention = retention;
 
   // Signup default role — the visible select encodes 'builtin:<role>' or
   // 'custom:<id>'; the API takes them as two separate fields.

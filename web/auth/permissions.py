@@ -36,6 +36,15 @@ CAN_APPROVE_PENDING = "approve_pending"
 CAN_GRANT_STONE = "grant_stone"
 CAN_GRANT_SELF_COMPILE = "grant_self_compile"
 
+# Files tab — managing the user's own (and optionally others') converted
+# outputs. own_files implicitly grants download + delete on the user's
+# own files; the *_others caps gate visibility / download / delete of
+# other users' files.
+CAN_VIEW_OWN_FILES = "view_own_files"
+CAN_VIEW_OTHERS_FILES = "view_others_files"
+CAN_DOWNLOAD_OTHERS_FILES = "download_others_files"
+CAN_DELETE_OTHERS_FILES = "delete_others_files"
+
 
 # --- Per-role base capabilities ----------------------------------------
 
@@ -48,6 +57,8 @@ _ROLE_CAPS: dict[Role, set[str]] = {
         CAN_SUSPEND_USER, CAN_BAN_USER, CAN_SUSPEND_ADMIN, CAN_BAN_ADMIN,
         CAN_RESTART_SERVER, CAN_EDIT_SERVER_SETTINGS,
         CAN_APPROVE_PENDING, CAN_GRANT_STONE, CAN_GRANT_SELF_COMPILE,
+        CAN_VIEW_OWN_FILES, CAN_VIEW_OTHERS_FILES,
+        CAN_DOWNLOAD_OTHERS_FILES, CAN_DELETE_OTHERS_FILES,
     },
     Role.admin: {
         CAN_VIEW_APP, CAN_RUN_CONVERSION, CAN_USE_STONE, CAN_USE_SELF_COMPILE,
@@ -56,9 +67,12 @@ _ROLE_CAPS: dict[Role, set[str]] = {
         CAN_SUSPEND_USER, CAN_BAN_USER, CAN_SUSPEND_ADMIN,
         CAN_RESTART_SERVER,
         CAN_APPROVE_PENDING, CAN_GRANT_STONE, CAN_GRANT_SELF_COMPILE,
+        CAN_VIEW_OWN_FILES, CAN_VIEW_OTHERS_FILES,
+        CAN_DOWNLOAD_OTHERS_FILES, CAN_DELETE_OTHERS_FILES,
     },
     Role.user: {
         CAN_VIEW_APP, CAN_RUN_CONVERSION, CAN_VIEW_PROFILE,
+        CAN_VIEW_OWN_FILES,
     },
     Role.pending: set(),
     Role.viewer: {
@@ -97,6 +111,13 @@ _CUSTOM_FLAG_FOR_CAP: dict[str, str] = {
     CAN_GRANT_SELF_COMPILE: "can_grant_self_compile",
     CAN_RESTART_SERVER: "can_restart_server",
     CAN_RESET_OTHER_CREDS: "can_reset_other_creds",
+    # Files-tab permissions — own_files behaves like Stone (no ceiling
+    # check, grantable to any base); the *_others variants are
+    # admin-tier and require the base to permit them.
+    CAN_VIEW_OWN_FILES: "can_view_own_files",
+    CAN_VIEW_OTHERS_FILES: "can_view_others_files",
+    CAN_DOWNLOAD_OTHERS_FILES: "can_download_others_files",
+    CAN_DELETE_OTHERS_FILES: "can_delete_others_files",
 }
 
 
@@ -135,7 +156,11 @@ def _has_capability_via_custom_role(user: "User", cap: str) -> bool:
     if cap == CAN_USE_SELF_COMPILE:
         # Same invariant as the per-user grant: SC implies Stone.
         return flag_on and bool(cr.stone_enabled)
-    # Admin-tier caps — ceiling-checked.
+    if cap == CAN_VIEW_OWN_FILES:
+        # No ceiling — any role that can convert (or even one that
+        # only inherits files visibility) can view its own outputs.
+        return flag_on
+    # Admin-tier caps (including the *_others files caps) — ceiling-checked.
     return flag_on and (cap in base_caps)
 
 

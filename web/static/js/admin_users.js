@@ -537,8 +537,13 @@ function openRoleForm(cr) {
     'can_view_users_tab', 'can_create_user', 'can_suspend_user', 'can_ban_user',
     'can_approve_pending', 'can_grant_stone', 'can_grant_self_compile',
     'can_reset_other_creds', 'can_restart_server',
+    // Files-tab caps — own_files works at any base; the *_others ones
+    // are admin-tier and are forced off when base != admin (see
+    // updateRoleAdminBlockVisibility below).
+    'can_view_own_files', 'can_view_others_files',
+    'can_download_others_files', 'can_delete_others_files',
   ]) {
-    f[flag].checked = !!(cr && cr[flag]);
+    if (f[flag]) f[flag].checked = !!(cr && cr[flag]);
   }
   f.daily_conversion_limit.value = cr && cr.daily_conversion_limit != null ? cr.daily_conversion_limit : '';
   f.rate_limit_per_minute.value = cr && cr.rate_limit_per_minute != null ? cr.rate_limit_per_minute : '';
@@ -593,6 +598,10 @@ roleForm.addEventListener('submit', async (e) => {
     can_grant_self_compile: roleForm.can_grant_self_compile.checked,
     can_reset_other_creds: roleForm.can_reset_other_creds.checked,
     can_restart_server: roleForm.can_restart_server.checked,
+    can_view_own_files: roleForm.can_view_own_files ? roleForm.can_view_own_files.checked : false,
+    can_view_others_files: roleForm.can_view_others_files ? roleForm.can_view_others_files.checked : false,
+    can_download_others_files: roleForm.can_download_others_files ? roleForm.can_download_others_files.checked : false,
+    can_delete_others_files: roleForm.can_delete_others_files ? roleForm.can_delete_others_files.checked : false,
   };
   try {
     if (id) await api.patch(`/roles/${id}`, data);

@@ -80,6 +80,23 @@ _ADDITIVE_COLUMNS: list[tuple[str, str, str]] = [
      "ALTER TABLE server_settings ADD COLUMN ssl_cert_pull_response_cert_field VARCHAR(64) NOT NULL DEFAULT 'fullchain'"),
     ("server_settings", "ssl_cert_pull_response_key_field",
      "ALTER TABLE server_settings ADD COLUMN ssl_cert_pull_response_key_field VARCHAR(64) NOT NULL DEFAULT 'privkey'"),
+    # Output retention v1 — per-role policy stored as JSON.
+    ("server_settings", "output_retention_json",
+     "ALTER TABLE server_settings ADD COLUMN output_retention_json TEXT NOT NULL DEFAULT "
+     "'{\"super_admin\":{\"max_files\":0,\"max_age\":0,\"age_unit\":\"days\",\"delete_on_download\":false},"
+     "\"admin\":{\"max_files\":0,\"max_age\":30,\"age_unit\":\"days\",\"delete_on_download\":false},"
+     "\"user\":{\"max_files\":20,\"max_age\":24,\"age_unit\":\"hours\",\"delete_on_download\":false}}'"),
+    # Files-tab capabilities on custom_roles. Default off — built-in
+    # roles get their defaults from _ROLE_CAPS in permissions.py;
+    # custom roles must opt in explicitly.
+    ("custom_roles", "can_view_own_files",
+     "ALTER TABLE custom_roles ADD COLUMN can_view_own_files BOOLEAN NOT NULL DEFAULT 0"),
+    ("custom_roles", "can_view_others_files",
+     "ALTER TABLE custom_roles ADD COLUMN can_view_others_files BOOLEAN NOT NULL DEFAULT 0"),
+    ("custom_roles", "can_download_others_files",
+     "ALTER TABLE custom_roles ADD COLUMN can_download_others_files BOOLEAN NOT NULL DEFAULT 0"),
+    ("custom_roles", "can_delete_others_files",
+     "ALTER TABLE custom_roles ADD COLUMN can_delete_others_files BOOLEAN NOT NULL DEFAULT 0"),
 ]
 
 
@@ -102,7 +119,10 @@ def ensure_schema(engine: Engine) -> None:
             if column in existing:
                 continue
             try:
-                conn.execute(text(ddl))
+                # exec_driver_sql sends SQL raw — text() treats colons as
+                # named-param markers, which is wrong for DDL whose default
+                # value happens to be JSON literals containing colons.
+                conn.exec_driver_sql(ddl)
                 _log.info("ensure_schema: added %s.%s", table, column)
             except Exception as e:
                 _log.warning("ensure_schema: failed to add %s.%s: %s", table, column, e)

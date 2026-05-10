@@ -217,6 +217,45 @@ echo &quot;$RESPONSE&quot; | jq -r .certKey > &quot;$VITRIOL_CERT_DIR/privkey.pe
       <p id="refresh-certs-msg" class="ok small" hidden></p>
     </details>
 
+    <details id="retention"><summary>Output retention (per role)</summary>
+      <p class="muted small">
+        How long converted output files stay in <code>/data/outputs/</code> before
+        being cleaned up. <code>max files = 0</code> means unlimited count.
+        <code>max age = 0</code> means no time-based cleanup.
+        <strong>Delete on download</strong> removes the file from disk right after
+        the user successfully downloads it (regardless of age / count limits).
+        Cleanup runs every 30 minutes.
+      </p>
+      <table class="retention-table">
+        <thead>
+          <tr><th>Role</th><th>Max files</th><th>Max age</th><th>Unit</th><th>Delete on download</th></tr>
+        </thead>
+        <tbody>
+          <tr data-role="super_admin">
+            <th>Super admin</th>
+            <td><input type="number" min="0" data-field="max_files" /></td>
+            <td><input type="number" min="0" data-field="max_age" /></td>
+            <td><select data-field="age_unit"><option value="minutes">minutes</option><option value="hours">hours</option><option value="days">days</option></select></td>
+            <td><input type="checkbox" data-field="delete_on_download" /></td>
+          </tr>
+          <tr data-role="admin">
+            <th>Admin</th>
+            <td><input type="number" min="0" data-field="max_files" /></td>
+            <td><input type="number" min="0" data-field="max_age" /></td>
+            <td><select data-field="age_unit"><option value="minutes">minutes</option><option value="hours">hours</option><option value="days">days</option></select></td>
+            <td><input type="checkbox" data-field="delete_on_download" /></td>
+          </tr>
+          <tr data-role="user">
+            <th>User</th>
+            <td><input type="number" min="0" data-field="max_files" /></td>
+            <td><input type="number" min="0" data-field="max_age" /></td>
+            <td><select data-field="age_unit"><option value="minutes">minutes</option><option value="hours">hours</option><option value="days">days</option></select></td>
+            <td><input type="checkbox" data-field="delete_on_download" /></td>
+          </tr>
+        </tbody>
+      </table>
+    </details>
+
     <details><summary>Self-compile defaults</summary>
       <label class="checkbox-row"><input type="checkbox" name="super_admin_can_self_compile" /> <span>Super admin can self-compile</span></label>
       <label class="checkbox-row"><input type="checkbox" name="admin_can_self_compile" /> <span>Admins can self-compile</span></label>

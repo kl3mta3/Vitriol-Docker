@@ -28,6 +28,7 @@
       </a>
       <div class="nav-links">
         <a href="/">App</a>
+        {% if show_files_tab %}<a href="/files">Files</a>{% endif %}
         <a href="/profile">Profile</a>
         {% if show_users_tab %}<a href="/admin/users">Users</a>{% endif %}
         {% if show_server_tab %}<a href="/admin/server">Server</a>{% endif %}

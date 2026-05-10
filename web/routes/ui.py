@@ -8,7 +8,7 @@ from fastapi.templating import Jinja2Templates
 from sqlalchemy.orm import Session
 
 from ..auth import permissions as _perms
-from ..auth.permissions import has_capability, CAN_VIEW_USERS_TAB, CAN_VIEW_SERVER_TAB
+from ..auth.permissions import has_capability, CAN_VIEW_USERS_TAB, CAN_VIEW_SERVER_TAB, CAN_VIEW_OWN_FILES
 from ..deps import get_current_user_optional, get_db
 from ..models import Role, ServerSettings, User
 
@@ -37,6 +37,7 @@ def _common_ctx(request: Request, user: Optional[User], db: Session) -> dict:
         "allow_signup": bool(s.allow_signup) if s else False,
         "show_users_tab": user is not None and has_capability(user, CAN_VIEW_USERS_TAB),
         "show_server_tab": user is not None and has_capability(user, CAN_VIEW_SERVER_TAB),
+        "show_files_tab": user is not None and has_capability(user, CAN_VIEW_OWN_FILES),
     }
 
 
@@ -71,6 +72,15 @@ def profile_page(request: Request, user: Optional[User] = Depends(get_current_us
     if user is None:
         return RedirectResponse(url="/signin")
     return templates.TemplateResponse(request, "profile.html", _common_ctx(request, user, db))
+
+
+@router.get("/files", response_class=HTMLResponse)
+def files_page(request: Request, user: Optional[User] = Depends(get_current_user_optional), db: Session = Depends(get_db)):
+    if user is None:
+        return RedirectResponse(url="/signin")
+    if not has_capability(user, CAN_VIEW_OWN_FILES):
+        return RedirectResponse(url="/")
+    return templates.TemplateResponse(request, "files.html", _common_ctx(request, user, db))
 
 
 @router.get("/admin/users", response_class=HTMLResponse)

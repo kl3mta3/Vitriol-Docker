@@ -249,3 +249,43 @@ document.getElementById('clear-all').addEventListener('click', () => {
 });
 
 loadFormats();
+
+// ---------------- Replay queue from /files page ------------------------
+//
+// The Files page stashes selected jobs in localStorage and redirects
+// here. We pull each output file's bytes back, wrap it as a File so the
+// rest of the playlist code treats it identically to a drag-dropped
+// upload, and add it as a new playlist row ready for the user to pick a
+// new target format and convert.
+
+(async function replayFromFilesTab() {
+  const raw = localStorage.getItem('vitriol_replay_queue');
+  if (!raw) return;
+  localStorage.removeItem('vitriol_replay_queue');
+  let queue = [];
+  try { queue = JSON.parse(raw); } catch (_) { return; }
+  if (!Array.isArray(queue) || !queue.length) return;
+
+  // Wait for the formats catalogue to land before adding rows so the
+  // dst-ext dropdowns populate immediately.
+  let waited = 0;
+  while (!formats && waited < 30) { await new Promise(r => setTimeout(r, 100)); waited++; }
+
+  for (const item of queue) {
+    try {
+      const r = await fetch(`/api/v1/jobs/${item.id}/result`, { credentials: 'same-origin' });
+      if (!r.ok) {
+        statusText.textContent = `Skipped ${item.name}: ${r.status}`;
+        continue;
+      }
+      const blob = await r.blob();
+      // File preserves the filename so the playlist renders + uploads
+      // the same way as a fresh drag-drop. Type from blob.
+      const file = new File([blob], item.name, { type: blob.type });
+      addFile(file);
+    } catch (ex) {
+      statusText.textContent = `Replay failed for ${item.name}: ${ex.message || ex}`;
+    }
+  }
+  if (queue.length) statusText.textContent = `Loaded ${queue.length} file${queue.length === 1 ? '' : 's'} from Files tab.`;
+})();

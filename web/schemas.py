@@ -190,6 +190,7 @@ class ServerSettingsOut(BaseModel):
     ssl_cert_pull_response_key_field: str = "privkey"
     super_admin_can_self_compile: bool
     admin_can_self_compile: bool
+    output_retention: dict = {}
 
 
 class ServerSettingsPatch(BaseModel):
@@ -238,6 +239,7 @@ class ServerSettingsPatch(BaseModel):
     ssl_cert_pull_response_key_field: Optional[str] = None
     super_admin_can_self_compile: Optional[bool] = None
     admin_can_self_compile: Optional[bool] = None
+    output_retention: Optional[dict] = None
 
 
 class CustomRoleOut(BaseModel):
@@ -259,6 +261,10 @@ class CustomRoleOut(BaseModel):
     can_restart_server: bool
     can_view_users_tab: bool
     can_reset_other_creds: bool
+    can_view_own_files: bool = False
+    can_view_others_files: bool = False
+    can_download_others_files: bool = False
+    can_delete_others_files: bool = False
     created_at: datetime
     user_count: int = 0
 
@@ -280,6 +286,10 @@ class CustomRoleCreateRequest(BaseModel):
     can_restart_server: bool = False
     can_view_users_tab: bool = False
     can_reset_other_creds: bool = False
+    can_view_own_files: bool = False
+    can_view_others_files: bool = False
+    can_download_others_files: bool = False
+    can_delete_others_files: bool = False
 
 
 class CustomRoleUpdateRequest(BaseModel):
@@ -299,6 +309,10 @@ class CustomRoleUpdateRequest(BaseModel):
     can_restart_server: Optional[bool] = None
     can_view_users_tab: Optional[bool] = None
     can_reset_other_creds: Optional[bool] = None
+    can_view_own_files: Optional[bool] = None
+    can_view_others_files: Optional[bool] = None
+    can_download_others_files: Optional[bool] = None
+    can_delete_others_files: Optional[bool] = None
 
 
 class MessageResponse(BaseModel):

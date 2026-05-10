@@ -143,6 +143,16 @@ class CustomRole(Base):
     can_view_users_tab = Column(Boolean, nullable=False, default=False)
     can_reset_other_creds = Column(Boolean, nullable=False, default=False)
 
+    # Files-tab permissions. own = the user's own outputs (the Files tab
+    # itself); others = looking at / acting on other users' files.
+    # Built-in roles: super_admin and admin get all four; user gets only
+    # can_view_own_files; viewer/pending get nothing. Custom roles can
+    # toggle within their base role's ceiling.
+    can_view_own_files = Column(Boolean, nullable=False, default=False, server_default="0")
+    can_view_others_files = Column(Boolean, nullable=False, default=False, server_default="0")
+    can_download_others_files = Column(Boolean, nullable=False, default=False, server_default="0")
+    can_delete_others_files = Column(Boolean, nullable=False, default=False, server_default="0")
+
     created_at = Column(DateTime, nullable=False, default=datetime.utcnow)
     updated_at = Column(DateTime, nullable=False, default=datetime.utcnow, onupdate=datetime.utcnow)
     created_by_user_id = Column(Integer, ForeignKey("users.id"), nullable=True)
@@ -352,6 +362,28 @@ class ServerSettings(Base):
 
     super_admin_can_self_compile = Column(Boolean, nullable=False, default=True)
     admin_can_self_compile = Column(Boolean, nullable=False, default=True)
+
+    # Per-role retention policy for converted output files. JSON shape:
+    #   { "<role>": {"max_files": int, "max_age": int, "age_unit": str,
+    #                "delete_on_download": bool}, ... }
+    # max_files=0 → unlimited count; max_age=0 → no time-based cleanup;
+    # delete_on_download=true → file is removed right after the user's
+    # first successful download. Background scheduler reads this every
+    # ~30 min and prunes expired/excess outputs.
+    output_retention_json = Column(
+        Text,
+        nullable=False,
+        default=(
+            '{"super_admin":{"max_files":0,"max_age":0,"age_unit":"days","delete_on_download":false},'
+            '"admin":{"max_files":0,"max_age":30,"age_unit":"days","delete_on_download":false},'
+            '"user":{"max_files":20,"max_age":24,"age_unit":"hours","delete_on_download":false}}'
+        ),
+        server_default=(
+            '{"super_admin":{"max_files":0,"max_age":0,"age_unit":"days","delete_on_download":false},'
+            '"admin":{"max_files":0,"max_age":30,"age_unit":"days","delete_on_download":false},'
+            '"user":{"max_files":20,"max_age":24,"age_unit":"hours","delete_on_download":false}}'
+        ),
+    )
 
     updated_at = Column(DateTime, nullable=False, default=datetime.utcnow, onupdate=datetime.utcnow)
     updated_by_user_id = Column(Integer, ForeignKey("users.id"), nullable=True)

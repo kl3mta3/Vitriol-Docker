@@ -70,7 +70,34 @@ def _to_out(s: ServerSettings) -> ServerSettingsOut:
         ssl_cert_pull_response_key_field=s.ssl_cert_pull_response_key_field or "privkey",
         super_admin_can_self_compile=s.super_admin_can_self_compile,
         admin_can_self_compile=s.admin_can_self_compile,
+        output_retention=_load_retention(s),
     )
+
+
+def _load_retention(s: ServerSettings) -> dict:
+    """Parse the per-role retention JSON, falling back to safe defaults
+    if the column is missing/empty/malformed."""
+    defaults = {
+        "super_admin": {"max_files": 0, "max_age": 0, "age_unit": "days", "delete_on_download": False},
+        "admin":       {"max_files": 0, "max_age": 30, "age_unit": "days", "delete_on_download": False},
+        "user":        {"max_files": 20, "max_age": 24, "age_unit": "hours", "delete_on_download": False},
+    }
+    raw = (s.output_retention_json or "").strip()
+    if not raw:
+        return defaults
+    try:
+        parsed = json.loads(raw)
+    except (json.JSONDecodeError, TypeError):
+        return defaults
+    # Merge so partial saves don't lose roles.
+    out = dict(defaults)
+    for role, cfg in parsed.items():
+        if not isinstance(cfg, dict):
+            continue
+        merged = dict(defaults.get(role, {}))
+        merged.update(cfg)
+        out[role] = merged
+    return out
 
 
 @router.get("/settings", response_model=ServerSettingsOut)
@@ -139,6 +166,21 @@ def patch_server_settings(
         s.disabled_input_formats_json = json.dumps(req.disabled_input_formats)
     if req.disabled_output_formats is not None:
         s.disabled_output_formats_json = json.dumps(req.disabled_output_formats)
+    if req.output_retention is not None:
+        # Sanitize incoming structure — accept only known roles + fields,
+        # coerce types so a misbehaving frontend can't poison the JSON.
+        valid_units = {"minutes", "hours", "days"}
+        sanitized: dict[str, dict] = {}
+        for role, cfg in (req.output_retention or {}).items():
+            if role not in {"super_admin", "admin", "user"} or not isinstance(cfg, dict):
+                continue
+            sanitized[role] = {
+                "max_files": max(0, int(cfg.get("max_files", 0) or 0)),
+                "max_age":   max(0, int(cfg.get("max_age", 0) or 0)),
+                "age_unit":  cfg.get("age_unit") if cfg.get("age_unit") in valid_units else "days",
+                "delete_on_download": bool(cfg.get("delete_on_download", False)),
+            }
+        s.output_retention_json = json.dumps(sanitized)
 
     if req.smtp_password is not None:
         s.smtp_password_enc = encrypt(req.smtp_password)

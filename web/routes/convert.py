@@ -1,6 +1,7 @@
 """Conversion API: upload + submit + list jobs + cancel + download."""
 from __future__ import annotations
 import json
+import os
 import secrets
 from datetime import datetime
 from pathlib import Path
@@ -12,7 +13,9 @@ from pydantic import BaseModel
 from sqlalchemy.orm import Session
 
 from ..auth.permissions import (
-    has_capability, CAN_RUN_CONVERSION, CAN_USE_STONE, CAN_USE_SELF_COMPILE,
+    has_capability,
+    CAN_RUN_CONVERSION, CAN_USE_STONE, CAN_USE_SELF_COMPILE,
+    CAN_DOWNLOAD_OTHERS_FILES,
 )
 from ..config import get_settings
 from ..deps import get_current_user, get_db, require_active_non_pending
@@ -188,10 +191,10 @@ def download_zip(req: _ZipRequest, user: User = Depends(get_current_user), db: S
     if not req.ids:
         raise HTTPException(status_code=400, detail="No job ids provided")
     jobs = db.query(Job).filter(Job.id.in_(req.ids)).all()
-    is_admin = user.role.value in ("admin", "super_admin")
+    can_others = has_capability(user, CAN_DOWNLOAD_OTHERS_FILES)
     available: list[Job] = []
     for j in jobs:
-        if j.user_id != user.id and not is_admin:
+        if j.user_id != user.id and not can_others:
             continue
         if j.status != JobStatus.done:
             continue
@@ -230,12 +233,67 @@ def download_zip(req: _ZipRequest, user: User = Depends(get_current_user), db: S
 
 @router.get("/jobs/{job_id}/result")
 def download_result(job_id: int, user: User = Depends(get_current_user), db: Session = Depends(get_db)):
+    """Stream a converted output file.
+
+    Owner can always download their own. Anyone else needs the
+    `download_others_files` capability. If the file's owner role has
+    `delete_on_download=true` configured in retention, the file is
+    removed from disk after the response finishes streaming.
+    """
     job: Optional[Job] = db.query(Job).get(job_id)
-    if job is None or (job.user_id != user.id and user.role.value not in ("admin", "super_admin")):
+    if job is None:
+        raise HTTPException(status_code=404, detail="Job not found")
+    if job.user_id != user.id and not has_capability(user, CAN_DOWNLOAD_OTHERS_FILES):
+        # 404 to avoid leaking that the job exists.
         raise HTTPException(status_code=404, detail="Job not found")
     if job.status != JobStatus.done:
         raise HTTPException(status_code=409, detail=f"Job is {job.status.value}")
     p = Path(job.dst_path)
     if not p.exists():
         raise HTTPException(status_code=410, detail="Output file no longer available")
-    return FileResponse(p, filename=job.dst_filename)
+
+    # Decide whether to delete on the way out, based on the OWNER's role
+    # retention config (not the downloader's — admins reading a user's
+    # file still trigger that user's delete-on-download policy).
+    cleanup_after = _should_delete_on_download(db, job)
+
+    response = FileResponse(p, filename=job.dst_filename)
+    if cleanup_after:
+        from starlette.background import BackgroundTask
+        response.background = BackgroundTask(_post_download_delete, str(p), job.id, job.user_id)
+    return response
+
+
+def _should_delete_on_download(db, job) -> bool:
+    """Read the per-role retention policy and decide if this job's
+    output should be removed after a successful download."""
+    from ..models import ServerSettings, Role
+    s = db.query(ServerSettings).get(1)
+    if s is None or not s.output_retention_json:
+        return False
+    import json as _json
+    try:
+        policy = _json.loads(s.output_retention_json)
+    except (_json.JSONDecodeError, TypeError):
+        return False
+    owner = db.query(User).get(job.user_id)
+    if owner is None:
+        return False
+    role_key = owner.role.value if hasattr(owner.role, "value") else str(owner.role)
+    role_cfg = policy.get(role_key) or policy.get("user") or {}
+    return bool(role_cfg.get("delete_on_download", False))
+
+
+def _post_download_delete(path: str, job_id: int, user_id: int) -> None:
+    """Background task — runs after the FileResponse finishes streaming
+    so the bytes always reach the client first. Best-effort: any failure
+    is logged but doesn't surface to the user."""
+    import logging
+    log = logging.getLogger("vitriol.cleanup")
+    try:
+        os.unlink(path)
+        log.info("delete_on_download: removed %s (job=%d user=%d)", path, job_id, user_id)
+    except FileNotFoundError:
+        pass
+    except OSError as e:
+        log.warning("delete_on_download: failed to remove %s: %s", path, e)
