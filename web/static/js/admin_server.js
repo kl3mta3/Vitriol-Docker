@@ -36,6 +36,25 @@ if (sizeValueEl && sizeUnitEl) {
   sizeUnitEl.addEventListener('change', updateBytesDisplay);
 }
 
+// Visual placeholder shown when a secret column is populated server-side.
+// We never echo plaintext back, so the field stays empty on save — but an
+// empty field looks identical to "I never saved this", which is confusing.
+// This shows the operator that the slot has a value (and that leaving it
+// blank preserves it). 12 bullets is just a visual cue, not the real length.
+const SAVED_SECRET_PLACEHOLDER = '•••••••••••• saved — leave blank to keep';
+const EMPTY_SECRET_PLACEHOLDER = '(none — paste a value to set)';
+
+// Map each `<field>_set` boolean from the API response to the password
+// input that represents it, so a populated DB column shows up as a clear
+// "saved" placeholder instead of looking unset.
+const SECRET_FIELD_MAP = {
+  smtp_password_set:                            'smtp_password',
+  oauth_google_secret_set:                      'oauth_google_client_secret',
+  oauth_github_secret_set:                      'oauth_github_client_secret',
+  ssl_cert_pull_webhook_secret_set:             'ssl_cert_pull_webhook_secret',
+  ssl_cert_pull_webhook_header_value_set:       'ssl_cert_pull_webhook_header_value',
+};
+
 async function load() {
   const s = await api.get('/server/settings');
   for (const [k, v] of Object.entries(s)) {
@@ -43,6 +62,14 @@ async function load() {
     if (!el) continue;
     if (el.type === 'checkbox') el.checked = !!v;
     else if (v != null) el.value = v;
+  }
+  // Reflect "this secret is saved" visually on every password slot whose
+  // matching `<field>_set` flag is true. Field stays empty (so blank =
+  // unchanged on next save) — only the placeholder changes.
+  for (const [setFlag, fieldName] of Object.entries(SECRET_FIELD_MAP)) {
+    const el = form.elements[fieldName];
+    if (!el) continue;
+    el.placeholder = s[setFlag] ? SAVED_SECRET_PLACEHOLDER : EMPTY_SECRET_PLACEHOLDER;
   }
   // Signup default role select takes the encoded form 'builtin:<role>'
   // or 'custom:<id>'. Populate the custom options first, then select
@@ -447,6 +474,16 @@ function openOidcForm(p) {
   oidcForm.scopes.value = p ? (p.scopes || 'openid email profile') : 'openid email profile';
   oidcForm.client_id.value = p ? p.client_id : '';
   oidcForm.client_secret.value = '';
+  // Match the secret-placeholder convention used in the main form: bullets
+  // + "saved" hint when the row has a stored client_secret, plain "(none)"
+  // hint when adding fresh, so it's obvious whether the slot is populated.
+  if (p && p.client_secret_set) {
+    oidcForm.client_secret.placeholder = SAVED_SECRET_PLACEHOLDER;
+  } else if (p) {
+    oidcForm.client_secret.placeholder = EMPTY_SECRET_PLACEHOLDER;
+  } else {
+    oidcForm.client_secret.placeholder = 'required for new providers';
+  }
   oidcForm.enabled.checked = p ? !!p.enabled : true;
   document.getElementById('oidc-form-title').textContent = p ? `Edit — ${p.display_name}` : 'Add OIDC provider';
   document.getElementById('oidc-form-delete').hidden = !p;
@@ -586,15 +623,17 @@ if (discordTestBtn) discordTestBtn.addEventListener('click', async () => {
   const original = discordTestBtn.textContent;
   discordTestBtn.textContent = 'Posting…';
   try {
-    // Auto-save first so a freshly-pasted webhook URL is persisted
-    // before we try to use it.
-    form.dispatchEvent(new Event('submit', { cancelable: true }));
-    await new Promise(r => setTimeout(r, 350));
+    // Persist ONLY the webhook URL — never dispatch a form-wide submit
+    // here. A full submit risks browser autofill clobbering unrelated
+    // fields (allowed_origin, smtp_*, etc.) silently. The dedicated PATCH
+    // below sends a one-key payload, leaving every other column untouched.
+    const url = (form.elements['discord_webhook_url'] || {}).value || '';
+    if (url) await api.patch('/server/settings', { discord_webhook_url: url });
     const r = await api.post('/server/test-discord', {});
     msg.textContent = r.message || 'Posted.';
     msg.className = 'ok small';
     msg.hidden = false;
-    await load();   // refresh pill state
+    await load();
   } catch (ex) {
     msg.textContent = (ex && ex.detail) || 'Failed';
     msg.className = 'error small';
@@ -860,10 +899,21 @@ if (testBtn) testBtn.addEventListener('click', async () => {
   testBtn.disabled = true;
   testBtn.textContent = 'Sending…';
   try {
-    // Persist any unsaved field edits (host, port, password, etc.) so the
-    // server tests against what the admin sees on screen.
-    form.dispatchEvent(new Event('submit', { cancelable: true }));
-    await new Promise(r => setTimeout(r, 350));
+    // Persist ONLY the SMTP fields — never dispatch a form-wide submit.
+    // (A full submit risks browser autofill silently overwriting unrelated
+    // fields like `allowed_origin`.) Empty password = leave saved value
+    // alone, matching the convention everywhere else in this form.
+    const smtpPatch = {
+      smtp_host:    (form.elements['smtp_host']    || {}).value || null,
+      smtp_port:    (form.elements['smtp_port']    || {}).value
+                       ? Number(form.elements['smtp_port'].value) : null,
+      smtp_user:    (form.elements['smtp_user']    || {}).value || null,
+      smtp_from:    (form.elements['smtp_from']    || {}).value || null,
+      smtp_use_tls: !!(form.elements['smtp_use_tls'] && form.elements['smtp_use_tls'].checked),
+    };
+    const pw = (form.elements['smtp_password'] || {}).value;
+    if (pw) smtpPatch.smtp_password = pw;
+    await api.patch('/server/settings', smtpPatch);
     const r = await api.post('/server/test-email', { to });
     msg.textContent = r.message;
     msg.className = 'ok';
@@ -890,29 +940,19 @@ if (testBtn) testBtn.addEventListener('click', async () => {
 function wireSsoTest(btnId, msgId, provider) {
   const btn = document.getElementById(btnId);
   if (!btn) return;
-  btn.addEventListener('click', async () => {
+  btn.addEventListener('click', () => {
+    // No auto-save here. The test flow uses whatever is already in the DB,
+    // and dispatching a form-wide submit risks browser autofill (or a
+    // stale value in a hidden field) silently overwriting unrelated
+    // settings — which is exactly how `allowed_origin` got clobbered with
+    // "masterlocke" the first time. If the operator wants to test newly
+    // typed credentials, they Save first, then click Test.
     const msg = document.getElementById(msgId);
-    msg.hidden = true;
-    btn.disabled = true;
-    const original = btn.textContent;
-    btn.textContent = 'Saving…';
-    try {
-      // Persist any field edits first so the test uses what's on screen.
-      form.dispatchEvent(new Event('submit', { cancelable: true }));
-      await new Promise(r => setTimeout(r, 350));
-      const url = `/api/v1/auth/sso/${provider}/start?test=1`;
-      window.open(url, '_blank', 'noopener,width=600,height=700');
-      msg.textContent = 'Opened sign-in window — complete it to verify config.';
-      msg.className = 'muted small';
-      msg.hidden = false;
-    } catch (ex) {
-      msg.textContent = (ex && ex.detail) || 'Failed to launch test.';
-      msg.className = 'error small';
-      msg.hidden = false;
-    } finally {
-      btn.disabled = false;
-      btn.textContent = original;
-    }
+    const url = `/api/v1/auth/sso/${provider}/start?test=1`;
+    window.open(url, '_blank', 'noopener,width=600,height=700');
+    msg.textContent = 'Opened sign-in window — complete it there to verify config. Save the page first if you just typed a new client ID/secret.';
+    msg.className = 'muted small';
+    msg.hidden = false;
   });
 }
 

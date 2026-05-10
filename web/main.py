@@ -174,20 +174,34 @@ def create_app() -> FastAPI:
 
     @app.middleware("http")
     async def _domain_lock(request: Request, call_next):
-        # Always exempt setup, static, and the admin/server settings page +
-        # API. If the operator typo'd allowed_origin and locked themselves
-        # out, they need a way back in to fix it without console access.
+        # Domain lock is defense-in-depth against DNS rebinding to the
+        # data API. It never applies to UI pages, static assets, auth
+        # routes, or admin/server recovery — the operator MUST always be
+        # able to reach the settings page to undo a typo'd value, and
+        # users must always be able to render /signin.
         path = request.url.path
-        if (
-            path.startswith("/setup")
-            or path.startswith("/static")
-            or path.startswith("/admin/server")
-            or path.startswith("/api/v1/server/")
-            or path.startswith("/api/v1/auth/")  # signin/refresh/logout
-            or path == "/healthz"
-        ):
+
+        # 1. All non-API paths bypass — HTML pages, static, /setup, /signin,
+        #    /admin/*, /profile, /files, etc.
+        if not path.startswith("/api/"):
             return await call_next(request)
-        # Read settings off the DB once per request — cheap on SQLite.
+
+        # 2. Recovery + auth API paths bypass — without these the locked-out
+        #    super admin has no path back into the UI to fix the setting.
+        for exempt in (
+            "/api/v1/auth/",       # signin / signup / refresh / logout / verify / sso
+            "/api/v1/server/",     # GET + PATCH /server/settings (where they fix it)
+            "/api/v1/me",          # whoami — required by the layout shell
+            "/api/v1/users",       # admin user-management UI fetches this on render
+            "/api/v1/oidc",        # provider list shown on /signin
+            "/api/v1/healthz",
+        ):
+            if path.startswith(exempt):
+                return await call_next(request)
+
+        # 3. Read the lock value lazily; if anything goes wrong reading
+        #    the DB, fail-open rather than fail-closed (we'd rather a brief
+        #    DB hiccup serves traffic than locks everyone out).
         try:
             db = SessionLocal()
             s = db.query(ServerSettings).get(1)
@@ -195,6 +209,7 @@ def create_app() -> FastAPI:
             db.close()
         except Exception:
             allowed = None
+
         if allowed:
             # Be tolerant of common operator mistakes — pasting
             # "https://app.vitriol.rocks" or "app.vitriol.rocks/" should
