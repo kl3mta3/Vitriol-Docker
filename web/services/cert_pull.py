@@ -85,7 +85,10 @@ async def run(db: Session) -> str:
 
 async def _run_webhook(s: ServerSettings) -> str:
     if not s.ssl_cert_pull_webhook_url:
-        raise CertPullError("Webhook URL not set.")
+        raise CertPullError(
+            "Webhook URL is empty (mode=webhook). Either fill in the URL field "
+            "and click Save settings, or switch the Mode dropdown to 'Script'."
+        )
     method = (s.ssl_cert_pull_webhook_method or "POST").upper()
     headers: dict[str, str] = {}
     body: Optional[bytes] = None
@@ -138,7 +141,10 @@ async def _run_webhook(s: ServerSettings) -> str:
 
 async def _run_script(s: ServerSettings) -> str:
     if not s.ssl_cert_pull_script or not s.ssl_cert_pull_script.strip():
-        raise CertPullError("Script body is empty.")
+        raise CertPullError(
+            "Script body is empty (mode=script). Paste your script in the "
+            "Script body field and click Save settings."
+        )
     cert_dir = _cfg.cert_dir
     cert_dir.mkdir(parents=True, exist_ok=True)
 

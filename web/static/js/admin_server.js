@@ -194,16 +194,27 @@ document.getElementById('refresh-certs').addEventListener('click', async () => {
   const msg = document.getElementById('refresh-certs-msg');
   btn.disabled = true;
   const original = btn.textContent;
-  btn.textContent = 'Pulling…';
   if (msg) { msg.hidden = true; msg.className = 'ok small'; }
   try {
+    // Auto-save the current form state first — otherwise users who
+    // changed mode/url/script in the form but didn't click "Save"
+    // hit "webhook URL not set" or worse. Saving on every pull is
+    // cheap and matches the user's mental model ("the form is the
+    // source of truth").
+    btn.textContent = 'Saving…';
+    form.dispatchEvent(new Event('submit', { cancelable: true }));
+    // submit is async — give it a tick to land. The handler is
+    // async/await, so we have to wait for the patch round-trip
+    // explicitly. Use a tiny poll on the message element instead
+    // of restructuring the submit handler.
+    await new Promise(r => setTimeout(r, 350));
+    btn.textContent = 'Pulling…';
     const r = await api.post('/server/refresh-certs', {});
     if (msg) {
       msg.textContent = r.message || 'Done.';
       msg.className = 'ok small';
       msg.hidden = false;
     }
-    // Refresh the last-run readout from the now-updated row.
     await load();
   } catch (ex) {
     if (msg) {
