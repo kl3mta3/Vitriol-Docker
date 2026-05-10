@@ -52,6 +52,18 @@ async def lifespan(app: FastAPI):
         apply_recovery_config(db)
         ensure_super_admin(db)
         migrate_legacy_oidc(db)
+        # The legacy Host-header lock has been retired (see note in
+        # create_app). Wipe any value left over from older deploys so the
+        # /admin/server form shows it empty and stops looking like an
+        # active setting that the operator forgot to fix.
+        s_ = db.query(ServerSettings).get(1)
+        if s_ is not None and s_.allowed_origin:
+            _log.info(
+                "Auto-clearing stale allowed_origin=%r (feature retired)",
+                s_.allowed_origin,
+            )
+            s_.allowed_origin = None
+            db.commit()
     finally:
         db.close()
     _log.info("Vitriol web v%s started; data dir=%s", __version__, cfg.data_dir)
@@ -172,60 +184,17 @@ def create_app() -> FastAPI:
             return RedirectResponse(url="/setup")
         return await call_next(request)
 
-    @app.middleware("http")
-    async def _domain_lock(request: Request, call_next):
-        # Domain lock is defense-in-depth against DNS rebinding to the
-        # data API. It never applies to UI pages, static assets, auth
-        # routes, or admin/server recovery — the operator MUST always be
-        # able to reach the settings page to undo a typo'd value, and
-        # users must always be able to render /signin.
-        path = request.url.path
-
-        # 1. All non-API paths bypass — HTML pages, static, /setup, /signin,
-        #    /admin/*, /profile, /files, etc.
-        if not path.startswith("/api/"):
-            return await call_next(request)
-
-        # 2. Recovery + auth API paths bypass — without these the locked-out
-        #    super admin has no path back into the UI to fix the setting.
-        for exempt in (
-            "/api/v1/auth/",       # signin / signup / refresh / logout / verify / sso
-            "/api/v1/server/",     # GET + PATCH /server/settings (where they fix it)
-            "/api/v1/me",          # whoami — required by the layout shell
-            "/api/v1/users",       # admin user-management UI fetches this on render
-            "/api/v1/oidc",        # provider list shown on /signin
-            "/api/v1/healthz",
-        ):
-            if path.startswith(exempt):
-                return await call_next(request)
-
-        # 3. Read the lock value lazily; if anything goes wrong reading
-        #    the DB, fail-open rather than fail-closed (we'd rather a brief
-        #    DB hiccup serves traffic than locks everyone out).
-        try:
-            db = SessionLocal()
-            s = db.query(ServerSettings).get(1)
-            allowed = s.allowed_origin if s else None
-            db.close()
-        except Exception:
-            allowed = None
-
-        if allowed:
-            # Be tolerant of common operator mistakes — pasting
-            # "https://app.vitriol.rocks" or "app.vitriol.rocks/" should
-            # still match a Host header of "app.vitriol.rocks".
-            allowed_host = allowed.strip()
-            if "://" in allowed_host:
-                allowed_host = allowed_host.split("://", 1)[1]
-            allowed_host = allowed_host.split("/", 1)[0].split(":", 1)[0].lower()
-            host = (request.headers.get("host") or "").split(":", 1)[0].lower()
-            if allowed_host and host and host != allowed_host:
-                return PlainTextResponse(
-                    f"Host not allowed (got {host!r}, expected {allowed_host!r}). "
-                    f"Visit /admin/server to fix the Allowed origin field.",
-                    status_code=403,
-                )
-        return await call_next(request)
+    # NOTE: the legacy `allowed_origin` Host-header lock used to live here.
+    # It caused two production outages (one from a browser-autofill leak
+    # putting "masterlocke" into the field, then locking the entire API
+    # surface; and a follow-on where the lock blocked /api/v1/formats and
+    # /api/v1/files even after the UI paths were exempted). The TLS proxy
+    # in front of us (Cloudflare → Coolify reverse proxy) already validates
+    # the Host header, and SameSite=Lax cookies plus the same-origin
+    # CORS policy mitigate DNS rebinding. Net value: negative. The column
+    # remains in `server_settings` and the input still lives on /admin/server
+    # so existing data isn't lost, but it is intentionally never read here.
+    # Auto-clear any stale value on boot so old DBs stop carrying it around.
 
     @app.exception_handler(404)
     async def _not_found(request: Request, exc):

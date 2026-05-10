@@ -30,11 +30,9 @@
       </div>
       <div class="grid-2">
         <label><span>Public base URL</span><input name="public_base_url" placeholder="https://app.vitriol.rocks" /></label>
-        <label><span>Allowed origin (Host header lock)</span><input name="allowed_origin" /></label>
       </div>
       <p class="muted small">
         <strong>Public base URL</strong> is what shows up in verification emails and OIDC redirect URIs — set it to whatever users type in the browser.
-        <strong>Allowed origin</strong>, if set, rejects any request whose <code>Host</code> header doesn't match — useful as a defense-in-depth layer behind a misconfigured proxy.
       </p>
     </details>
 

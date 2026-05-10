@@ -1,0 +1,16 @@
+{% extends "base.html" %}
+{% block title %}{{ headline }} — Vitriol{% endblock %}
+{% block content %}
+<section class="auth-card">
+  <h1 class="display">Vitriol</h1>
+  {% if ok %}
+    <h2 class="display small" style="color: var(--blue);">{{ headline }}</h2>
+  {% else %}
+    <h2 class="display small" style="color: var(--red);">{{ headline }}</h2>
+  {% endif %}
+  <p class="muted" style="margin-top: 12px;">{{ detail }}</p>
+  <div class="auth-foot" style="margin-top: 24px;">
+    <a href="/signin" class="btn btn-primary">Go to sign in</a>
+  </div>
+</section>
+{% endblock %}

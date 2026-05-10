@@ -111,12 +111,26 @@ def consume_password_reset_token(db: Session, raw: str) -> Optional[PasswordRese
 
 def public_url(db: Session, path: str) -> str:
     s = _settings_row(db)
-    base = (s.public_base_url if s else None) or "http://localhost:3825"
+    base = (s.public_base_url if s and s.public_base_url else "").strip()
+    if not base:
+        # No public URL configured — emails would otherwise ship a
+        # `localhost:3825/...` link that nobody outside the container can
+        # reach. Log loudly so the operator notices the misconfiguration
+        # the first time a verification email goes out.
+        logger.warning(
+            "public_base_url is empty — verification/reset links will use "
+            "http://localhost:3825 as the fallback host. Set Public base URL "
+            "under /admin/server."
+        )
+        base = "http://localhost:3825"
     return base.rstrip("/") + "/" + path.lstrip("/")
 
 
 async def send_verification_email(db: Session, user: User, raw_token: str) -> bool:
-    link = public_url(db, f"auth/verify?token={raw_token}")
+    # Points at the public-facing /verify HTML page (handled by ui.py)
+    # rather than the bare /api/v1/auth/verify JSON endpoint, so a
+    # browser click renders a real success page instead of `{"message":...}`.
+    link = public_url(db, f"verify?token={raw_token}")
     body = (
         f"Hello {user.username},\n\n"
         f"Verify your Vitriol account by visiting:\n{link}\n\n"
@@ -126,7 +140,7 @@ async def send_verification_email(db: Session, user: User, raw_token: str) -> bo
 
 
 async def send_password_reset_email(db: Session, user: User, raw_token: str) -> bool:
-    link = public_url(db, f"auth/reset?token={raw_token}")
+    link = public_url(db, f"reset?token={raw_token}")
     body = (
         f"Hello {user.username},\n\n"
         f"Reset your Vitriol password by visiting:\n{link}\n\n"
