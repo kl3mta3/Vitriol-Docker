@@ -18,7 +18,9 @@ from typing import Optional
 
 from sqlalchemy.orm import Session
 
-from ..models import Job, JobStatus, Role, ServerSettings, User
+from ..models import (
+    EmailVerificationToken, Job, JobStatus, Role, ServerSettings, Status, User,
+)
 
 _log = logging.getLogger(__name__)
 
@@ -118,10 +120,37 @@ def run_once(db: Session) -> dict:
             if _delete_file(old):
                 count_deleted += 1
 
-    if age_deleted or count_deleted:
-        _log.info("cleanup: aged=%d count-pruned=%d", age_deleted, count_deleted)
+    # 3. Purge stale unverified signups. Anyone who hit /signup, never
+    #    clicked the verification link, and is now older than 24h gets
+    #    their row + tokens deleted so the username/email are reusable
+    #    for a real signup. The verification token expiry (also 24h)
+    #    keeps the window tight even if this sweep is delayed.
+    cutoff = now - timedelta(hours=24)
+    unverified_purged = 0
+    stale_users = (
+        db.query(User)
+        .filter(User.status == Status.unverified)
+        .filter(User.created_at < cutoff)
+        .all()
+    )
+    for u in stale_users:
+        db.query(EmailVerificationToken).filter(EmailVerificationToken.user_id == u.id).delete()
+        db.delete(u)
+        unverified_purged += 1
+    if unverified_purged:
+        db.commit()
 
-    return {"aged": age_deleted, "count_pruned": count_deleted}
+    if age_deleted or count_deleted or unverified_purged:
+        _log.info(
+            "cleanup: aged=%d count-pruned=%d unverified-purged=%d",
+            age_deleted, count_deleted, unverified_purged,
+        )
+
+    return {
+        "aged": age_deleted,
+        "count_pruned": count_deleted,
+        "unverified_purged": unverified_purged,
+    }
 
 
 def _file_exists(job: Job) -> bool:

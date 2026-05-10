@@ -35,11 +35,21 @@ def _ensure_can_modify(actor: User, target: User, allow_admin_modify_admin: bool
 
 
 @router.get("", response_model=List[UserOut])
-def list_users(actor: User = Depends(require_admin), db: Session = Depends(get_db)):
+def list_users(
+    include_unverified: bool = False,
+    actor: User = Depends(require_admin),
+    db: Session = Depends(get_db),
+):
     q = db.query(User)
     # Regular admins must not see (or be able to act on) the super admin.
     if not is_super_admin(actor):
         q = q.filter(User.role != Role.super_admin)
+    # Unverified rows (signup awaiting email verification) are hidden by
+    # default — they're a transient state that auto-purges after 24h, and
+    # admins don't want them cluttering the user table or inflating the
+    # user count. Pass ?include_unverified=1 to see them.
+    if not include_unverified:
+        q = q.filter(User.status != Status.unverified)
     return q.order_by(User.id).all()
 
 

@@ -25,6 +25,10 @@ class Status(str, enum.Enum):
     active = "active"
     suspended = "suspended"
     banned = "banned"
+    # Sign-up completed but the user hasn't clicked the verification email
+    # link yet. Hidden from the admin user list, blocked from sign-in,
+    # auto-purged after 24h. Flips to `active` on successful verify.
+    unverified = "unverified"
 
 
 class JobStatus(str, enum.Enum):

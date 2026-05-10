@@ -74,6 +74,11 @@ def signin(req: SignInRequest, request: Request, response: Response, db: Session
         raise HTTPException(status_code=401, detail="Invalid credentials")
     if user.status == Status.banned:
         raise HTTPException(status_code=403, detail="Account banned")
+    if user.status == Status.unverified:
+        raise HTTPException(
+            status_code=403,
+            detail="Please verify your email before signing in. Check your inbox for the verification link.",
+        )
     if user.status == Status.suspended and user.suspended_until and user.suspended_until > datetime.utcnow():
         raise HTTPException(status_code=403, detail=f"Account suspended until {user.suspended_until.isoformat()}Z")
     # Block sign-in for unverified users when the operator requires email
@@ -144,16 +149,26 @@ async def signup(req: SignUpRequest, db: Session = Depends(get_db)):
         raise HTTPException(status_code=409, detail="Email already registered")
     role = s.signup_default_role or Role.viewer
     require_verify = bool(s.require_email_verification)
+
+    # Two distinct creation paths:
+    #
+    #   verify ON  → row goes in as Status.unverified. Hidden from admin
+    #                user lists. Cleanup task purges after 24h. No Discord
+    #                ping, no admin email, no approval row — those fire
+    #                from the verify endpoint when the user proves email
+    #                ownership. If the verification email itself fails to
+    #                send, we delete the row so the user can retry once
+    #                SMTP is fixed instead of being orphaned.
+    #
+    #   verify OFF → fire the original flow: row goes in as active, then
+    #                Discord + admin emails go out for pending users.
     user = User(
         username=req.username,
         email=req.email,
         password_hash=hash_password(req.password),
         role=Role.pending if role == Role.pending else role,
-        status=Status.active,
-        # When verification is off, mark verified at creation so the user
-        # never gets nagged for it later.
+        status=Status.unverified if require_verify else Status.active,
         email_verified_at=None if require_verify else datetime.utcnow(),
-        # Apply the configured custom-role overlay if one is set.
         custom_role_id=s.signup_default_custom_role_id,
     )
     db.add(user)
@@ -162,61 +177,102 @@ async def signup(req: SignUpRequest, db: Session = Depends(get_db)):
 
     if require_verify:
         raw = email_svc.issue_verification_token(db, user, TokenPurpose.signup)
-        await email_svc.send_verification_email(db, user, raw)
+        ok = await email_svc.send_verification_email(db, user, raw)
+        if not ok:
+            # SMTP rejected the message (or isn't configured). Don't leave
+            # an unverified row that the user can never reach — delete and
+            # surface the failure so they can retry. The container log
+            # already captured the underlying SMTP error via _send().
+            db.delete(user)
+            db.commit()
+            raise HTTPException(
+                status_code=503,
+                detail=(
+                    "We couldn't send the verification email. The server's "
+                    "outbound mail isn't working — please contact the site "
+                    "administrator and try again later."
+                ),
+            )
+        audit.log(db, None, "signup_unverified", target_user_id=user.id,
+                  metadata={"role": user.role.value})
+        return MessageResponse(message=(
+            "Account pending email verification. Check your inbox for the "
+            "link — it expires in 24 hours. You won't appear in the user "
+            "list until you verify."
+        ))
 
+    # ---- verify=OFF path: full flow happens immediately ------------------
     if user.role == Role.pending:
         ar = ApprovalRequest(user_id=user.id, requested_role=Role.user, status=ApprovalStatus.pending)
         db.add(ar)
         db.commit()
-        admins = (
-            db.query(User)
-            .filter(User.role.in_([Role.super_admin, Role.admin]))
-            .filter(User.email.isnot(None))
-            .all()
-        )
-        recipients = [a.email for a in admins if a.email]
-        await email_svc.send_pending_approval_notification(db, user, recipients)
-        await discord_svc.notify(
-            db, f":hourglass: New pending user **{user.username}** ({user.email}) awaits approval."
-        )
+        await _notify_admins_of_pending(db, user)
 
     audit.log(db, None, "signup", target_user_id=user.id, metadata={"role": user.role.value})
 
-    # Build a message that matches what actually happened. Four flavors:
-    #   verify on  + pending  → check email AND wait for approval
-    #   verify on  + active   → check email
-    #   verify off + pending  → wait for approval
-    #   verify off + active   → ready to sign in now
-    if user.role == Role.pending and require_verify:
-        msg = ("Account created. Verify your email — we've sent you a link — and an "
-               "administrator will review your sign-up. You'll be notified by email "
-               "once approved. Please allow a bit of time.")
-    elif user.role == Role.pending:
+    if user.role == Role.pending:
         msg = ("Account created and pending approval. An administrator will review "
                "your sign-up shortly; you'll be able to sign in once approved. "
                "Please allow a bit of time.")
-    elif require_verify:
-        msg = "Check your email to verify your account."
     else:
         msg = "Account created. You can sign in now."
     return MessageResponse(message=msg)
 
 
+async def _notify_admins_of_pending(db: Session, user: User) -> None:
+    """Fire Discord webhook + admin/super-admin emails for a newly-pending
+    user. Called from signup (verify=off path) and from verify() (verify=on
+    path) — both end with the same notification fan-out."""
+    admins = (
+        db.query(User)
+        .filter(User.role.in_([Role.super_admin, Role.admin]))
+        .filter(User.email.isnot(None))
+        .all()
+    )
+    recipients = [a.email for a in admins if a.email]
+    await email_svc.send_pending_approval_notification(db, user, recipients)
+    await discord_svc.notify(
+        db, f":hourglass: New pending user **{user.username}** ({user.email}) awaits approval."
+    )
+
+
 @router.get("/verify", response_model=MessageResponse)
-def verify(token: str, db: Session = Depends(get_db)):
+async def verify(token: str, db: Session = Depends(get_db)):
     row = email_svc.consume_verification_token(db, token)
     if row is None:
         raise HTTPException(status_code=400, detail="Invalid or expired token")
     user: Optional[User] = db.query(User).get(row.user_id)
     if user is None:
         raise HTTPException(status_code=404, detail="User missing")
+
+    just_promoted_from_unverified = False
     if row.purpose == TokenPurpose.signup:
         user.email_verified_at = datetime.utcnow()
+        # Sign-up verification: flip the limbo `unverified` status into a
+        # real account state. From here on the row appears in the admin
+        # user list, can sign in, and (if pending-role) is eligible for
+        # the approval queue.
+        if user.status == Status.unverified:
+            user.status = Status.active
+            just_promoted_from_unverified = True
     elif row.purpose == TokenPurpose.change_email and row.new_email:
         user.email = row.new_email
         user.email_verified_at = datetime.utcnow()
     db.commit()
     audit.log(db, user.id, "verify_email", target_user_id=user.id)
+
+    # Now that the user has proven email ownership, do the pending fan-out
+    # that signup() deferred. This is the moment Discord + admin emails
+    # fire — not at signup time — so admins don't get pinged about
+    # signups that never complete verification.
+    if just_promoted_from_unverified and user.role == Role.pending:
+        ar = ApprovalRequest(
+            user_id=user.id, requested_role=Role.user, status=ApprovalStatus.pending,
+        )
+        db.add(ar)
+        db.commit()
+        await _notify_admins_of_pending(db, user)
+
     return MessageResponse(message="Email verified.")
 
 
