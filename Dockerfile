@@ -16,6 +16,7 @@ RUN apt-get update && apt-get install -y --no-install-recommends \
         libassimp5 \
         pandoc \
         jq \
+        gosu \
         libxkbcommon0 \
         libdbus-1-3 \
         libegl1 \
@@ -41,12 +42,19 @@ RUN chmod +x /entrypoint.sh && \
     useradd -r -u 1000 -m -d /home/vitriol vitriol && \
     chown -R vitriol:vitriol /app /data
 
-USER vitriol
 # Default listening port. 3825 picked as a clean unused IANA range port to
 # minimize collision with other self-hosted services (8000, 8080, 3000 etc.
 # get reused everywhere). Override at the orchestrator layer if needed.
 EXPOSE 3825
 VOLUME ["/data"]
 
+# NOTE: container starts as root. The entrypoint chowns /data to the
+# vitriol user *after* the volume is mounted (Docker mounts volumes after
+# image filesystem materialisation, so any earlier chown -R is a no-op
+# the moment a named volume comes into play), then drops to vitriol via
+# `gosu`. This is the standard pattern for handling persistent volumes
+# without forcing the operator to chown the host-side bind mount, and it
+# fixes the silent write failures that previously corrupted /data/.secret_key
+# across restarts on Coolify and other PaaS hosts.
 ENTRYPOINT ["/entrypoint.sh"]
 CMD ["uvicorn", "web.main:app", "--host", "0.0.0.0", "--port", "3825", "--proxy-headers"]
