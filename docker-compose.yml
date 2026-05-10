@@ -2,7 +2,6 @@ services:
   vitriol:
     build:
       context: .
-      dockerfile: docker/Dockerfile
     image: vitriol-web:latest
     # `container_name` and the host port binding are convenient for direct
     # `docker compose up` use. Coolify (and most other Docker PaaS) ignore

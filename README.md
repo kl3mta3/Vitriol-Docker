@@ -89,7 +89,7 @@ For automated provisioning (CI / IaC), pre-bake the super admin via the optional
 Coolify reads this repo's `docker-compose.yml` as-is — no fork, no edits required.
 
 1. **Coolify → New Resource → Public (or Private) Repository.** Paste the GitHub URL, pick the branch.
-2. **Build pack: Docker Compose.** Coolify auto-detects [docker-compose.yml](docker-compose.yml) at the repo root and uses [docker/Dockerfile](docker/Dockerfile) as the build context.
+2. **Build pack: Docker Compose.** Coolify auto-detects [docker-compose.yml](docker-compose.yml) at the repo root and uses [Dockerfile](Dockerfile) as the build context.
 3. **Domain.** Set the public URL Coolify should route to the container (e.g. `vitriol.yourdomain.com`). Coolify provisions Let's Encrypt + Traefik labels automatically.
 4. **Environment variables (all optional):**
    - `VITRIOL_SECRET_KEY` — leave blank, Coolify will auto-generate one on first boot and persist it inside the volume at `/data/.secret_key`. Set it explicitly only if you want to provision it from infrastructure-as-code or share a key across replicas.
