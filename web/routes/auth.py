@@ -70,6 +70,21 @@ def signin(req: SignInRequest, request: Request, response: Response, db: Session
         .filter((User.username == ident) | (User.email == ident))
         .one_or_none()
     )
+    # Honor the password-sign-in master toggle — but never block the
+    # super admin. SSO can break (IdP outage, expired client secret,
+    # network), and locking the operator out of their own server when
+    # SSO is the only path back in is a worse failure mode than
+    # serving a password form for one account.
+    s_for_signin: Optional[ServerSettings] = db.query(ServerSettings).get(1)
+    if (
+        s_for_signin is not None
+        and not bool(s_for_signin.password_signin_enabled)
+        and (user is None or user.role != Role.super_admin)
+    ):
+        raise HTTPException(
+            status_code=403,
+            detail="Password sign-in is disabled on this server. Use SSO.",
+        )
     if user is None or not verify_password(req.password, user.password_hash or ""):
         raise HTTPException(status_code=401, detail="Invalid credentials")
     if user.status == Status.banned:
@@ -553,13 +568,41 @@ async def _sso_callback_inner(
     # the round-trip worked end-to-end, without polluting the user list
     # with a pending account.
     if request.session.pop("sso_test", None) == provider:
+        # Stamp last_test_* on the matching OIDC row so the admin UI
+        # can show "✓ tested 2 min ago" without forcing the operator
+        # to re-run the popup just to refresh the indicator.
+        if kind == "oidc":
+            from .. import models as _m
+            row = (
+                db.query(_m.OidcProvider)
+                .filter(_m.OidcProvider.slug == provider)
+                .one_or_none()
+            )
+            if row is not None:
+                row.last_test_at = datetime.utcnow()
+                row.last_test_ok = True
+                db.commit()
         from fastapi.templating import Jinja2Templates
         _templates = Jinja2Templates(directory="web/templates")
+        # base.html dereferences `caps|tojson` and a few other vars; if
+        # those are missing Jinja substitutes ``Undefined`` and the
+        # ``tojson`` filter throws ``TypeError: Object of type Undefined
+        # is not JSON serializable``. The test result page renders with
+        # no signed-in user (we deliberately don't issue cookies in test
+        # mode), so caps is an empty list and the tab-visibility flags
+        # are all false — same shape ``_common_ctx`` produces for the
+        # anonymous case.
         return _templates.TemplateResponse(
             request,
             "sso_test_result.html",
             {
                 "request": request,
+                "user": None,
+                "caps": [],
+                "allow_signup": False,
+                "show_users_tab": False,
+                "show_server_tab": False,
+                "show_files_tab": False,
                 "provider": provider,
                 "kind": kind,
                 "sub": sub,

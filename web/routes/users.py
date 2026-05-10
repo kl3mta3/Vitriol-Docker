@@ -241,7 +241,7 @@ class _ApproveBody(BaseModel):
 
 
 @router.post("/{user_id}/approve", response_model=UserOut)
-def approve_pending(
+async def approve_pending(
     user_id: int,
     body: Optional[_ApproveBody] = None,
     actor: User = Depends(require_admin),
@@ -274,6 +274,32 @@ def approve_pending(
     db.commit()
     db.refresh(target)
     audit.log(db, actor.id, "user_approve", target_user_id=target.id, metadata={"role": new_role.value})
+
+    # Auto-provision into every OIDC provider that's opted in. Per-row
+    # failures don't roll back the approval — admin gets the failure
+    # detail in the audit log so they can manually create the missing
+    # IdP account if needed. (Blocking the approval on an IdP-side
+    # network blip would be worse UX than completing the approval and
+    # flagging the provisioning failure.)
+    from ..services.provisioning import provision_user_to_all_enabled
+    try:
+        results = await provision_user_to_all_enabled(db, target)
+        for slug, ok, err in results:
+            audit.log(
+                db, actor.id,
+                "provision_ok" if ok else "provision_failed",
+                target_user_id=target.id,
+                metadata={"provider": slug, "error": err} if err else {"provider": slug},
+            )
+    except Exception:
+        # provision_user_to_all_enabled already swallows per-row
+        # exceptions; this catch only fires on a catastrophic failure
+        # (DB session gone, etc.) which we just log and move on.
+        import logging
+        logging.getLogger("vitriol.provisioning").exception(
+            "Provisioning fan-out crashed for user %s after approval", target.id,
+        )
+
     return target
 
 

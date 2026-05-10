@@ -105,6 +105,27 @@ _ADDITIVE_COLUMNS: list[tuple[str, str, str]] = [
      "ALTER TABLE server_settings ADD COLUMN require_email_verification BOOLEAN NOT NULL DEFAULT 1"),
     # Master enable toggles for the singleton integrations — let the
     # operator pause an integration without nulling out saved credentials.
+    # OIDC last-test bookkeeping — drives the per-row "last test" cell
+    # and pill in the OIDC providers table.
+    ("oidc_providers", "last_test_at",
+     "ALTER TABLE oidc_providers ADD COLUMN last_test_at TIMESTAMP"),
+    ("oidc_providers", "last_test_ok",
+     "ALTER TABLE oidc_providers ADD COLUMN last_test_ok BOOLEAN"),
+    # Auto-provision approved users into the IdP (Authentik only for
+    # now). When ``provision_on_approve`` is True, the admin promoting
+    # a pending user triggers a POST to the IdP's user-creation API
+    # using ``provision_api_token`` (Authentik admin token in current
+    # impl). ``provision_kind`` is a strategy selector so future
+    # providers (Keycloak, Okta, SCIM) can plug in without schema churn.
+    ("oidc_providers", "provision_kind",
+     "ALTER TABLE oidc_providers ADD COLUMN provision_kind VARCHAR(32) NOT NULL DEFAULT 'none'"),
+    ("oidc_providers", "provision_on_approve",
+     "ALTER TABLE oidc_providers ADD COLUMN provision_on_approve BOOLEAN NOT NULL DEFAULT 0"),
+    ("oidc_providers", "provision_api_token_enc",
+     "ALTER TABLE oidc_providers ADD COLUMN provision_api_token_enc TEXT"),
+    # Password sign-in master toggle — when False, /signin only offers SSO.
+    ("server_settings", "password_signin_enabled",
+     "ALTER TABLE server_settings ADD COLUMN password_signin_enabled BOOLEAN NOT NULL DEFAULT 1"),
     ("server_settings", "smtp_enabled",
      "ALTER TABLE server_settings ADD COLUMN smtp_enabled BOOLEAN NOT NULL DEFAULT 1"),
     ("server_settings", "oauth_google_enabled",

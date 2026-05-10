@@ -475,7 +475,7 @@ async function loadOidcProviders() {
   paintSsoSummaryPill(rows);
   if (!Array.isArray(rows) || rows.length === 0) {
     const tr = document.createElement('tr');
-    tr.innerHTML = '<td colspan="5" class="empty-state">No OIDC providers yet. Click "+ Add OIDC provider" below.</td>';
+    tr.innerHTML = '<td colspan="6" class="empty-state">No OIDC providers yet. Click "+ Add OIDC provider" below.</td>';
     oidcTbody.appendChild(tr);
     return;
   }
@@ -483,19 +483,42 @@ async function loadOidcProviders() {
     const tr = document.createElement('tr');
     tr.className = 'user-row clickable';
     tr.dataset.id = p.id;
+
+    // Pull just the hostname out of the issuer URL — the full path
+    // bloats the column and isn't useful at a glance. The Edit dialog
+    // shows the full thing.
+    let issuerHost = p.issuer || '';
+    try { issuerHost = new URL(p.issuer).host; } catch (_) { /* leave raw */ }
+
+    // Last-test cell — matches the notification-channels table pattern.
+    let lastTest = '<span class="muted small">untested</span>';
+    if (p.last_test_at) {
+      const when = new Date(p.last_test_at).toLocaleString();
+      lastTest = p.last_test_ok
+        ? `<span class="status-pill ok">ok</span> <span class="muted small">${when}</span>`
+        : `<span class="status-pill failed">failed</span> <span class="muted small">${when}</span>`;
+    }
+
     // Inline enable checkbox: PATCH on change, no need to open the
-    // edit form. stopPropagation prevents the row-click handler from
-    // also opening the form when the checkbox is the click target.
+    // edit form. Inline Test button: opens the SSO test popup using
+    // the same `?test=1` flag the in-form Test button uses.
+    // stopPropagation on both keeps the row-click handler (which
+    // opens Edit) from firing when the operator clicks an action.
     tr.innerHTML = `
       <td>${escapeHtmlSimple(p.display_name)}</td>
       <td><code>${escapeHtmlSimple(p.slug)}</code></td>
-      <td class="muted small" style="max-width: 320px; overflow: hidden; text-overflow: ellipsis; white-space: nowrap;">${escapeHtmlSimple(p.issuer)}</td>
+      <td class="muted small">${escapeHtmlSimple(issuerHost)}</td>
       <td class="row-toggle-cell"><label class="row-toggle"><input type="checkbox" data-oidc-toggle="${p.id}" ${p.enabled ? 'checked' : ''} /></label></td>
-      <td class="row-manage-cell"><button type="button" class="btn btn-secondary btn-manage">Edit</button></td>
+      <td>${lastTest}</td>
+      <td class="row-manage-cell" style="white-space: nowrap;">
+        <button type="button" class="btn btn-secondary btn-manage" data-oidc-test="${escapeHtmlSimple(p.slug)}">Test</button>
+        <button type="button" class="btn btn-secondary btn-manage">Edit</button>
+      </td>
     `;
     tr.addEventListener('click', (e) => {
-      // Ignore clicks that land on the toggle checkbox or its label.
-      if (e.target.closest('[data-oidc-toggle], .row-toggle')) return;
+      // Ignore clicks on the toggle or any action button — those have
+      // their own handlers and shouldn't also trigger Edit.
+      if (e.target.closest('[data-oidc-toggle], .row-toggle, [data-oidc-test]')) return;
       openOidcForm(p);
     });
     const toggle = tr.querySelector('[data-oidc-toggle]');
@@ -504,12 +527,18 @@ async function loadOidcProviders() {
       const next = toggle.checked;
       try {
         await api.patch(`/server/oidc-providers/${p.id}`, { enabled: next });
-        // Refresh the table + pill so the summary count stays accurate.
         await loadOidcProviders();
       } catch (ex) {
         toggle.checked = !next;
         alert((ex && ex.detail) || 'Failed to toggle provider.');
       }
+    });
+    const testBtn = tr.querySelector('[data-oidc-test]');
+    if (testBtn) testBtn.addEventListener('click', (e) => {
+      e.stopPropagation();
+      const slug = testBtn.dataset.oidcTest;
+      const url = `/api/v1/auth/sso/${encodeURIComponent(slug)}/start?test=1`;
+      window.open(url, '_blank', 'noopener,width=600,height=700');
     });
     oidcTbody.appendChild(tr);
   }
@@ -517,7 +546,6 @@ async function loadOidcProviders() {
 
 function paintSsoSummaryPill(oidcRows) {
   const pill = document.getElementById('sso-status-pill');
-  if (!pill) return;
   // Read the saved Google/GitHub state from the form-elements that
   // load() just populated. Falls back to false if the elements aren't
   // in the DOM yet (very early call before load completes).
@@ -530,12 +558,34 @@ function paintSsoSummaryPill(oidcRows) {
     (googleEn && googleCfg ? 1 : 0) +
     (githubEn && githubCfg ? 1 : 0) +
     oidcCount;
-  if (active === 0) {
-    pill.textContent = 'none';
-    pill.className = 'status-pill missing';
-  } else {
-    pill.textContent = `${active} active`;
-    pill.className = 'status-pill ok';
+  if (pill) {
+    if (active === 0) {
+      pill.textContent = 'none';
+      pill.className = 'status-pill missing';
+    } else {
+      pill.textContent = `${active} active`;
+      pill.className = 'status-pill ok';
+    }
+  }
+  // Side effect: the "Password sign-in enabled" toggle in the Sign-up
+  // section is only safe to turn off when at least one SSO method is
+  // active — otherwise non-super-admins have no path in at all.
+  // Disable the checkbox + show a warning when active === 0. If the
+  // operator had already turned it off and then disabled their last
+  // SSO provider, re-enable password sign-in defensively so they
+  // don't paint themselves into a corner.
+  const pwToggle = document.getElementById('password-signin-toggle');
+  const pwWarn = document.getElementById('password-signin-warn');
+  if (pwToggle) {
+    if (active === 0) {
+      // Force on, lock the control, surface the warning.
+      if (!pwToggle.checked) pwToggle.checked = true;
+      pwToggle.disabled = true;
+      if (pwWarn) pwWarn.hidden = false;
+    } else {
+      pwToggle.disabled = false;
+      if (pwWarn) pwWarn.hidden = true;
+    }
   }
 }
 
@@ -543,6 +593,44 @@ function escapeHtmlSimple(s) {
   return String(s == null ? '' : s).replace(/[&<>"']/g, c => ({
     '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;', "'": '&#39;'
   }[c]));
+}
+
+// Per-kind provisioning help text. Keyed on provision_kind so adding a
+// new kind (keycloak, scim, ...) is one entry plus a service handler.
+const PROVISION_HELP = {
+  authentik:
+    'Create a long-lived token under Authentik admin → Directory → Tokens → New token. ' +
+    'Identifier: any (e.g. vitriol-provisioning). User: a service account with the ' +
+    '"Admin" group. Paste the generated key here.',
+};
+
+function applyProvisionSection(p, kindHint) {
+  // kindHint comes from the template card on Add; on Edit we use the
+  // saved provision_kind. Pass empty string for "no template picked yet".
+  const section = document.querySelector('[data-oidc-provision-section]');
+  if (!section) return;
+  const kind = (p && p.provision_kind) || kindHint || 'none';
+  const known = Object.prototype.hasOwnProperty.call(PROVISION_HELP, kind);
+  section.hidden = !known;
+  section.open = known;
+  oidcForm.provision_kind.value = known ? kind : 'none';
+  oidcForm.provision_on_approve.checked = !!(p && p.provision_on_approve);
+  oidcForm.provision_api_token.value = '';
+  const apiTokenMark = document.querySelector('.saved-mark[data-saved-mark-for="provision_api_token"]');
+  if (apiTokenMark) apiTokenMark.hidden = !(p && p.provision_api_token_set);
+  oidcForm.provision_api_token.placeholder = (p && p.provision_api_token_set)
+    ? SAVED_SECRET_PLACEHOLDER
+    : (known ? 'IdP admin API token' : '');
+  const help = document.getElementById('oidc-provision-help');
+  if (help) {
+    if (known) {
+      help.textContent = PROVISION_HELP[kind];
+      help.hidden = false;
+    } else {
+      help.hidden = true;
+      help.textContent = '';
+    }
+  }
 }
 
 function openOidcForm(p) {
@@ -577,6 +665,7 @@ function openOidcForm(p) {
     testBtn.dataset.slug = p ? p.slug : '';
   }
   document.getElementById('oidc-form-msg').hidden = true;
+  applyProvisionSection(p, '');
   updateOidcRedirectPreview();
   oidcDialog.showModal();
 }
@@ -638,6 +727,7 @@ const OIDC_TEMPLATES = [
     issuerTemplate: 'https://auth.your-domain.com/application/o/<app-slug>/',
     scopes: 'openid email profile',
     docsUrl: 'https://goauthentik.io/docs/providers/oauth2/',
+    provisionKind: 'authentik',   // Vitriol can auto-create users via Authentik's admin API
   },
   {
     id: 'keycloak',
@@ -793,6 +883,11 @@ function openOidcFormFromTemplate(tpl) {
   document.getElementById('oidc-form-title').textContent = `Add ${tpl.name}`;
   document.getElementById('oidc-form-delete').hidden = true;
   document.getElementById('oidc-form-msg').hidden = true;
+  // The catalog card knows whether this kind supports auto-provisioning;
+  // pass that hint so the form shows the provisioning section pre-set
+  // to that kind. Operators can still uncheck "Auto-provision approved
+  // users" if they don't want it.
+  applyProvisionSection(null, tpl.provisionKind || 'none');
   updateOidcRedirectPreview();
   oidcDialog.showModal();
 }
@@ -832,8 +927,15 @@ if (oidcForm) oidcForm.addEventListener('submit', async (e) => {
     client_id: oidcForm.client_id.value.trim(),
     scopes: oidcForm.scopes.value.trim() || 'openid email profile',
     enabled: oidcForm.enabled.checked,
+    provision_kind: oidcForm.provision_kind.value || 'none',
+    provision_on_approve: oidcForm.provision_on_approve.checked,
   };
   if (oidcForm.client_secret.value) payload.client_secret = oidcForm.client_secret.value;
+  // Same convention as every other secret in the app: only ship the
+  // value if the operator actually typed something. Empty = unchanged.
+  if (oidcForm.provision_api_token.value) {
+    payload.provision_api_token = oidcForm.provision_api_token.value;
+  }
   try {
     if (id) {
       await api.patch(`/server/oidc-providers/${id}`, payload);
@@ -877,6 +979,19 @@ if (document.getElementById('oidc-form-delete')) {
 
 // Kick off the initial load when the SSO section is in the DOM.
 if (oidcTbody) loadOidcProviders();
+
+// Live-repaint the SSO summary pill (+ password-signin toggle lock)
+// whenever the operator toggles Google/GitHub enabled in the form,
+// even before they click Save. Pulls the freshest OIDC row state via
+// loadOidcProviders so the count stays accurate end-to-end.
+['oauth_google_enabled', 'oauth_github_enabled'].forEach(fieldName => {
+  const el = form.elements[fieldName];
+  if (el) el.addEventListener('change', () => {
+    // Reuse the existing reload to get rows AND repaint the pill,
+    // which also re-evaluates the password-signin safety lock.
+    loadOidcProviders().catch(() => {});
+  });
+});
 
 // ============================================================
 // Notification channels — multi-row replacement for the old singleton

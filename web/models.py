@@ -154,6 +154,23 @@ class OidcProvider(Base):
     scopes = Column(String(255), nullable=False, default="openid email profile")
     enabled = Column(Boolean, nullable=False, default=True)
 
+    # Test bookkeeping — stamped when an operator completes a test-mode
+    # SSO round-trip from /admin/server. ``last_test_ok = True`` means
+    # the test popup returned a real ``sub`` from the IdP, proving the
+    # client_id/secret + redirect URI + issuer URL are all consistent.
+    last_test_at = Column(DateTime, nullable=True)
+    last_test_ok = Column(Boolean, nullable=True)
+
+    # Auto-provision approved users into the IdP. ``provision_kind``
+    # selects the strategy ('none', 'authentik' currently — future:
+    # 'keycloak', 'scim'). ``provision_on_approve`` is the per-provider
+    # toggle that fires the provisioning call when an admin approves a
+    # pending user. ``provision_api_token_enc`` holds the IdP-side
+    # admin API token (Authentik: a long-lived service-account token).
+    provision_kind = Column(String(32), nullable=False, default="none", server_default="none")
+    provision_on_approve = Column(Boolean, nullable=False, default=False, server_default="0")
+    provision_api_token_enc = Column(Text, nullable=True)
+
     created_at = Column(DateTime, nullable=False, default=datetime.utcnow)
     updated_at = Column(DateTime, nullable=False, default=datetime.utcnow, onupdate=datetime.utcnow)
     created_by_user_id = Column(Integer, ForeignKey("users.id"), nullable=True)
@@ -420,6 +437,12 @@ class ServerSettings(Base):
     # marked email_verified_at=now() on creation. Useful for SMTP-less
     # demos and for closed networks where email isn't reachable.
     require_email_verification = Column(Boolean, nullable=False, default=True, server_default="1")
+    # Master toggle for username/password sign-in. When False, /signin's
+    # form is hidden and POST /auth/signin returns 403. Useful for
+    # deployments that want to enforce SSO-only access. UI side enforces
+    # that at least one SSO provider is enabled before allowing this
+    # to be turned off — disabling both paths would lock everyone out.
+    password_signin_enabled = Column(Boolean, nullable=False, default=True, server_default="1")
 
     # Master enable flag — when False, all outbound SMTP is skipped even
     # if credentials are set. Lets the operator pause email without

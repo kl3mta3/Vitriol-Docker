@@ -161,6 +161,7 @@ class ServerSettingsOut(BaseModel):
     signup_default_role: str
     signup_default_custom_role_id: Optional[int] = None
     require_email_verification: bool = True
+    password_signin_enabled: bool = True
     smtp_enabled: bool = True
     smtp_host: Optional[str]
     smtp_port: Optional[int]
@@ -223,6 +224,7 @@ class ServerSettingsPatch(BaseModel):
     signup_default_role: Optional[str] = None
     signup_default_custom_role_id: Optional[int] = None
     require_email_verification: Optional[bool] = None
+    password_signin_enabled: Optional[bool] = None
     smtp_enabled: Optional[bool] = None
     smtp_host: Optional[str] = None
     smtp_port: Optional[int] = None

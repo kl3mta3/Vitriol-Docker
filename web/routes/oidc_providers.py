@@ -38,6 +38,11 @@ class OidcProviderOut(BaseModel):
     client_secret_set: bool
     scopes: str
     enabled: bool
+    last_test_at: Optional[str] = None
+    last_test_ok: Optional[bool] = None
+    provision_kind: str = "none"
+    provision_on_approve: bool = False
+    provision_api_token_set: bool = False
 
 
 class OidcProviderCreate(BaseModel):
@@ -48,6 +53,9 @@ class OidcProviderCreate(BaseModel):
     client_secret: str
     scopes: str = "openid email profile"
     enabled: bool = True
+    provision_kind: Optional[str] = None         # 'none' | 'authentik'
+    provision_on_approve: Optional[bool] = None
+    provision_api_token: Optional[str] = None    # plaintext; encrypted at rest
 
 
 class OidcProviderUpdate(BaseModel):
@@ -58,6 +66,9 @@ class OidcProviderUpdate(BaseModel):
     client_secret: Optional[str] = None  # blank = unchanged
     scopes: Optional[str] = None
     enabled: Optional[bool] = None
+    provision_kind: Optional[str] = None
+    provision_on_approve: Optional[bool] = None
+    provision_api_token: Optional[str] = None  # None = unchanged, "" = clear
 
 
 def _to_out(r: OidcProvider) -> OidcProviderOut:
@@ -65,6 +76,11 @@ def _to_out(r: OidcProvider) -> OidcProviderOut:
         id=r.id, slug=r.slug, display_name=r.display_name, issuer=r.issuer,
         client_id=r.client_id, client_secret_set=bool(r.client_secret_enc),
         scopes=r.scopes or "openid email profile", enabled=r.enabled,
+        last_test_at=(r.last_test_at.isoformat() + "Z") if r.last_test_at else None,
+        last_test_ok=r.last_test_ok,
+        provision_kind=r.provision_kind or "none",
+        provision_on_approve=bool(r.provision_on_approve),
+        provision_api_token_set=bool(r.provision_api_token_enc),
     )
 
 
@@ -104,6 +120,9 @@ def create_oidc(
     _validate_slug(slug, db=db)
     if not req.client_secret:
         raise HTTPException(status_code=400, detail="Client secret is required for new providers.")
+    pkind = (req.provision_kind or "none").strip() or "none"
+    if pkind not in ("none", "authentik"):
+        raise HTTPException(status_code=400, detail=f"Unsupported provision_kind: {pkind!r}")
     row = OidcProvider(
         slug=slug,
         display_name=req.display_name,
@@ -112,6 +131,9 @@ def create_oidc(
         client_secret_enc=encrypt(req.client_secret),
         scopes=req.scopes or "openid email profile",
         enabled=req.enabled,
+        provision_kind=pkind,
+        provision_on_approve=bool(req.provision_on_approve),
+        provision_api_token_enc=encrypt(req.provision_api_token) if req.provision_api_token else None,
         created_by_user_id=actor.id,
     )
     db.add(row)
@@ -147,6 +169,18 @@ def update_oidc(
         row.scopes = req.scopes or "openid email profile"
     if req.enabled is not None:
         row.enabled = req.enabled
+    if req.provision_kind is not None:
+        pkind = (req.provision_kind or "none").strip() or "none"
+        if pkind not in ("none", "authentik"):
+            raise HTTPException(status_code=400, detail=f"Unsupported provision_kind: {pkind!r}")
+        row.provision_kind = pkind
+    if req.provision_on_approve is not None:
+        row.provision_on_approve = bool(req.provision_on_approve)
+    if req.provision_api_token is not None:
+        # "" explicitly clears; non-empty re-encrypts; None (default)
+        # means "leave existing value alone" — same convention as
+        # every other secret in this app.
+        row.provision_api_token_enc = encrypt(req.provision_api_token) if req.provision_api_token else None
 
     db.commit()
     db.refresh(row)

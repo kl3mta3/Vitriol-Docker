@@ -5,6 +5,7 @@
   <h1 class="display">Vitriol</h1>
   <p class="muted">Sign in to continue.</p>
 
+  {% if password_signin_enabled %}
   <form id="signin-form" class="stack" autocomplete="on">
     <label>
       <span>Username or email</span>
@@ -17,6 +18,11 @@
     <button type="submit" class="btn btn-primary">Sign in</button>
     <p id="signin-error" class="error" hidden></p>
   </form>
+  {% else %}
+  <p class="muted small" style="text-align: center; margin: 16px 0;">
+    Password sign-in is disabled. Use one of the providers below.
+  </p>
+  {% endif %}
 
   <div class="sso-row" id="sso-row" hidden></div>
 
