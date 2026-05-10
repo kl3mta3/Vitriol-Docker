@@ -156,44 +156,6 @@
       </div>
     </details>
 
-<dialog id="oidc-form-dialog" class="manage-dialog">
-  <form id="oidc-form">
-    <header class="manage-head">
-      <h2 class="display small" id="oidc-form-title">Add OIDC provider</h2>
-    </header>
-    <input type="hidden" name="id" />
-
-    <details open>
-      <summary>Identity</summary>
-      <div class="grid-2">
-        <label><span>Display name (button label)</span><input name="display_name" required placeholder="Authentik" /></label>
-        <label><span>Slug (URL-safe — auto from display name if blank)</span><input name="slug" placeholder="authentik" pattern="[a-z0-9][a-z0-9-]{1,30}[a-z0-9]" /></label>
-        <label class="full"><span>Issuer URL</span><input name="issuer" required placeholder="https://auth.example.com/application/o/vitriol/" /></label>
-        <label class="full"><span>Scopes</span><input name="scopes" placeholder="openid email profile" /></label>
-        <label class="checkbox-row"><input type="checkbox" name="enabled" checked /> <span>Enabled</span></label>
-      </div>
-    </details>
-
-    <details open>
-      <summary>Credentials</summary>
-      <div class="grid-2">
-        <label><span>Client ID</span><input name="client_id" required /></label>
-        <label><span>Client secret</span><input name="client_secret" type="password" autocomplete="new-password" placeholder="(unchanged when editing)" /></label>
-      </div>
-      <p class="muted small">Redirect URI to register with this provider's IdP:</p>
-      <pre id="oidc-form-redirect" class="cli-block">https://YOUR_HOST/api/v1/auth/sso/&lt;slug&gt;/callback</pre>
-    </details>
-
-    <footer class="dialog-actions">
-      <button type="button" id="oidc-form-delete" class="btn btn-danger" hidden>Delete</button>
-      <span style="flex:1;"></span>
-      <button type="button" class="btn btn-ghost" data-close>Cancel</button>
-      <button type="submit" class="btn btn-primary">Save</button>
-    </footer>
-    <p id="oidc-form-msg" class="ok small" hidden></p>
-  </form>
-</dialog>
-
     <details><summary>Server secret key</summary>
       <p class="muted small">
         Used to sign session tokens and encrypt SMTP / OAuth / SSL secrets at rest.
