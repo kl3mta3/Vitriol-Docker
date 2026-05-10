@@ -213,16 +213,24 @@ def ensure_super_admin(db: Session) -> Optional[User]:
 
 
 def apply_recovery_config(db: Session) -> None:
-    """If /data/server_config.json contains a super_admin_recovery block,
-    apply it and delete the block. Format:
+    """If /data/server_config.json contains recovery blocks, apply and
+    erase them. Two supported blocks:
 
         {
           "super_admin_recovery": {
             "username": "newname",
             "email": "x@y.z",
             "password": "newpw"
+          },
+          "server_recovery": {
+            "allowed_origin": null,        # null = clear; "host" = set
+            "public_base_url": null
           }
         }
+
+    The server_recovery block is the emergency hatch when the operator
+    has locked themselves out via a typo'd allowed_origin (or similar).
+    Drop the file in /data/, restart, and the bad value is cleared.
     """
     cfg = get_settings()
     path: Path = cfg.server_config_recovery_file
@@ -233,26 +241,44 @@ def apply_recovery_config(db: Session) -> None:
     except json.JSONDecodeError as e:
         _log.error("server_config.json is not valid JSON: %s", e)
         return
+
+    # ---- Super admin credential reset ------------------------------------
     block = data.pop("super_admin_recovery", None)
-    if not block:
-        return
-    sa = db.query(User).filter(User.role == Role.super_admin).one_or_none()
-    if sa is None:
-        _log.warning("Recovery block present but no super admin row exists; will create on bootstrap.")
-        return
-    if "username" in block and block["username"]:
-        sa.username = block["username"]
-    if "email" in block:
-        sa.email = block["email"] or None
-    if "password" in block and block["password"]:
-        sa.password_hash = hash_password(block["password"])
-    sa.status = Status.active
-    sa.suspended_until = None
-    sa.suspension_reason = None
-    db.commit()
-    # Wipe the recovery block; leave the rest of the file intact.
+    if block:
+        sa = db.query(User).filter(User.role == Role.super_admin).one_or_none()
+        if sa is None:
+            _log.warning("Recovery block present but no super admin row exists; will create on bootstrap.")
+        else:
+            if "username" in block and block["username"]:
+                sa.username = block["username"]
+            if "email" in block:
+                sa.email = block["email"] or None
+            if "password" in block and block["password"]:
+                sa.password_hash = hash_password(block["password"])
+            sa.status = Status.active
+            sa.suspended_until = None
+            sa.suspension_reason = None
+            db.commit()
+            _log.info("Applied super_admin_recovery from server_config.json")
+
+    # ---- Server settings reset (lockout escape hatch) --------------------
+    srv = data.pop("server_recovery", None)
+    if srv:
+        from ..models import ServerSettings as _SS
+        s = db.query(_SS).get(1)
+        if s is not None:
+            allowed_keys = {
+                "allowed_origin", "public_base_url",
+                "ssl_cert_pull_webhook_url", "ssl_cert_pull_auto_days",
+            }
+            for k, v in srv.items():
+                if k in allowed_keys:
+                    setattr(s, k, v)
+                    _log.info("server_recovery: set %s = %r", k, v)
+            db.commit()
+
+    # Wipe applied recovery blocks; leave the rest of the file intact.
     try:
         path.write_text(json.dumps(data, indent=2), encoding="utf-8")
     except OSError as e:
         _log.error("Failed to clear recovery block: %s", e)
-    _log.info("Applied super_admin_recovery from server_config.json")
