@@ -814,22 +814,14 @@ if (discordTestBtn) discordTestBtn.addEventListener('click', async () => {
   const original = discordTestBtn.textContent;
   discordTestBtn.textContent = 'Posting…';
   try {
-    // Persist ONLY the webhook URL — never dispatch a form-wide submit
-    // here. A full submit risks browser autofill clobbering unrelated
-    // fields (allowed_origin, smtp_*, etc.) silently. The dedicated PATCH
-    // below sends a one-key payload, leaving every other column untouched.
-    const url = (form.elements['discord_webhook_url'] || {}).value || '';
-    if (url) await api.patch('/server/settings', { discord_webhook_url: url });
     const r = await api.post('/server/test-discord', {});
     msg.textContent = r.message || 'Posted.';
     msg.className = 'ok small';
     msg.hidden = false;
-    await load();
   } catch (ex) {
     msg.textContent = (ex && ex.detail) || 'Failed';
     msg.className = 'error small';
     msg.hidden = false;
-    await load();
   } finally {
     discordTestBtn.disabled = false;
     discordTestBtn.textContent = original;
@@ -1080,7 +1072,8 @@ if (importForm) importForm.addEventListener('submit', async (e) => {
   }
 });
 
-// Send a test email through the saved SMTP settings — no DB writes.
+// Send a test email through the saved SMTP settings — no DB writes,
+// no auto-save, no form fan-out. Use what's in the DB right now.
 const testBtn = document.getElementById('smtp-test-btn');
 if (testBtn) testBtn.addEventListener('click', async () => {
   const msg = document.getElementById('smtp-test-msg');
@@ -1090,21 +1083,6 @@ if (testBtn) testBtn.addEventListener('click', async () => {
   testBtn.disabled = true;
   testBtn.textContent = 'Sending…';
   try {
-    // Persist ONLY the SMTP fields — never dispatch a form-wide submit.
-    // (A full submit risks browser autofill silently overwriting unrelated
-    // fields like `allowed_origin`.) Empty password = leave saved value
-    // alone, matching the convention everywhere else in this form.
-    const smtpPatch = {
-      smtp_host:    (form.elements['smtp_host']    || {}).value || null,
-      smtp_port:    (form.elements['smtp_port']    || {}).value
-                       ? Number(form.elements['smtp_port'].value) : null,
-      smtp_user:    (form.elements['smtp_user']    || {}).value || null,
-      smtp_from:    (form.elements['smtp_from']    || {}).value || null,
-      smtp_use_tls: !!(form.elements['smtp_use_tls'] && form.elements['smtp_use_tls'].checked),
-    };
-    const pw = (form.elements['smtp_password'] || {}).value;
-    if (pw) smtpPatch.smtp_password = pw;
-    await api.patch('/server/settings', smtpPatch);
     const r = await api.post('/server/test-email', { to });
     msg.textContent = r.message;
     msg.className = 'ok';
@@ -1115,9 +1093,6 @@ if (testBtn) testBtn.addEventListener('click', async () => {
     msg.hidden = false;
     testBtn.disabled = false;
     testBtn.textContent = 'Send test email';
-    // Refresh pill state from server so the banner + pill reflect the
-    // new last_test_ok flag persisted by the test endpoint.
-    try { await load(); } catch {}
   }
 });
 
