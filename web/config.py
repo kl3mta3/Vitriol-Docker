@@ -18,7 +18,7 @@ import secrets as _secrets
 from functools import lru_cache
 from pathlib import Path
 from typing import Optional
-from pydantic import Field
+from pydantic import AliasChoices, Field
 from pydantic_settings import BaseSettings, SettingsConfigDict
 
 
@@ -33,10 +33,14 @@ class Settings(BaseSettings):
 
     # --- Core ---------------------------------------------------------
     # Raw env value — may be empty / placeholder. The actual value used by
-    # the app is resolved in `resolve_secret_key()` below.
+    # the app is resolved in `resolve_secret_key()` below. Accepts both
+    # ``VITRIOL_SECRET_KEY`` (prefix matches the rest of the app's env
+    # vars) and the unprefixed ``SECRET_KEY`` (what most operators
+    # naturally type) via the alias_choices below — either works.
     secret_key: str = Field(
         default="",
-        description="Optional override for VITRIOL_SECRET_KEY. Empty = auto-generate and persist.",
+        validation_alias=AliasChoices("VITRIOL_SECRET_KEY", "SECRET_KEY"),
+        description="Optional override. Empty = auto-generate and persist to /data/.secret_key.",
     )
     data_dir: Path = Path("/data")
     database_url: str = ""  # default computed in __init__ from data_dir
@@ -105,11 +109,37 @@ class Settings(BaseSettings):
         value.
         """
         import logging as _logging
+        import hashlib as _hashlib
         _log = _logging.getLogger("vitriol.config")
 
         f = self.secret_key_file
         env_val = (self.secret_key or "").strip()
         has_explicit_env = bool(env_val) and env_val != "replace-me-with-a-long-random-string"
+
+        # Boot-time filesystem snapshot. Lets the operator confirm whether
+        # the volume is actually persistent by comparing this output across
+        # restarts: if vitriol.db has a stable size+mtime but .secret_key
+        # disappears or changes, we know something specifically targets
+        # the dotfile (Coolify cache cleanup, dotfile filtering, etc.).
+        # If both vanish, the volume itself is being reset. The 8-char
+        # SHA prefix of the resolved key is logged at the end so two
+        # successive boots can be compared without leaking the key.
+        try:
+            db_path = self.data_dir / "vitriol.db"
+            db_stat = db_path.stat() if db_path.exists() else None
+            sk_stat = f.stat() if f.exists() else None
+            _log.info(
+                "Filesystem probe: data_dir=%s vitriol.db=%s .secret_key=%s env_set=%s",
+                self.data_dir,
+                f"size={db_stat.st_size}" if db_stat else "MISSING",
+                f"size={sk_stat.st_size}" if sk_stat else "MISSING",
+                has_explicit_env,
+            )
+        except OSError as e:
+            _log.warning("Filesystem probe failed: %s", e)
+
+        def _fingerprint(k: str) -> str:
+            return _hashlib.sha256(k.encode("utf-8")).hexdigest()[:8]
 
         # 1. Explicit env var wins. Mirror it to the file so the in-UI
         #    rotation / settings export still see the live value.
@@ -118,7 +148,10 @@ class Settings(BaseSettings):
                 _write_secret_key(f, env_val)
             except OSError:
                 pass  # read-only volume is fine — env wins regardless
-            _log.info("SECRET_KEY source: env var (deterministic across restarts)")
+            _log.info(
+                "SECRET_KEY source: env var (fingerprint=%s) — deterministic across restarts",
+                _fingerprint(env_val),
+            )
             return env_val
 
         # 2. Persisted file wins next — that's how rotation survives
@@ -127,10 +160,13 @@ class Settings(BaseSettings):
             try:
                 k = f.read_text(encoding="utf-8").strip()
                 if k:
-                    _log.info("SECRET_KEY source: %s (existing file)", f)
+                    _log.info(
+                        "SECRET_KEY source: %s (fingerprint=%s)",
+                        f, _fingerprint(k),
+                    )
                     return k
-            except OSError:
-                pass
+            except OSError as e:
+                _log.warning("Could not read %s: %s — falling through", f, e)
 
         # 3. Auto-generate. 64 url-safe bytes = ~86 chars; plenty for HS256
         #    + PBKDF2.
@@ -163,11 +199,11 @@ class Settings(BaseSettings):
             return new_key
 
         _log.warning(
-            "SECRET_KEY source: AUTO-GENERATED at %s (first run). "
-            "If you see this message on every restart, your /data volume "
-            "isn't persistent — set a SECRET_KEY env var in your "
-            "orchestrator (Coolify) so encrypted DB secrets survive "
-            "restarts.", f,
+            "SECRET_KEY source: AUTO-GENERATED at %s (first run, fingerprint=%s). "
+            "If this fingerprint differs on the next restart, .secret_key "
+            "is NOT persisting — set VITRIOL_SECRET_KEY (or SECRET_KEY) in "
+            "your orchestrator so encrypted DB secrets survive restarts.",
+            f, _fingerprint(new_key),
         )
         return new_key
 
