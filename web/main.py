@@ -52,7 +52,50 @@ async def lifespan(app: FastAPI):
     finally:
         db.close()
     _log.info("Vitriol web v%s started; data dir=%s", __version__, cfg.data_dir)
+
+    # Background cert-pull scheduler. Wakes hourly, runs the pull if
+    # auto_days is set and the last run is older than that. Stays a
+    # no-op until the operator turns auto-renewal on.
+    import asyncio
+    from datetime import datetime, timedelta
+    from .services.cert_pull import run as cert_pull_run, CertPullError
+
+    async def _cert_pull_loop():
+        while True:
+            try:
+                await asyncio.sleep(3600)
+                db_ = SessionLocal()
+                try:
+                    s = db_.query(ServerSettings).get(1)
+                    if s is None:
+                        continue
+                    days = int(s.ssl_cert_pull_auto_days or 0)
+                    if days <= 0:
+                        continue
+                    last = s.ssl_cert_pull_last_run_at
+                    due = last is None or last < (datetime.utcnow() - timedelta(days=days))
+                    if not due:
+                        continue
+                    _log.info("Auto cert pull: %d-day interval; last run %s", days, last)
+                    try:
+                        msg = await cert_pull_run(db_)
+                        _log.info("Auto cert pull ok: %s", msg)
+                    except CertPullError as e:
+                        _log.warning("Auto cert pull failed: %s", e)
+                finally:
+                    db_.close()
+            except asyncio.CancelledError:
+                raise
+            except Exception:
+                _log.exception("Cert-pull scheduler hiccup; continuing")
+
+    cert_task = asyncio.create_task(_cert_pull_loop())
     yield
+    cert_task.cancel()
+    try:
+        await cert_task
+    except (asyncio.CancelledError, Exception):
+        pass
     _log.info("Vitriol web shutting down")
 
 

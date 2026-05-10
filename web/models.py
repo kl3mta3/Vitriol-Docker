@@ -326,6 +326,30 @@ class ServerSettings(Base):
     ssl_cert_pull_webhook_url = Column(String(512), nullable=True)
     ssl_cert_pull_webhook_secret_enc = Column(Text, nullable=True)
 
+    # SSL cert-pull mode + extras. Two modes are supported:
+    #   - webhook : POST/GET against an HTTP endpoint (existing)
+    #   - script  : run a shell script that writes fullchain.pem + privkey.pem
+    #               into $VITRIOL_CERT_DIR. More flexible — handles any cert
+    #               API (SphereSSL, certbot, custom) without us having to
+    #               anticipate auth shape or response schema.
+    ssl_cert_pull_mode = Column(String(16), nullable=False, default="webhook", server_default="webhook")
+    ssl_cert_pull_script = Column(Text, nullable=True)
+    # 0 = manual only; >0 = re-pull every N days via the background scheduler.
+    ssl_cert_pull_auto_days = Column(Integer, nullable=False, default=0, server_default="0")
+    ssl_cert_pull_last_run_at = Column(DateTime, nullable=True)
+    # Short message describing the last pull's outcome for UI display.
+    ssl_cert_pull_last_status = Column(String(512), nullable=True)
+    # Optional static-header auth for the webhook mode (e.g. SphereSSL's
+    # X-Api-Key). When set, takes precedence over HMAC body signing — they
+    # rarely make sense together. Header value is encrypted at rest.
+    ssl_cert_pull_webhook_method = Column(String(8), nullable=False, default="POST", server_default="POST")
+    ssl_cert_pull_webhook_header_name = Column(String(64), nullable=True)
+    ssl_cert_pull_webhook_header_value_enc = Column(Text, nullable=True)
+    # Configurable JSON field names so we can speak SphereSSL's
+    # certPem/certKey shape as easily as our own fullchain/privkey.
+    ssl_cert_pull_response_cert_field = Column(String(64), nullable=False, default="fullchain", server_default="fullchain")
+    ssl_cert_pull_response_key_field = Column(String(64), nullable=False, default="privkey", server_default="privkey")
+
     super_admin_can_self_compile = Column(Boolean, nullable=False, default=True)
     admin_can_self_compile = Column(Boolean, nullable=False, default=True)
 

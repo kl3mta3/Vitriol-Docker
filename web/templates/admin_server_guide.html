@@ -338,38 +338,95 @@ Client secret: <span class="placeholder">from Auth0</span></pre>
 
   <!-- ============================================== SSL -->
   <details id="ssl">
-    <summary>SSL cert pull webhook</summary>
+    <summary>SSL cert pull</summary>
     <p>
       Vitriol itself doesn't terminate TLS — front it with a reverse proxy
-      (Caddy / Traefik / Nginx). This webhook lets Vitriol <em>pull</em> renewed certs
-      from a server you control and drop them into <code>/data/certs/</code> for the proxy
-      to pick up. Useful when your cert authority is somewhere the container can't reach
-      directly (private CA, internal step-ca, etc.).
+      (Caddy / Traefik / Nginx). The cert-pull feature fetches renewed certs
+      and drops them into <code>/data/certs/fullchain.pem</code> +
+      <code>/data/certs/privkey.pem</code> for the proxy to pick up. Two modes
+      cover anything you'd want to wire up.
+    </p>
+
+    <h4>Auto-renewal</h4>
+    <p>
+      The <strong>Auto-renew every N days</strong> field tells the background
+      scheduler to re-run the pull on that interval. <code>0</code> disables
+      auto-renewal — the operator pulls on demand via the <em>Pull certs now</em>
+      button. Typical values: <code>7</code> for safety-margin renewal of
+      90-day Let's Encrypt certs, <code>30</code> for longer-lived certs.
+    </p>
+
+    <h3>Mode 1: Webhook</h3>
+    <p>
+      Vitriol makes an HTTP request to your cert API and parses JSON out
+      of the response. Supports GET or POST and either static-header auth
+      (<code>X-Api-Key</code> &amp; friends) or HMAC body signing.
     </p>
 
     <h4>Fields</h4>
     <ul>
-      <li><strong>Webhook URL</strong> — your endpoint. Vitriol POSTs JSON to it.</li>
-      <li><strong>Shared secret</strong> — used as HMAC-SHA256 key. Vitriol sends an <code>X-Vitriol-Signature: sha256=&lt;hex&gt;</code> header. Verify it on your side.</li>
+      <li><strong>Webhook URL</strong> — your cert endpoint.</li>
+      <li><strong>HTTP method</strong> — GET (most cert APIs) or POST.</li>
+      <li><strong>Auth header name / value</strong> — set both for static-header auth (e.g. <code>X-Api-Key</code>). Takes precedence over HMAC.</li>
+      <li><strong>HMAC shared secret</strong> — POST-only. Sent as <code>X-Vitriol-Signature: sha256=&lt;hex&gt;</code>.</li>
+      <li><strong>Response cert / key fields</strong> — JSON keys to extract. Default <code>fullchain</code> / <code>privkey</code>; SphereSSL uses <code>certPem</code> / <code>certKey</code>.</li>
     </ul>
 
-    <h4>Request Vitriol sends</h4>
+    <h4>Example — Vitriol's own format</h4>
     <pre>POST <span class="placeholder">your-webhook-url</span>
 Content-Type: application/json
 X-Vitriol-Signature: sha256=&lt;hmac of body using shared secret&gt;
 
-{"action": "pull-certs"}</pre>
+{"action": "pull-certs"}
 
-    <h4>Response Vitriol expects</h4>
-    <pre>HTTP 200
-Content-Type: application/json
-
+→ Response:
 {
-  "fullchain": "-----BEGIN CERTIFICATE-----\n...\n-----END CERTIFICATE-----\n",
-  "privkey":   "-----BEGIN PRIVATE KEY-----\n...\n-----END PRIVATE KEY-----\n"
+  "fullchain": "-----BEGIN CERTIFICATE-----\n...\n",
+  "privkey":   "-----BEGIN PRIVATE KEY-----\n...\n"
 }</pre>
 
-    <h4>Tiny Flask example</h4>
+    <h4>Example — SphereSSL</h4>
+    <pre>Mode:                  Webhook
+Webhook URL:           https://<span class="placeholder">spheressl.example.com</span>/api/cert/<span class="placeholder">your.host</span>
+HTTP method:           GET
+Auth header name:      X-Api-Key
+Auth header value:     <span class="placeholder">your-spheressl-api-key</span>
+Response cert field:   certPem
+Response key field:    certKey
+Auto-renew every:      7 days</pre>
+
+    <h3>Mode 2: Script</h3>
+    <p>
+      Sometimes the cert API doesn't fit a clean GET/JSON shape — multi-step
+      flows, custom auth, file-based outputs. Mode 2 runs a shell script you
+      paste in. The container has <code>bash</code>, <code>curl</code>, and
+      <code>jq</code> pre-installed; the script gets <code>$VITRIOL_CERT_DIR</code>
+      pointing at <code>/data/certs/</code> and is expected to write
+      <code>fullchain.pem</code> and <code>privkey.pem</code> there.
+    </p>
+
+    <h4>Example — SphereSSL via script</h4>
+    <pre>#!/usr/bin/env bash
+set -euo pipefail
+
+API_KEY='<span class="placeholder">your-spheressl-api-key</span>'
+DOMAIN='<span class="placeholder">your.host</span>'
+URL="https://<span class="placeholder">spheressl.example.com</span>/api/cert/$DOMAIN"
+
+RESPONSE=$(curl -fsSL -H "X-Api-Key: $API_KEY" "$URL")
+echo "$RESPONSE" | jq -r .certPem &gt; "$VITRIOL_CERT_DIR/fullchain.pem"
+echo "$RESPONSE" | jq -r .certKey &gt; "$VITRIOL_CERT_DIR/privkey.pem"</pre>
+
+    <p class="muted small">
+      Exit code: <code>0</code> = success. Anything else marks the run as
+      failed and surfaces stderr's last line in the UI status pill. 5-minute
+      hard timeout. Runs as the container's non-root <code>vitriol</code>
+      user, so <code>sudo</code> / <code>apt-get</code> won't work — you can
+      <code>curl</code>, <code>jq</code>, write files under <code>/data/</code>,
+      and call other HTTP services from within the container's network.
+    </p>
+
+    <h4>Tiny Flask example (Vitriol's native webhook format)</h4>
     <pre>import hmac, hashlib
 from flask import Flask, request, jsonify, abort
 

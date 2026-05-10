@@ -135,13 +135,75 @@
       <p id="secret-key-msg" class="muted small" hidden></p>
     </details>
 
-    <details><summary>SSL cert pull webhook</summary>
-      <p class="muted small">Server calls this webhook (HMAC-SHA256 signed) to fetch <code>fullchain.pem</code> and <code>privkey.pem</code>; they're written to <code>/data/certs/</code> for your reverse proxy.</p>
-      <div class="grid-2">
-        <label><span>Webhook URL</span><input name="ssl_cert_pull_webhook_url" /></label>
-        <label><span>Shared secret</span><input name="ssl_cert_pull_webhook_secret" type="password" placeholder="(unchanged)" /></label>
+    <details><summary>SSL cert pull <span id="ssl-last-pill" class="status-pill"></span></summary>
+      <p class="muted small">
+        Pulls renewed TLS certs into <code>/data/certs/</code> for your reverse proxy
+        (Caddy / nginx / Traefik). Two modes — Webhook for plain JSON APIs, or Script
+        for anything that needs custom auth or response shape (SphereSSL, certbot wrappers,
+        custom CAs).
+      </p>
+
+      <label class="full"><span>Mode</span>
+        <select name="ssl_cert_pull_mode" id="ssl-mode-select">
+          <option value="webhook">Webhook (HTTP request)</option>
+          <option value="script">Script (shell)</option>
+        </select>
+      </label>
+
+      <!-- Webhook mode -->
+      <div id="ssl-mode-webhook" class="ssl-mode-block">
+        <div class="grid-2">
+          <label><span>Webhook URL</span><input name="ssl_cert_pull_webhook_url" placeholder="https://ca.example/api/cert/your.host" /></label>
+          <label><span>HTTP method</span>
+            <select name="ssl_cert_pull_webhook_method">
+              <option value="GET">GET</option>
+              <option value="POST">POST</option>
+            </select>
+          </label>
+          <label><span>Auth header name (optional)</span><input name="ssl_cert_pull_webhook_header_name" placeholder="X-Api-Key" /></label>
+          <label><span>Auth header value</span><input name="ssl_cert_pull_webhook_header_value" type="password" placeholder="(unchanged)" /></label>
+          <label><span>HMAC shared secret (POST only, ignored if header set)</span><input name="ssl_cert_pull_webhook_secret" type="password" placeholder="(unchanged)" /></label>
+          <label><span>Response cert field</span><input name="ssl_cert_pull_response_cert_field" placeholder="fullchain" /></label>
+          <label><span>Response key field</span><input name="ssl_cert_pull_response_key_field" placeholder="privkey" /></label>
+        </div>
+        <p class="muted small">
+          Default response shape is <code>{ "fullchain": "…", "privkey": "…" }</code>.
+          For SphereSSL, set the field names to <code>certPem</code> and <code>certKey</code>.
+        </p>
       </div>
+
+      <!-- Script mode -->
+      <div id="ssl-mode-script" class="ssl-mode-block" hidden>
+        <p class="muted small">
+          Runs under <code>bash</code> as the container user. Receives <code>$VITRIOL_CERT_DIR</code> (resolves to <code>/data/certs/</code>) and is expected to write <code>fullchain.pem</code> and <code>privkey.pem</code> there. <code>curl</code> and <code>jq</code> are pre-installed. 5-minute timeout.
+        </p>
+        <label class="full"><span>Script body</span>
+          <textarea name="ssl_cert_pull_script" rows="14" spellcheck="false" placeholder="#!/usr/bin/env bash
+set -euo pipefail
+
+API_KEY='your-api-key'
+DOMAIN='your.host'
+URL=&quot;https://ca.example/api/cert/$DOMAIN&quot;
+
+RESPONSE=$(curl -fsSL -H &quot;X-Api-Key: $API_KEY&quot; &quot;$URL&quot;)
+echo &quot;$RESPONSE&quot; | jq -r .certPem > &quot;$VITRIOL_CERT_DIR/fullchain.pem&quot;
+echo &quot;$RESPONSE&quot; | jq -r .certKey > &quot;$VITRIOL_CERT_DIR/privkey.pem&quot;
+"></textarea>
+        </label>
+      </div>
+
+      <hr style="border-color: var(--border); margin: 16px 0;">
+
+      <div class="grid-2">
+        <label><span>Auto-renew every N days (0 = manual only)</span><input name="ssl_cert_pull_auto_days" type="number" min="0" max="365" /></label>
+        <div>
+          <p class="muted small" style="margin: 0;">Last run:</p>
+          <p id="ssl-last-run" class="muted small" style="margin-top: 4px;">—</p>
+        </div>
+      </div>
+
       <button type="button" id="refresh-certs" class="btn btn-secondary">Pull certs now</button>
+      <p id="refresh-certs-msg" class="ok small" hidden></p>
     </details>
 
     <details><summary>Self-compile defaults</summary>

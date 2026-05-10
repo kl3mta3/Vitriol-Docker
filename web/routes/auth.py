@@ -37,13 +37,13 @@ def _set_session_cookies(resp: Response, access: str, refresh: str) -> None:
     resp.set_cookie(
         "vitriol_refresh", refresh,
         httponly=True, samesite="lax", secure=False,
-        max_age=_settings.refresh_token_days * 86400, path="/auth",
+        max_age=_settings.refresh_token_days * 86400, path="/api/v1/auth",
     )
 
 
 def _clear_session_cookies(resp: Response) -> None:
     resp.delete_cookie("vitriol_access", path="/")
-    resp.delete_cookie("vitriol_refresh", path="/auth")
+    resp.delete_cookie("vitriol_refresh", path="/api/v1/auth")
 
 
 def _record_session(db: Session, user: User, refresh_raw: str, request: Request) -> None:

@@ -108,7 +108,7 @@ def setup_create(req: SetupRequest, request: Request, response: Response, db: Se
     response.set_cookie(
         "vitriol_refresh", raw_refresh,
         httponly=True, samesite="lax", secure=False,
-        max_age=_settings.refresh_token_days * 86400, path="/auth",
+        max_age=_settings.refresh_token_days * 86400, path="/api/v1/auth",
     )
     audit.log(db, user.id, "setup_create_super_admin", target_user_id=user.id)
     return TokenResponse(access_token=access, expires_in=expires_in)

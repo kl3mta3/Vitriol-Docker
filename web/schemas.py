@@ -178,6 +178,16 @@ class ServerSettingsOut(BaseModel):
     allowed_origin: Optional[str]
     ssl_cert_pull_webhook_url: Optional[str]
     ssl_cert_pull_webhook_secret_set: bool = False
+    ssl_cert_pull_mode: str = "webhook"
+    ssl_cert_pull_script: Optional[str] = None
+    ssl_cert_pull_auto_days: int = 0
+    ssl_cert_pull_last_run_at: Optional[datetime] = None
+    ssl_cert_pull_last_status: Optional[str] = None
+    ssl_cert_pull_webhook_method: str = "POST"
+    ssl_cert_pull_webhook_header_name: Optional[str] = None
+    ssl_cert_pull_webhook_header_value_set: bool = False
+    ssl_cert_pull_response_cert_field: str = "fullchain"
+    ssl_cert_pull_response_key_field: str = "privkey"
     super_admin_can_self_compile: bool
     admin_can_self_compile: bool
 
@@ -218,6 +228,14 @@ class ServerSettingsPatch(BaseModel):
     allowed_origin: Optional[str] = None
     ssl_cert_pull_webhook_url: Optional[str] = None
     ssl_cert_pull_webhook_secret: Optional[str] = None
+    ssl_cert_pull_mode: Optional[str] = None
+    ssl_cert_pull_script: Optional[str] = None
+    ssl_cert_pull_auto_days: Optional[int] = None
+    ssl_cert_pull_webhook_method: Optional[str] = None
+    ssl_cert_pull_webhook_header_name: Optional[str] = None
+    ssl_cert_pull_webhook_header_value: Optional[str] = None
+    ssl_cert_pull_response_cert_field: Optional[str] = None
+    ssl_cert_pull_response_key_field: Optional[str] = None
     super_admin_can_self_compile: Optional[bool] = None
     admin_can_self_compile: Optional[bool] = None
 

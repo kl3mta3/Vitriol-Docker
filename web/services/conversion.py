@@ -28,36 +28,67 @@ from ..models import Job, JobStatus
 _settings = get_settings()
 _executor = ThreadPoolExecutor(max_workers=_settings.max_concurrent_conversions, thread_name_prefix="vit-convert")
 _tokens: dict[int, CancellationToken] = {}
-_subscribers: dict[int, set[asyncio.Queue]] = {}
+_subscribers: dict[int, set[tuple[asyncio.Queue, asyncio.AbstractEventLoop]]] = {}
 _subscribers_lock = threading.Lock()
 
 
 # ------------------------------------------------------------- pub/sub
+#
+# Cross-thread plumbing: subscribers are websocket handlers running on
+# the event-loop thread; publishers are conversion jobs running in
+# ThreadPoolExecutor workers. asyncio.Queue is NOT thread-safe — calling
+# put_nowait() from a worker thread silently drops events (sometimes!)
+# and that's exactly the symptom of "100% then no done event" we hit in
+# production. Fix: capture the loop at subscribe time and route every
+# publish through loop.call_soon_threadsafe, which IS thread-safe.
+
+# Each subscription stores (queue, owning_loop) so the publisher knows
+# which loop to schedule the put on.
+_Subscriber = tuple  # (asyncio.Queue, asyncio.AbstractEventLoop)
+
+
+def _put_safe(q: "asyncio.Queue", event: dict) -> None:
+    """Runs on the event-loop thread (scheduled by call_soon_threadsafe)."""
+    try:
+        q.put_nowait(event)
+    except asyncio.QueueFull:
+        pass
+
 
 def _publish(job_id: int, event: dict) -> None:
     with _subscribers_lock:
-        queues = list(_subscribers.get(job_id, ()))
-    for q in queues:
+        subs = list(_subscribers.get(job_id, ()))
+    for q, loop in subs:
+        if loop.is_closed():
+            continue
         try:
-            q.put_nowait(event)
-        except asyncio.QueueFull:
+            loop.call_soon_threadsafe(_put_safe, q, event)
+        except RuntimeError:
+            # Loop was closed between our check and the schedule call.
+            # Treat as a dead subscriber — the WS will drop on its end.
             pass
 
 
 def subscribe(job_id: int) -> asyncio.Queue:
+    """Called by the websocket handler on the event-loop thread."""
     q: asyncio.Queue = asyncio.Queue(maxsize=128)
+    loop = asyncio.get_running_loop()
     with _subscribers_lock:
-        _subscribers.setdefault(job_id, set()).add(q)
+        _subscribers.setdefault(job_id, set()).add((q, loop))
     return q
 
 
 def unsubscribe(job_id: int, q: asyncio.Queue) -> None:
     with _subscribers_lock:
         s = _subscribers.get(job_id)
-        if s is not None:
-            s.discard(q)
-            if not s:
-                _subscribers.pop(job_id, None)
+        if s is None:
+            return
+        # Find the (q, loop) tuple matching this queue and discard it.
+        target = next((sub for sub in s if sub[0] is q), None)
+        if target is not None:
+            s.discard(target)
+        if not s:
+            _subscribers.pop(job_id, None)
 
 
 # ----------------------------------------------------------- run a job

@@ -59,6 +59,27 @@ _ADDITIVE_COLUMNS: list[tuple[str, str, str]] = [
      "ALTER TABLE users ADD COLUMN custom_role_id INTEGER REFERENCES custom_roles(id) ON DELETE SET NULL"),
     ("server_settings", "signup_default_custom_role_id",
      "ALTER TABLE server_settings ADD COLUMN signup_default_custom_role_id INTEGER REFERENCES custom_roles(id) ON DELETE SET NULL"),
+    # SSL cert-pull v2: script mode + auto-renewal + flexible webhook auth.
+    ("server_settings", "ssl_cert_pull_mode",
+     "ALTER TABLE server_settings ADD COLUMN ssl_cert_pull_mode VARCHAR(16) NOT NULL DEFAULT 'webhook'"),
+    ("server_settings", "ssl_cert_pull_script",
+     "ALTER TABLE server_settings ADD COLUMN ssl_cert_pull_script TEXT"),
+    ("server_settings", "ssl_cert_pull_auto_days",
+     "ALTER TABLE server_settings ADD COLUMN ssl_cert_pull_auto_days INTEGER NOT NULL DEFAULT 0"),
+    ("server_settings", "ssl_cert_pull_last_run_at",
+     "ALTER TABLE server_settings ADD COLUMN ssl_cert_pull_last_run_at TIMESTAMP"),
+    ("server_settings", "ssl_cert_pull_last_status",
+     "ALTER TABLE server_settings ADD COLUMN ssl_cert_pull_last_status VARCHAR(512)"),
+    ("server_settings", "ssl_cert_pull_webhook_method",
+     "ALTER TABLE server_settings ADD COLUMN ssl_cert_pull_webhook_method VARCHAR(8) NOT NULL DEFAULT 'POST'"),
+    ("server_settings", "ssl_cert_pull_webhook_header_name",
+     "ALTER TABLE server_settings ADD COLUMN ssl_cert_pull_webhook_header_name VARCHAR(64)"),
+    ("server_settings", "ssl_cert_pull_webhook_header_value_enc",
+     "ALTER TABLE server_settings ADD COLUMN ssl_cert_pull_webhook_header_value_enc TEXT"),
+    ("server_settings", "ssl_cert_pull_response_cert_field",
+     "ALTER TABLE server_settings ADD COLUMN ssl_cert_pull_response_cert_field VARCHAR(64) NOT NULL DEFAULT 'fullchain'"),
+    ("server_settings", "ssl_cert_pull_response_key_field",
+     "ALTER TABLE server_settings ADD COLUMN ssl_cert_pull_response_key_field VARCHAR(64) NOT NULL DEFAULT 'privkey'"),
 ]
 
 

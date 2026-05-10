@@ -58,6 +58,16 @@ def _to_out(s: ServerSettings) -> ServerSettingsOut:
         allowed_origin=s.allowed_origin,
         ssl_cert_pull_webhook_url=s.ssl_cert_pull_webhook_url,
         ssl_cert_pull_webhook_secret_set=bool(s.ssl_cert_pull_webhook_secret_enc),
+        ssl_cert_pull_mode=s.ssl_cert_pull_mode or "webhook",
+        ssl_cert_pull_script=s.ssl_cert_pull_script,
+        ssl_cert_pull_auto_days=int(s.ssl_cert_pull_auto_days or 0),
+        ssl_cert_pull_last_run_at=s.ssl_cert_pull_last_run_at,
+        ssl_cert_pull_last_status=s.ssl_cert_pull_last_status,
+        ssl_cert_pull_webhook_method=s.ssl_cert_pull_webhook_method or "POST",
+        ssl_cert_pull_webhook_header_name=s.ssl_cert_pull_webhook_header_name,
+        ssl_cert_pull_webhook_header_value_set=bool(s.ssl_cert_pull_webhook_header_value_enc),
+        ssl_cert_pull_response_cert_field=s.ssl_cert_pull_response_cert_field or "fullchain",
+        ssl_cert_pull_response_key_field=s.ssl_cert_pull_response_key_field or "privkey",
         super_admin_can_self_compile=s.super_admin_can_self_compile,
         admin_can_self_compile=s.admin_can_self_compile,
     )
@@ -99,6 +109,9 @@ def patch_server_settings(
         "oidc_scopes",
         "public_base_url", "allowed_origin",
         "ssl_cert_pull_webhook_url",
+        "ssl_cert_pull_mode", "ssl_cert_pull_script", "ssl_cert_pull_auto_days",
+        "ssl_cert_pull_webhook_method", "ssl_cert_pull_webhook_header_name",
+        "ssl_cert_pull_response_cert_field", "ssl_cert_pull_response_key_field",
         "super_admin_can_self_compile", "admin_can_self_compile",
     }
     for f in plain_fields:
@@ -137,6 +150,9 @@ def patch_server_settings(
         s.oidc_client_secret_enc = encrypt(req.oidc_client_secret)
     if req.ssl_cert_pull_webhook_secret is not None:
         s.ssl_cert_pull_webhook_secret_enc = encrypt(req.ssl_cert_pull_webhook_secret)
+    if req.ssl_cert_pull_webhook_header_value is not None:
+        # Empty string explicitly clears the header auth.
+        s.ssl_cert_pull_webhook_header_value_enc = encrypt(req.ssl_cert_pull_webhook_header_value) if req.ssl_cert_pull_webhook_header_value else None
 
     s.updated_by_user_id = actor.id
     db.commit()
@@ -242,29 +258,12 @@ async def test_email(
 
 @router.post("/refresh-certs", response_model=MessageResponse)
 async def refresh_certs(actor: User = Depends(require_super_admin), db: Session = Depends(get_db)):
-    s = db.query(ServerSettings).get(1)
-    if s is None or not s.ssl_cert_pull_webhook_url:
-        raise HTTPException(status_code=400, detail="No SSL webhook configured")
-    secret = decrypt(s.ssl_cert_pull_webhook_secret_enc) or ""
-    payload = json.dumps({"action": "pull-certs"}).encode("utf-8")
-    sig = hmac.new(secret.encode("utf-8"), payload, hashlib.sha256).hexdigest() if secret else ""
-    headers = {"Content-Type": "application/json"}
-    if sig:
-        headers["X-Vitriol-Signature"] = f"sha256={sig}"
+    """Trigger a cert pull immediately. Dispatches on `ssl_cert_pull_mode`
+    (webhook or script) — see web/services/cert_pull.py for the modes."""
+    from ..services.cert_pull import run as do_pull, CertPullError
     try:
-        async with httpx.AsyncClient(timeout=30) as client:
-            r = await client.post(s.ssl_cert_pull_webhook_url, content=payload, headers=headers)
-            r.raise_for_status()
-            data = r.json()
-    except Exception as e:
-        raise HTTPException(status_code=502, detail=f"Webhook call failed: {e}")
-    cert_dir: Path = _cfg.cert_dir
-    cert_dir.mkdir(parents=True, exist_ok=True)
-    fullchain = data.get("fullchain")
-    privkey = data.get("privkey")
-    if not fullchain or not privkey:
-        raise HTTPException(status_code=502, detail="Webhook response missing fullchain/privkey")
-    (cert_dir / "fullchain.pem").write_text(fullchain, encoding="utf-8")
-    (cert_dir / "privkey.pem").write_text(privkey, encoding="utf-8")
-    audit.log(db, actor.id, "ssl_certs_refresh")
-    return MessageResponse(message=f"Certificates written to {cert_dir}.")
+        msg = await do_pull(db)
+    except CertPullError as e:
+        raise HTTPException(status_code=502, detail=str(e))
+    audit.log(db, actor.id, "ssl_certs_refresh", metadata={"status": msg})
+    return MessageResponse(message=msg)

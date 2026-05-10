@@ -68,6 +68,39 @@ async function load() {
     ru.textContent = `${base}/api/v1/auth/sso/oidc/callback`;
   }
 
+  // ---- SSL cert-pull mode wiring ----
+  const sslMode = document.getElementById('ssl-mode-select');
+  if (sslMode) {
+    sslMode.value = s.ssl_cert_pull_mode || 'webhook';
+    updateSslModeBlocks();
+    // Script field is a <textarea> with a name; the for-each loop above
+    // already populated form.elements['ssl_cert_pull_script']. Make sure
+    // empty strings stay empty rather than showing 'null'.
+    if (s.ssl_cert_pull_script == null) form.elements['ssl_cert_pull_script'].value = '';
+  }
+  // Last-run readout + status pill.
+  const lastRunEl = document.getElementById('ssl-last-run');
+  if (lastRunEl) {
+    if (s.ssl_cert_pull_last_run_at) {
+      const when = new Date(s.ssl_cert_pull_last_run_at).toLocaleString();
+      lastRunEl.textContent = `${when} — ${s.ssl_cert_pull_last_status || '(no status)'}`;
+    } else {
+      lastRunEl.textContent = 'never';
+    }
+  }
+  const sslPill = document.getElementById('ssl-last-pill');
+  if (sslPill) {
+    if (!s.ssl_cert_pull_last_run_at) {
+      sslPill.textContent = '';
+    } else if ((s.ssl_cert_pull_last_status || '').startsWith('failed')) {
+      sslPill.textContent = 'last: failed';
+      sslPill.className = 'status-pill missing';
+    } else {
+      sslPill.textContent = 'last: ok';
+      sslPill.className = 'status-pill ok';
+    }
+  }
+
   // SMTP status pill + signup-without-SMTP warning banner.
   const smtpConfigured = !!(s.smtp_host && s.smtp_from);
   const pill = document.getElementById('smtp-status-pill');
@@ -144,11 +177,46 @@ document.getElementById('restart-btn').addEventListener('click', async () => {
   alert('Restart scheduled.');
 });
 
+// ---- SSL mode picker — show only the active mode's controls. ----
+function updateSslModeBlocks() {
+  const sel = document.getElementById('ssl-mode-select');
+  const mode = sel ? sel.value : 'webhook';
+  const wb = document.getElementById('ssl-mode-webhook');
+  const sc = document.getElementById('ssl-mode-script');
+  if (wb) wb.hidden = mode !== 'webhook';
+  if (sc) sc.hidden = mode !== 'script';
+}
+const _sslSel = document.getElementById('ssl-mode-select');
+if (_sslSel) _sslSel.addEventListener('change', updateSslModeBlocks);
+
 document.getElementById('refresh-certs').addEventListener('click', async () => {
+  const btn = document.getElementById('refresh-certs');
+  const msg = document.getElementById('refresh-certs-msg');
+  btn.disabled = true;
+  const original = btn.textContent;
+  btn.textContent = 'Pulling…';
+  if (msg) { msg.hidden = true; msg.className = 'ok small'; }
   try {
     const r = await api.post('/server/refresh-certs', {});
-    alert(r.message);
-  } catch (ex) { alert(ex.detail || 'Failed'); }
+    if (msg) {
+      msg.textContent = r.message || 'Done.';
+      msg.className = 'ok small';
+      msg.hidden = false;
+    }
+    // Refresh the last-run readout from the now-updated row.
+    await load();
+  } catch (ex) {
+    if (msg) {
+      msg.textContent = ex.detail || 'Pull failed';
+      msg.className = 'error small';
+      msg.hidden = false;
+    } else {
+      alert(ex.detail || 'Failed');
+    }
+  } finally {
+    btn.disabled = false;
+    btn.textContent = original;
+  }
 });
 
 // ---------- Server secret key ----------
