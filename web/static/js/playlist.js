@@ -1,4 +1,96 @@
 // Playlist UX — drop zone, per-row controls, websocket-driven progress.
+//
+// Persistence (so navigating to /files / /profile / /admin and back
+// doesn't wipe the user's queue):
+//   - Stone + Verify toggle states            → localStorage
+//   - Row metadata (filename, ext, jobId, …)  → IndexedDB (rows store)
+//   - Original File blobs                     → IndexedDB (blobs store)
+//
+// Row id is a uuid generated at drop time; the row keeps it in
+// row.dataset.id and uses it as the IDB key for both stores. On
+// playlist-mutating events we re-snapshot every row so a stale tab
+// state can never get out of sync with what's on screen.
+
+const IDB_NAME = 'vitriol-playlist';
+const IDB_VERSION = 1;
+const ROWS_STORE = 'rows';   // {id, filename, srcExt, dstExt, jobId, hasPassword}
+const BLOBS_STORE = 'blobs'; // raw File objects keyed by row id
+
+function _openIdb() {
+  return new Promise((resolve, reject) => {
+    const r = indexedDB.open(IDB_NAME, IDB_VERSION);
+    r.onerror = () => reject(r.error);
+    r.onsuccess = () => resolve(r.result);
+    r.onupgradeneeded = (e) => {
+      const db = e.target.result;
+      if (!db.objectStoreNames.contains(ROWS_STORE)) db.createObjectStore(ROWS_STORE);
+      if (!db.objectStoreNames.contains(BLOBS_STORE)) db.createObjectStore(BLOBS_STORE);
+    };
+  });
+}
+function _idbReq(req) {
+  return new Promise((resolve, reject) => {
+    req.onsuccess = () => resolve(req.result);
+    req.onerror = () => reject(req.error);
+  });
+}
+async function idbPutRow(id, meta, blob) {
+  const db = await _openIdb();
+  const tx = db.transaction([ROWS_STORE, BLOBS_STORE], 'readwrite');
+  tx.objectStore(ROWS_STORE).put(meta, id);
+  if (blob) tx.objectStore(BLOBS_STORE).put(blob, id);
+  return new Promise((res, rej) => {
+    tx.oncomplete = () => res();
+    tx.onerror = () => rej(tx.error);
+  });
+}
+async function idbDeleteRow(id) {
+  const db = await _openIdb();
+  const tx = db.transaction([ROWS_STORE, BLOBS_STORE], 'readwrite');
+  tx.objectStore(ROWS_STORE).delete(id);
+  tx.objectStore(BLOBS_STORE).delete(id);
+  return new Promise((res, rej) => { tx.oncomplete = () => res(); tx.onerror = () => rej(tx.error); });
+}
+async function idbAllRows() {
+  const db = await _openIdb();
+  const tx = db.transaction(ROWS_STORE, 'readonly');
+  const store = tx.objectStore(ROWS_STORE);
+  const keys = await _idbReq(store.getAllKeys());
+  const vals = await _idbReq(store.getAll());
+  return keys.map((k, i) => ({ id: k, meta: vals[i] }));
+}
+async function idbGetBlob(id) {
+  const db = await _openIdb();
+  return _idbReq(db.transaction(BLOBS_STORE, 'readonly').objectStore(BLOBS_STORE).get(id));
+}
+async function idbClear() {
+  const db = await _openIdb();
+  const tx = db.transaction([ROWS_STORE, BLOBS_STORE], 'readwrite');
+  tx.objectStore(ROWS_STORE).clear();
+  tx.objectStore(BLOBS_STORE).clear();
+  return new Promise((res, rej) => { tx.oncomplete = () => res(); tx.onerror = () => rej(tx.error); });
+}
+
+// Persist a row's current state. Called after any field change.
+async function persistRow(row) {
+  if (!row.dataset.id) return;
+  const dstSel = row.querySelector('[data-dst-ext]');
+  const meta = {
+    filename: row._file ? row._file.name : (row.querySelector('[data-filename]').textContent || ''),
+    srcExt:   row._srcExt,
+    dstExt:   dstSel ? dstSel.value : '',
+    jobId:    row._jobId || null,
+    hasPassword: !!row._password,
+    statusKind: (row.querySelector('[data-status]')?.className || '').replace('status-glyph ', '').trim() || 'idle',
+  };
+  try {
+    await idbPutRow(row.dataset.id, meta, row._file && !meta.jobId ? row._file : null);
+  } catch (e) { /* IDB errors shouldn't break the UX */ }
+}
+function _uuid() {
+  if (crypto && crypto.randomUUID) return crypto.randomUUID();
+  return 'r-' + Math.random().toString(36).slice(2) + Date.now().toString(36);
+}
 
 const dz = document.getElementById('dropzone');
 const fileInput = document.getElementById('file-input');
@@ -66,29 +158,64 @@ function refreshTargets(row) {
   if (targets.includes(current)) select.value = current;
 }
 
-function addFile(file) {
+function addFile(file, opts) {
+  // opts.id  → reuse an existing IDB key (used during restoreFromIdb)
+  // opts.dstExt → seed dst-ext dropdown to the saved selection
+  // opts.jobId → row was already submitted before we navigated away
+  opts = opts || {};
   const row = tpl.content.firstElementChild.cloneNode(true);
+  row.dataset.id = opts.id || _uuid();
   row._file = file;
-  row._srcExt = '.' + file.name.split('.').pop().toLowerCase();
+  row._srcExt = '.' + (file ? file.name.split('.').pop() : (opts.srcExt || 'bin').replace(/^\./, '')).toLowerCase();
   row._password = '';
-  row._jobId = null;
+  row._jobId = opts.jobId || null;
 
-  row.querySelector('[data-filename]').textContent = file.name;
+  row.querySelector('[data-filename]').textContent = file ? file.name : (opts.filename || '(file lost)');
   row.querySelector('[data-src-ext]').textContent = row._srcExt;
 
   refreshTargets(row);
+  if (opts.dstExt) {
+    const sel = row.querySelector('[data-dst-ext]');
+    if (sel && [...sel.options].some(o => o.value === opts.dstExt)) sel.value = opts.dstExt;
+    if (sel) sel.addEventListener('change', () => persistRow(row));
+  } else {
+    const sel = row.querySelector('[data-dst-ext]');
+    if (sel) sel.addEventListener('change', () => persistRow(row));
+  }
   bindRow(row);
-  // If Stone isn't on at row-create time, hide the lock icon up front
-  // — applyStoneClass keeps it in sync from then on.
   const lock = row.querySelector('[data-lock]');
   if (lock) lock.hidden = !stoneToggle.checked;
   playlist.appendChild(row);
   dz.classList.add('has-files');
+
+  // If we're rehydrating a row whose conversion was already submitted,
+  // resync with the server: fetch current job state, then either flip
+  // straight to Done (with the Re-transmute / Download buttons) or
+  // reopen the websocket for live progress.
+  if (opts.jobId) {
+    api.get(`/jobs/${opts.jobId}`).then(job => {
+      if (!job) return;
+      if (job.status === 'done') {
+        flipToDone(row, job.id);
+      } else if (job.status === 'failed') {
+        setStatus(row, 'failed', job.error || 'Failed');
+      } else if (job.status === 'cancelled') {
+        setStatus(row, 'cancelled', 'Cancelled');
+      } else {
+        // queued / running — pick up live updates from where the
+        // last process left off.
+        openWebsocket(row, job.id);
+      }
+    }).catch(() => {});
+  }
+
+  persistRow(row);
 }
 
 function bindRow(row) {
   row.querySelector('[data-rm]').addEventListener('click', () => {
     if (row._jobId) api.del('/jobs/' + row._jobId).catch(() => {});
+    if (row.dataset.id) idbDeleteRow(row.dataset.id).catch(() => {});
     row.remove();
     if (!playlist.children.length) dz.classList.remove('has-files');
   });
@@ -138,16 +265,19 @@ async function convertRow(row) {
   try {
     const job = await api.post('/convert', fd, true);
     row._jobId = job.id;
+    persistRow(row);
     openWebsocket(row, job.id);
   } catch (ex) {
     setStatus(row, 'failed', ex.detail || 'Submit failed');
     row.querySelector('[data-go]').disabled = false;
+    persistRow(row);
   }
 }
 
 function flipToDone(row, jobId) {
   setStatus(row, 'done', 'Done');
   row.querySelector('[data-bar]').style.width = '100%';
+
   const go = row.querySelector('[data-go]');
   go.textContent = 'Download';
   go.disabled = false;
@@ -157,6 +287,37 @@ function flipToDone(row, jobId) {
   const fresh = go.cloneNode(true);
   fresh.addEventListener('click', () => { location.href = `/api/v1/jobs/${jobId}/result`; });
   go.parentNode.replaceChild(fresh, go);
+
+  // Re-transmute: convert this row again with whatever the current
+  // dst-ext / Stone toggle / password are. Useful for re-doing a row
+  // after tweaking output format or password without starting over
+  // (or for quickly producing several different targets from the same
+  // source file). Only added once — guard against double-flip.
+  if (!row.querySelector('[data-retransmute]')) {
+    const retransmute = document.createElement('button');
+    retransmute.className = 'btn btn-secondary row-retransmute';
+    retransmute.dataset.retransmute = '';
+    retransmute.title = 'Run this row through transmutation again with the current settings';
+    retransmute.textContent = 'Re-transmute';
+    retransmute.addEventListener('click', () => {
+      // Reset progress + clear the prior jobId so the new job gets its
+      // own websocket and download link.
+      row._jobId = null;
+      row.querySelector('[data-bar]').style.width = '0%';
+      // Restore the Transmute button (reverse of flipToDone).
+      const dl = row.querySelector('[data-go]');
+      const reset = dl.cloneNode(true);
+      reset.textContent = 'Transmute';
+      reset.disabled = false;
+      reset.addEventListener('click', () => convertRow(row));
+      dl.parentNode.replaceChild(reset, dl);
+      // Drop the Re-transmute button itself; flipToDone will add it
+      // back after the new job finishes.
+      retransmute.remove();
+      convertRow(row);
+    });
+    fresh.parentNode.insertBefore(retransmute, fresh.nextSibling);
+  }
 }
 
 function openWebsocket(row, jobId) {
@@ -227,7 +388,18 @@ fileInput.addEventListener('change', () => {
   fileInput.value = '';
 });
 
-stoneToggle.addEventListener('change', applyStoneClass);
+// Toggle persistence — sticky across full sessions so a user who
+// always works in Stone mode doesn't have to re-flip on every visit.
+const TOGGLE_KEY_STONE = 'vitriol_stone_on';
+const TOGGLE_KEY_VERIFY = 'vitriol_verify_on';
+
+stoneToggle.addEventListener('change', () => {
+  localStorage.setItem(TOGGLE_KEY_STONE, stoneToggle.checked ? '1' : '0');
+  applyStoneClass();
+});
+verifyToggle.addEventListener('change', () => {
+  localStorage.setItem(TOGGLE_KEY_VERIFY, verifyToggle.checked ? '1' : '0');
+});
 
 document.getElementById('convert-all').addEventListener('click', () => {
   for (const row of playlist.children) convertRow(row);
@@ -291,16 +463,58 @@ document.getElementById('download-selected').addEventListener('click', async () 
 });
 document.getElementById('remove-selected').addEventListener('click', () => {
   for (const row of [...playlist.children]) {
-    if (row.querySelector('.row-check').checked) row.remove();
+    if (row.querySelector('.row-check').checked) {
+      if (row.dataset.id) idbDeleteRow(row.dataset.id).catch(() => {});
+      row.remove();
+    }
   }
   if (!playlist.children.length) dz.classList.remove('has-files');
 });
 document.getElementById('clear-all').addEventListener('click', () => {
   playlist.innerHTML = '';
   dz.classList.remove('has-files');
+  idbClear().catch(() => {});
 });
 
-loadFormats();
+// Restore toggle state from localStorage before we touch the playlist
+// — ensures Stone/Verify reflect prior state by the time rows render
+// (so lock-icon visibility is correct on rehydrated rows).
+if (localStorage.getItem(TOGGLE_KEY_STONE) === '1') stoneToggle.checked = true;
+if (localStorage.getItem(TOGGLE_KEY_VERIFY) === '1') verifyToggle.checked = true;
+applyStoneClass();
+
+// Rehydrate any persisted rows from IndexedDB. Order:
+//   1. Wait for /formats so the dst-ext dropdowns can populate.
+//   2. Walk the rows store; for each, fetch the saved File blob (if
+//      one was stored) and reconstruct the row. addFile handles WS
+//      reconnection for jobIds that survived the navigation.
+async function restoreFromIdb() {
+  await loadFormats();
+  let entries = [];
+  try { entries = await idbAllRows(); } catch (e) { return; }
+  for (const { id, meta } of entries) {
+    if (!meta) continue;
+    let blob = null;
+    try { blob = await idbGetBlob(id); } catch (_) { blob = null; }
+    // No blob AND no jobId means the row is unrecoverable — drop it.
+    if (!blob && !meta.jobId) {
+      idbDeleteRow(id).catch(() => {});
+      continue;
+    }
+    const file = blob
+      ? (blob instanceof File ? blob : new File([blob], meta.filename || 'file'))
+      : null;
+    addFile(file, {
+      id,
+      filename: meta.filename,
+      srcExt: meta.srcExt,
+      dstExt: meta.dstExt,
+      jobId: meta.jobId || null,
+    });
+  }
+}
+
+restoreFromIdb();
 
 // ---------------- Replay queue from /files page ------------------------
 //

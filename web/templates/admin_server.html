@@ -337,10 +337,76 @@ echo &quot;$RESPONSE&quot; | jq -r .certKey > &quot;$VITRIOL_CERT_DIR/privkey.pe
 
     <div class="form-actions">
       <button type="submit" class="btn btn-primary">Save settings</button>
+      <span style="flex: 1;"></span>
+      <button type="button" id="export-btn" class="btn btn-secondary">Export…</button>
+      <button type="button" id="import-btn" class="btn btn-secondary">Import…</button>
       <p id="server-msg" class="ok" hidden></p>
     </div>
   </form>
 </section>
+
+<!-- Export options dialog -->
+<dialog id="export-dialog" class="manage-dialog">
+  <form id="export-form" class="stack">
+    <header class="manage-head"><h2 class="display small">Export settings</h2></header>
+    <p class="muted small">
+      Bundles your server config (limits, SMTP, OAuth, OIDC providers, custom roles, retention,
+      cert-pull config, etc.) into a single JSON file. Optionally encrypt with a password —
+      <strong>without</strong> a password the file contains your secrets in plaintext, so treat
+      it like a private key.
+    </p>
+    <label class="checkbox-row">
+      <input type="checkbox" id="export-encrypt" />
+      <span>Encrypt with a password (PBKDF2 + Fernet AES-128)</span>
+    </label>
+    <label id="export-password-row" hidden>
+      <span>Password</span>
+      <input type="password" id="export-password" autocomplete="new-password" minlength="8" />
+    </label>
+    <p id="export-msg" class="error small" hidden></p>
+    <footer class="dialog-actions">
+      <button type="button" class="btn btn-ghost" data-close>Cancel</button>
+      <button type="submit" class="btn btn-primary">Download</button>
+    </footer>
+  </form>
+</dialog>
+
+<!-- Import: file pick → optional password → confirm summary -->
+<dialog id="import-dialog" class="manage-dialog">
+  <form id="import-form" class="stack">
+    <header class="manage-head"><h2 class="display small" id="import-title">Import settings</h2></header>
+
+    <div id="import-step-pick" class="stack">
+      <p class="muted small">Select a settings file exported from this or another Vitriol install.</p>
+      <input type="file" id="import-file" accept=".json,application/json" />
+    </div>
+
+    <div id="import-step-password" class="stack" hidden>
+      <p class="muted small">This file is encrypted. Enter the password used at export time.</p>
+      <label>
+        <span>Password</span>
+        <input type="password" id="import-password" autocomplete="off" />
+      </label>
+    </div>
+
+    <div id="import-step-confirm" class="stack" hidden>
+      <p class="muted small">
+        Decryption + hash check OK. Applying these settings will <strong>overwrite</strong>
+        your current configuration (existing OIDC providers / custom roles with matching slugs
+        or names get replaced; others are left alone).
+      </p>
+      <table class="kv-table" id="import-summary">
+        <tbody></tbody>
+      </table>
+    </div>
+
+    <p id="import-msg" class="error small" hidden></p>
+    <footer class="dialog-actions">
+      <button type="button" class="btn btn-ghost" data-close>Cancel</button>
+      <button type="submit" id="import-submit" class="btn btn-primary">Continue</button>
+    </footer>
+  </form>
+</dialog>
 {% endblock %}
 {% block scripts %}
 <script src="/static/js/admin_server.js?v={{ v }}"></script>

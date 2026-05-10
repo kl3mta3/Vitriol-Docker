@@ -55,11 +55,22 @@ async function load() {
     sizeUnitEl.value = r.unit;
     updateBytesDisplay();
   }
-  // List fields stored as JSON.
-  try {
-    form.elements['disabled_input_formats'].value = JSON.parse(s.disabled_input_formats_json || '[]').join(',');
-    form.elements['disabled_output_formats'].value = JSON.parse(s.disabled_output_formats_json || '[]').join(',');
-  } catch (e) {}
+  // 3-tier disabled-formats grid — six JSON arrays, decoded into
+  // comma-separated strings shown in the matching tier inputs.
+  const tierMap = {
+    'global,input':  s.disabled_input_formats_json,
+    'global,output': s.disabled_output_formats_json,
+    'admin,input':   s.disabled_admin_input_formats_json,
+    'admin,output':  s.disabled_admin_output_formats_json,
+    'user,input':    s.disabled_user_input_formats_json,
+    'user,output':   s.disabled_user_output_formats_json,
+  };
+  document.querySelectorAll('#format-tiers-table input[data-tier]').forEach(el => {
+    const k = `${el.dataset.tier},${el.dataset.dir}`;
+    let arr = [];
+    try { arr = JSON.parse(tierMap[k] || '[]'); } catch (_) { arr = []; }
+    el.value = Array.isArray(arr) ? arr.join(',') : '';
+  });
 
   // Show the absolute OIDC redirect URI so admins can paste it into their IdP.
   const ru = document.getElementById('oidc-redirect-uri');
@@ -161,8 +172,24 @@ form.addEventListener('submit', async (e) => {
       data[el.name] = el.value;
     }
   }
-  if (data.disabled_input_formats !== undefined) data.disabled_input_formats = csv(data.disabled_input_formats || '');
-  if (data.disabled_output_formats !== undefined) data.disabled_output_formats = csv(data.disabled_output_formats || '');
+  // 3-tier format inputs (no `name` attr — read by data-tier/data-dir).
+  // Each tier×direction maps to its own API field.
+  const tierField = {
+    'global,input':  'disabled_input_formats',
+    'global,output': 'disabled_output_formats',
+    'admin,input':   'disabled_admin_input_formats',
+    'admin,output':  'disabled_admin_output_formats',
+    'user,input':    'disabled_user_input_formats',
+    'user,output':   'disabled_user_output_formats',
+  };
+  document.querySelectorAll('#format-tiers-table input[data-tier]').forEach(el => {
+    const apiField = tierField[`${el.dataset.tier},${el.dataset.dir}`];
+    if (!apiField) return;
+    data[apiField] = csv(el.value || '');
+  });
+  // Drop the old flat names if they snuck in via leftover form serialization.
+  delete data.disabled_input_formats_old;
+  delete data.disabled_output_formats_old;
   // Max file size — overwrite whatever the form serializer produced (which
   // is nothing, since the inputs have no `name`) with the computed bytes.
   const bytes = readableToBytes();
@@ -558,6 +585,250 @@ if (discordTestBtn) discordTestBtn.addEventListener('click', async () => {
   } finally {
     discordTestBtn.disabled = false;
     discordTestBtn.textContent = original;
+  }
+});
+
+// ============================================================
+// Export / Import settings
+// ============================================================
+//
+// Export: collect server config, optionally encrypt with a password,
+//         download as a JSON file. Encryption is server-side (Fernet
+//         keyed off PBKDF2 of the user's password).
+// Import: pick file → if encrypted, prompt for password → server
+//         validates + verifies hash → confirmation modal with summary
+//         → apply.
+
+const exportDialog = document.getElementById('export-dialog');
+const exportForm = document.getElementById('export-form');
+const exportEncryptToggle = document.getElementById('export-encrypt');
+const exportPasswordRow = document.getElementById('export-password-row');
+const exportMsg = document.getElementById('export-msg');
+
+const importDialog = document.getElementById('import-dialog');
+const importForm = document.getElementById('import-form');
+const importFile = document.getElementById('import-file');
+const importPasswordEl = document.getElementById('import-password');
+const importMsg = document.getElementById('import-msg');
+const importSubmit = document.getElementById('import-submit');
+
+const importStepPick = document.getElementById('import-step-pick');
+const importStepPassword = document.getElementById('import-step-password');
+const importStepConfirm = document.getElementById('import-step-confirm');
+
+let _importEnvelope = null;
+let _importPassword = null;
+let _importStep = 'pick';   // 'pick' | 'password' | 'confirm'
+
+// ---- Export ----------------------------------------------------------
+
+if (document.getElementById('export-btn')) {
+  document.getElementById('export-btn').addEventListener('click', () => {
+    exportEncryptToggle.checked = false;
+    document.getElementById('export-password').value = '';
+    exportPasswordRow.hidden = true;
+    exportMsg.hidden = true;
+    exportDialog.showModal();
+  });
+}
+
+if (exportEncryptToggle) {
+  exportEncryptToggle.addEventListener('change', () => {
+    exportPasswordRow.hidden = !exportEncryptToggle.checked;
+  });
+}
+
+if (exportForm) exportForm.addEventListener('submit', async (e) => {
+  e.preventDefault();
+  const password = exportEncryptToggle.checked
+    ? document.getElementById('export-password').value
+    : '';
+  if (exportEncryptToggle.checked && password.length < 8) {
+    exportMsg.textContent = 'Password must be at least 8 characters.';
+    exportMsg.hidden = false;
+    return;
+  }
+  exportMsg.hidden = true;
+  try {
+    const envelope = await api.post('/server/export', { password: password || null });
+    // Build a blob and trigger a download.
+    const stamp = new Date().toISOString().replace(/[:.]/g, '-').slice(0, 19);
+    const filename = `vitriol-settings-${stamp}.json`;
+    const blob = new Blob([JSON.stringify(envelope, null, 2)], { type: 'application/json' });
+    const url = URL.createObjectURL(blob);
+    const a = document.createElement('a');
+    a.href = url; a.download = filename;
+    document.body.appendChild(a); a.click(); a.remove();
+    URL.revokeObjectURL(url);
+    exportDialog.close();
+  } catch (ex) {
+    exportMsg.textContent = (ex && ex.detail) || 'Export failed.';
+    exportMsg.hidden = false;
+  }
+});
+
+// ---- Import ----------------------------------------------------------
+
+function _importStepShow(step) {
+  _importStep = step;
+  importStepPick.hidden = step !== 'pick';
+  importStepPassword.hidden = step !== 'password';
+  importStepConfirm.hidden = step !== 'confirm';
+  importMsg.hidden = true;
+  if (step === 'pick') {
+    importSubmit.textContent = 'Continue';
+    importSubmit.disabled = !importFile.files.length;
+  } else if (step === 'password') {
+    importSubmit.textContent = 'Decrypt';
+    importSubmit.disabled = false;
+    setTimeout(() => importPasswordEl.focus(), 50);
+  } else {
+    importSubmit.textContent = 'Apply settings';
+    importSubmit.disabled = false;
+  }
+}
+
+function _renderSummary(summary) {
+  const tbody = document.querySelector('#import-summary tbody');
+  tbody.innerHTML = '';
+  const rows = [
+    ['Public base URL', summary.public_base_url],
+    ['Allow signup', summary.allow_signup ? 'on' : 'off'],
+    ['SMTP host', summary.smtp_host],
+    ['SMTP from', summary.smtp_from],
+    ['Discord webhook', summary.discord_configured ? 'configured' : '—'],
+    ['Google OAuth', summary.google_configured ? 'configured' : '—'],
+    ['GitHub OAuth', summary.github_configured ? 'configured' : '—'],
+    ['OIDC providers', `${summary.oidc_provider_count}${summary.oidc_slugs.length ? ' (' + summary.oidc_slugs.join(', ') + (summary.oidc_provider_count > summary.oidc_slugs.length ? ', …' : '') + ')' : ''}`],
+    ['Custom roles', `${summary.custom_role_count}${summary.custom_role_names.length ? ' (' + summary.custom_role_names.join(', ') + (summary.custom_role_count > summary.custom_role_names.length ? ', …' : '') + ')' : ''}`],
+  ];
+  for (const [k, v] of rows) {
+    const tr = document.createElement('tr');
+    tr.innerHTML = `<th>${k}</th><td>${v == null ? '—' : v}</td>`;
+    tbody.appendChild(tr);
+  }
+}
+
+async function _validateImport() {
+  // POSTs envelope (+ password if we have one) with confirm=false to
+  // get a summary back. Server returns 401 with {needs_password: true}
+  // when the file is encrypted and we haven't supplied a password yet.
+  const body = { envelope: _importEnvelope, confirm: false };
+  if (_importPassword) body.password = _importPassword;
+  try {
+    const r = await api.post('/server/import', body);
+    return { ok: true, summary: r.summary };
+  } catch (ex) {
+    const detail = ex && ex.detail;
+    if (detail && typeof detail === 'object' && detail.needs_password) {
+      return { ok: false, needsPassword: true };
+    }
+    return { ok: false, error: typeof detail === 'string' ? detail : 'Could not read file.' };
+  }
+}
+
+if (document.getElementById('import-btn')) {
+  document.getElementById('import-btn').addEventListener('click', () => {
+    _importEnvelope = null;
+    _importPassword = null;
+    importFile.value = '';
+    importPasswordEl.value = '';
+    importMsg.hidden = true;
+    _importStepShow('pick');
+    importDialog.showModal();
+  });
+}
+
+if (importFile) {
+  importFile.addEventListener('change', () => {
+    importSubmit.disabled = !importFile.files.length;
+  });
+}
+
+if (importForm) importForm.addEventListener('submit', async (e) => {
+  e.preventDefault();
+  importMsg.hidden = true;
+
+  if (_importStep === 'pick') {
+    const f = importFile.files[0];
+    if (!f) return;
+    let parsed;
+    try {
+      parsed = JSON.parse(await f.text());
+    } catch (ex) {
+      importMsg.textContent = 'File is not valid JSON.';
+      importMsg.hidden = false;
+      return;
+    }
+    if (!parsed || parsed.format !== 'vitriol-settings-v1') {
+      importMsg.textContent = 'File doesn\'t look like a Vitriol settings export.';
+      importMsg.hidden = false;
+      return;
+    }
+    _importEnvelope = parsed;
+    importSubmit.disabled = true;
+    importSubmit.textContent = 'Reading…';
+    const res = await _validateImport();
+    importSubmit.disabled = false;
+    if (res.ok) {
+      _renderSummary(res.summary);
+      _importStepShow('confirm');
+    } else if (res.needsPassword) {
+      _importStepShow('password');
+    } else {
+      importMsg.textContent = res.error || 'Could not parse file.';
+      importMsg.hidden = false;
+      importSubmit.textContent = 'Continue';
+    }
+    return;
+  }
+
+  if (_importStep === 'password') {
+    const pw = importPasswordEl.value;
+    if (!pw) { importMsg.textContent = 'Enter a password.'; importMsg.hidden = false; return; }
+    _importPassword = pw;
+    importSubmit.disabled = true;
+    importSubmit.textContent = 'Checking…';
+    const res = await _validateImport();
+    importSubmit.disabled = false;
+    if (res.ok) {
+      _renderSummary(res.summary);
+      _importStepShow('confirm');
+    } else if (res.needsPassword) {
+      // Shouldn't happen — we just sent a password.
+      importMsg.textContent = 'Password rejected.';
+      importMsg.hidden = false;
+      importSubmit.textContent = 'Decrypt';
+    } else {
+      importMsg.textContent = res.error || 'Wrong password or corrupted file.';
+      importMsg.hidden = false;
+      importSubmit.textContent = 'Decrypt';
+    }
+    return;
+  }
+
+  if (_importStep === 'confirm') {
+    importSubmit.disabled = true;
+    importSubmit.textContent = 'Applying…';
+    const body = { envelope: _importEnvelope, confirm: true };
+    if (_importPassword) body.password = _importPassword;
+    try {
+      const r = await api.post('/server/import', body);
+      importDialog.close();
+      // Re-load form so the freshly-imported values are reflected.
+      await load();
+      const m = document.getElementById('server-msg');
+      if (m) {
+        m.textContent = r.message || 'Settings imported.';
+        m.className = 'ok';
+        m.hidden = false;
+      }
+    } catch (ex) {
+      importMsg.textContent = (ex && ex.detail) || 'Apply failed.';
+      importMsg.hidden = false;
+      importSubmit.disabled = false;
+      importSubmit.textContent = 'Apply settings';
+    }
   }
 });
 

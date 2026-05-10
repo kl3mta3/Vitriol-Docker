@@ -11,6 +11,7 @@ from typing import Optional
 
 import httpx
 from fastapi import APIRouter, BackgroundTasks, Depends, HTTPException
+from pydantic import BaseModel
 from sqlalchemy.orm import Session
 
 from ..auth.crypto import decrypt, encrypt
@@ -251,6 +252,69 @@ def rotate_secret_key(
     import os, signal
     background.add_task(lambda: os.kill(os.getpid(), signal.SIGTERM))
     return MessageResponse(message="Secret key rotated. Server restarting — sign in again in a few seconds.")
+
+
+class _ExportRequest(BaseModel):
+    password: Optional[str] = None
+
+
+class _ImportRequest(BaseModel):
+    envelope: dict
+    password: Optional[str] = None
+    confirm: bool = False
+
+
+@router.post("/export")
+def export_settings(
+    req: _ExportRequest,
+    actor: User = Depends(require_super_admin),
+    db: Session = Depends(get_db),
+):
+    """Bundle all server-side configuration into a portable JSON file.
+
+    With a password, the body is encrypted with PBKDF2-derived Fernet
+    so the resulting file is safe to email / drop in a backup. Without,
+    secrets are emitted in plaintext (fine for an internal admin who's
+    immediately moving it to another vault).
+    """
+    from ..services import settings_export as _se
+    snapshot = _se.collect(db)
+    envelope = _se.make_envelope(snapshot, req.password or None)
+    audit.log(db, actor.id, "settings_export", metadata={"encrypted": bool(req.password)})
+    return envelope
+
+
+@router.post("/import")
+def import_settings(
+    req: _ImportRequest,
+    actor: User = Depends(require_super_admin),
+    db: Session = Depends(get_db),
+):
+    """Two-step import: with `confirm=false` we parse + validate +
+    decrypt + verify hash, then return a small summary so the UI can
+    show a confirmation modal. With `confirm=true` we apply.
+
+    On password mismatch or hash mismatch we return 400 — the messages
+    are intentionally vague so a wrong password can't be distinguished
+    from a corrupted file (no oracle).
+    """
+    from ..services import settings_export as _se
+    try:
+        plaintext = _se.parse_envelope(req.envelope, req.password)
+    except _se.NeedsPasswordError:
+        # Specific 401-shaped response so the UI can switch to "ask for
+        # password" without showing a scary error.
+        raise HTTPException(status_code=401, detail={"needs_password": True})
+    except ValueError as e:
+        raise HTTPException(status_code=400, detail=str(e))
+
+    summary = _se.summarize(plaintext)
+    if not req.confirm:
+        return {"summary": summary, "ready": True}
+
+    applied = _se.apply(db, plaintext)
+    audit.log(db, actor.id, "settings_import", metadata=applied)
+    return {"summary": summary, "applied": applied, "message": "Settings imported."}
 
 
 @router.post("/restart", response_model=MessageResponse)

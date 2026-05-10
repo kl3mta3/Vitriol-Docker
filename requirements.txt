@@ -16,6 +16,9 @@ zstandard>=0.22
 pyarrow>=15.0
 tomli-w>=1.0
 PyYAML>=6.0
+# Used by the Mandelbrot encoder + WAV/AIFF/FLAC encoder paths in
+# masquerade.py (Stone PNG↔WAV, image↔audio crossings).
+numpy>=1.26
 
 # Web app
 fastapi>=0.110
