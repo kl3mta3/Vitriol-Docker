@@ -317,6 +317,23 @@ echo &quot;$RESPONSE&quot; | jq -r .certKey > &quot;$VITRIOL_CERT_DIR/privkey.pe
   </form>
 </section>
 
+<!-- OIDC provider catalog — Sonarr-style picker shown BEFORE the bare
+     add/edit form. Each card pre-fills the form with the chosen
+     provider's known issuer template, scopes, and display name so the
+     operator only has to paste the client_id / client_secret. The
+     "Custom OIDC" card opens the form blank, same as the old behaviour. -->
+<dialog id="oidc-catalog-dialog" class="manage-dialog manage-dialog-wide">
+  <header class="manage-head">
+    <h2 class="display small">Choose a provider</h2>
+    <button type="button" class="dialog-x" data-close aria-label="Close">×</button>
+  </header>
+  <p class="muted small" style="margin: 0 0 12px 0;">
+    Pick a template to pre-fill issuer URL + scopes — or use Custom OIDC for anything
+    that isn't on the list.
+  </p>
+  <div id="oidc-catalog-grid" class="provider-grid"></div>
+</dialog>
+
 <!-- OIDC provider add/edit dialog (outside the server-form to avoid
      nested-form parsing issues) -->
 <dialog id="oidc-form-dialog" class="manage-dialog">

@@ -554,6 +554,37 @@ dialog {
 dialog::backdrop { background: rgba(0,0,0,0.6); backdrop-filter: blur(4px); }
 .dialog-actions { display: flex; gap: 8px; justify-content: flex-end; margin-top: 12px; }
 
+/* Wider variant for provider catalogs that show a card grid. */
+.manage-dialog-wide { max-width: 720px; width: 90vw; }
+.dialog-x {
+  background: transparent; border: none; color: var(--ink-muted);
+  font-size: 24px; cursor: pointer; padding: 0 6px; line-height: 1;
+}
+.dialog-x:hover { color: var(--ink); }
+
+/* Sonarr-style provider picker grid — used by OIDC catalog and
+   eventually by notification-channel catalog. Each card is a button
+   that pre-fills the matching add-form. */
+.provider-grid {
+  display: grid; gap: 12px;
+  grid-template-columns: repeat(auto-fill, minmax(160px, 1fr));
+  margin-top: 8px;
+}
+.provider-card {
+  display: flex; flex-direction: column; align-items: flex-start; gap: 6px;
+  padding: 14px; border: 1px solid var(--border-2);
+  border-radius: var(--radius); background: var(--surface);
+  color: var(--ink); cursor: pointer; text-align: left;
+  font-family: var(--font-body); transition: border-color 0.15s, background 0.15s;
+}
+.provider-card:hover { border-color: var(--purple); background: var(--surface-2); }
+.provider-card .pc-name {
+  font-family: var(--font-display); letter-spacing: 1px;
+  text-transform: uppercase; font-size: 13px; color: var(--ink);
+}
+.provider-card .pc-desc { font-size: 11px; color: var(--ink-muted); line-height: 1.4; }
+.provider-card.pc-custom { border-style: dashed; }
+
 @media (max-width: 720px) {
   .nav-links { display: none; }
   .grid-2 { grid-template-columns: 1fr; }

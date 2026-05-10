@@ -505,7 +505,198 @@ if (oidcForm) {
   oidcForm.display_name.addEventListener('input', updateOidcRedirectPreview);
 }
 
-if (oidcAddBtn) oidcAddBtn.addEventListener('click', () => openOidcForm(null));
+// ---- OIDC provider template catalog -------------------------------------
+//
+// Sonarr-style picker: clicking "+ Add OIDC provider" first opens a card
+// grid of well-known IdPs. Picking one pre-fills the bare add/edit form
+// with that provider's known issuer URL pattern, default scopes, and a
+// reasonable display name. Picking "Custom OIDC" opens the form blank
+// (the historical behaviour). Each entry's `docsUrl` opens in a new tab
+// from the provider card's "?" link, so an operator who's never used a
+// given IdP has the official setup docs one click away.
+//
+// Issuer values listed here use placeholders (<your-domain>, <region>,
+// <tenant>, <pool-id>, etc.) so the operator knows what to substitute.
+// They aren't validated client-side beyond "looks URL-shaped" — Authlib
+// hits the .well-known/openid-configuration endpoint at registration
+// time and surfaces real errors.
+const OIDC_TEMPLATES = [
+  {
+    id: 'authentik',
+    name: 'Authentik',
+    description: 'Self-hosted, open-source IdP.',
+    displayName: 'Authentik',
+    slug: 'authentik',
+    issuerTemplate: 'https://auth.your-domain.com/application/o/<app-slug>/',
+    scopes: 'openid email profile',
+    docsUrl: 'https://goauthentik.io/docs/providers/oauth2/',
+  },
+  {
+    id: 'keycloak',
+    name: 'Keycloak',
+    description: 'Self-hosted by Red Hat / open-source.',
+    displayName: 'Keycloak',
+    slug: 'keycloak',
+    issuerTemplate: 'https://keycloak.your-domain.com/realms/<realm-name>',
+    scopes: 'openid email profile',
+    docsUrl: 'https://www.keycloak.org/docs/latest/server_admin/index.html#con-oidc_server_administration_guide',
+  },
+  {
+    id: 'auth0',
+    name: 'Auth0',
+    description: 'Hosted IdP (an Okta company).',
+    displayName: 'Auth0',
+    slug: 'auth0',
+    issuerTemplate: 'https://<your-tenant>.us.auth0.com/',
+    scopes: 'openid email profile',
+    docsUrl: 'https://auth0.com/docs/get-started/applications/application-settings',
+  },
+  {
+    id: 'okta',
+    name: 'Okta',
+    description: 'Enterprise IdP. Use OIE Custom Authorization Server.',
+    displayName: 'Okta',
+    slug: 'okta',
+    issuerTemplate: 'https://<your-org>.okta.com/oauth2/default',
+    scopes: 'openid email profile',
+    docsUrl: 'https://developer.okta.com/docs/concepts/oauth-openid/',
+  },
+  {
+    id: 'entra',
+    name: 'Microsoft Entra ID',
+    description: 'Azure AD. Single- or multi-tenant.',
+    displayName: 'Microsoft',
+    slug: 'microsoft',
+    issuerTemplate: 'https://login.microsoftonline.com/<tenant-id>/v2.0',
+    scopes: 'openid email profile',
+    docsUrl: 'https://learn.microsoft.com/en-us/entra/identity-platform/v2-protocols-oidc',
+  },
+  {
+    id: 'google',
+    name: 'Google Identity',
+    description: 'Cloud Identity / Workspace OIDC. (Consumer Google login is a separate built-in.)',
+    displayName: 'Google Identity',
+    slug: 'google-identity',
+    issuerTemplate: 'https://accounts.google.com',
+    scopes: 'openid email profile',
+    docsUrl: 'https://developers.google.com/identity/openid-connect/openid-connect',
+  },
+  {
+    id: 'gitlab',
+    name: 'GitLab',
+    description: 'GitLab.com or self-hosted.',
+    displayName: 'GitLab',
+    slug: 'gitlab',
+    issuerTemplate: 'https://gitlab.com',
+    scopes: 'openid email profile',
+    docsUrl: 'https://docs.gitlab.com/integration/openid_connect_provider/',
+  },
+  {
+    id: 'cognito',
+    name: 'Amazon Cognito',
+    description: 'AWS user pools.',
+    displayName: 'Cognito',
+    slug: 'cognito',
+    issuerTemplate: 'https://cognito-idp.<region>.amazonaws.com/<userpool-id>',
+    scopes: 'openid email profile',
+    docsUrl: 'https://docs.aws.amazon.com/cognito/latest/developerguide/cognito-userpools-server-contract-reference.html',
+  },
+  {
+    id: 'apple',
+    name: 'Sign in with Apple',
+    description: 'Apple ID. Requires a paid Apple Developer membership.',
+    displayName: 'Apple',
+    slug: 'apple',
+    issuerTemplate: 'https://appleid.apple.com',
+    scopes: 'openid email name',
+    docsUrl: 'https://developer.apple.com/documentation/sign_in_with_apple/sign_in_with_apple_rest_api',
+  },
+  {
+    id: 'zitadel',
+    name: 'ZITADEL',
+    description: 'Cloud-native open-source IdP.',
+    displayName: 'ZITADEL',
+    slug: 'zitadel',
+    issuerTemplate: 'https://<your-instance>.zitadel.cloud',
+    scopes: 'openid email profile',
+    docsUrl: 'https://zitadel.com/docs/guides/integrate/login/oidc/login-users',
+  },
+  {
+    id: 'salesforce',
+    name: 'Salesforce',
+    description: 'Salesforce as an IdP via Connected App.',
+    displayName: 'Salesforce',
+    slug: 'salesforce',
+    issuerTemplate: 'https://login.salesforce.com',
+    scopes: 'openid email profile',
+    docsUrl: 'https://help.salesforce.com/s/articleView?id=sf.sso_provider_openid_connect.htm',
+  },
+];
+
+const oidcCatalogDialog = document.getElementById('oidc-catalog-dialog');
+const oidcCatalogGrid = document.getElementById('oidc-catalog-grid');
+
+function renderOidcCatalog() {
+  if (!oidcCatalogGrid) return;
+  oidcCatalogGrid.innerHTML = '';
+  for (const tpl of OIDC_TEMPLATES) {
+    const card = document.createElement('button');
+    card.type = 'button';
+    card.className = 'provider-card';
+    card.innerHTML = `
+      <span class="pc-name">${escapeHtmlSimple(tpl.name)}</span>
+      <span class="pc-desc">${escapeHtmlSimple(tpl.description)}</span>
+    `;
+    card.addEventListener('click', () => {
+      oidcCatalogDialog.close();
+      openOidcFormFromTemplate(tpl);
+    });
+    oidcCatalogGrid.appendChild(card);
+  }
+  // Custom OIDC card — opens the form blank, same as the old Add button.
+  const custom = document.createElement('button');
+  custom.type = 'button';
+  custom.className = 'provider-card pc-custom';
+  custom.innerHTML = `
+    <span class="pc-name">Custom OIDC</span>
+    <span class="pc-desc">Anything not on this list — paste your own issuer URL.</span>
+  `;
+  custom.addEventListener('click', () => {
+    oidcCatalogDialog.close();
+    openOidcForm(null);
+  });
+  oidcCatalogGrid.appendChild(custom);
+}
+
+function openOidcFormFromTemplate(tpl) {
+  // Pre-fill the existing add form with template values. We pass a
+  // pseudo-provider object that isn't yet persisted (no id) so the form
+  // treats this as a "create" — the only difference is the fields aren't
+  // empty.
+  oidcForm.id.value = '';
+  oidcForm.display_name.value = tpl.displayName;
+  oidcForm.slug.value = tpl.slug;
+  oidcForm.issuer.value = tpl.issuerTemplate;
+  oidcForm.scopes.value = tpl.scopes;
+  oidcForm.client_id.value = '';
+  oidcForm.client_secret.value = '';
+  oidcForm.client_secret.placeholder = 'required for new providers';
+  oidcForm.enabled.checked = true;
+  document.getElementById('oidc-form-title').textContent = `Add ${tpl.name}`;
+  document.getElementById('oidc-form-delete').hidden = true;
+  document.getElementById('oidc-form-msg').hidden = true;
+  updateOidcRedirectPreview();
+  oidcDialog.showModal();
+}
+
+if (oidcAddBtn) oidcAddBtn.addEventListener('click', () => {
+  if (oidcCatalogDialog) {
+    renderOidcCatalog();
+    oidcCatalogDialog.showModal();
+  } else {
+    openOidcForm(null);
+  }
+});
 
 // Generic Cancel/Close handler for any dialog button marked data-close —
 // wires up the OIDC modal, export-dialog, import-dialog, etc. so they all
