@@ -32,6 +32,37 @@ def super_admin_exists(db: Session) -> bool:
     return db.query(User).filter(User.role == Role.super_admin).count() > 0
 
 
+def migrate_legacy_discord(db: Session) -> None:
+    """One-time copy of ServerSettings.discord_webhook_url into a
+    notification_channels row.
+
+    Triggers when:
+      - the new table is empty (first boot after the multi-channel change)
+      - AND ServerSettings.discord_webhook_url has a non-empty value
+
+    The legacy column itself is left untouched so settings export/import
+    files from older releases keep round-tripping; ``services.notifications``
+    no longer reads it after this migration runs.
+    """
+    from ..models import NotificationChannel, NotificationKind
+    from ..auth.crypto import encrypt
+    if db.query(NotificationChannel).count() > 0:
+        return
+    s: Optional[ServerSettings] = db.query(ServerSettings).get(1)
+    if s is None or not s.discord_webhook_url:
+        return
+    row = NotificationChannel(
+        kind=NotificationKind.discord,
+        name="Discord (migrated)",
+        enabled=True,
+        config_json="{}",
+        secret_enc=encrypt(s.discord_webhook_url),
+    )
+    db.add(row)
+    db.commit()
+    _log.info("Migrated legacy discord_webhook_url into notification_channels.")
+
+
 def migrate_legacy_oidc(db: Session) -> None:
     """One-time copy of the deprecated single-OIDC fields on
     ServerSettings into a row in the new oidc_providers table.

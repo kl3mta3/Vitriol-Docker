@@ -122,6 +122,7 @@ async def request_access(user: User = Depends(get_current_user), db: Session = D
         .all()
     )
     await email_svc.send_pending_approval_notification(db, user, [a.email for a in admins if a.email])
-    await discord_svc.notify(db, f":eye: Viewer **{user.username}** requested access upgrade.")
+    from ..services.notifications import notify_all
+    await notify_all(db, f":eye: Viewer **{user.username}** requested access upgrade.")
     audit.log(db, user.id, "request_access", target_user_id=user.id)
     return MessageResponse(message="Request submitted.")

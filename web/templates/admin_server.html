@@ -121,11 +121,21 @@
       </div>
     </details>
 
-    <details name="server-settings"><summary>Discord webhook <span id="discord-status-pill" class="status-pill"></span></summary>
-      <label class="full"><span>Webhook URL</span><input name="discord_webhook_url" /></label>
-      <div class="smtp-test">
-        <button type="button" id="discord-test-btn" class="btn btn-secondary">Send test message</button>
-        <p id="discord-test-msg" class="ok" hidden></p>
+    <details name="server-settings"><summary>Notification webhooks <span id="notif-status-pill" class="status-pill"></span></summary>
+      <p class="muted small">
+        Add as many channels as you want — every enabled channel receives
+        a copy of every admin notification (new pending user, access
+        request, etc.). Discord, Slack, ntfy, Gotify, Telegram, generic
+        webhook, bash script, and Bluesky are supported.
+      </p>
+      <table class="oidc-table" id="notif-table">
+        <thead>
+          <tr><th>Name</th><th>Kind</th><th>Enabled</th><th>Last test</th><th></th></tr>
+        </thead>
+        <tbody id="notif-tbody"></tbody>
+      </table>
+      <div style="margin-top: 8px;">
+        <button type="button" id="notif-add-btn" class="btn btn-secondary">+ Add channel</button>
       </div>
     </details>
 
@@ -371,6 +381,126 @@ echo &quot;$RESPONSE&quot; | jq -r .certKey > &quot;$VITRIOL_CERT_DIR/privkey.pe
       <button type="submit" class="btn btn-primary">Save</button>
     </footer>
     <p id="oidc-form-msg" class="ok small" hidden></p>
+  </form>
+</dialog>
+
+<!-- Notification channel catalog — same Sonarr-style picker pattern as
+     OIDC. Click "+ Add channel" → grid of cards → pick a kind → opens
+     the per-kind form below pre-populated with the right field set. -->
+<dialog id="notif-catalog-dialog" class="manage-dialog manage-dialog-wide">
+  <header class="manage-head">
+    <h2 class="display small">Choose a channel kind</h2>
+    <button type="button" class="dialog-x" data-close aria-label="Close">×</button>
+  </header>
+  <p class="muted small" style="margin: 0 0 12px 0;">
+    Each channel is independent — Discord, Slack, ntfy, Gotify, Telegram,
+    generic HTTP webhook, bash script, or Bluesky. You can have as many
+    of each as you want.
+  </p>
+  <div id="notif-catalog-grid" class="provider-grid"></div>
+</dialog>
+
+<!-- Per-kind notification add/edit form. The visible fields are toggled
+     by JS based on the selected kind so the operator only sees inputs
+     that matter for the chosen channel type. -->
+<dialog id="notif-form-dialog" class="manage-dialog">
+  <form id="notif-form">
+    <header class="manage-head">
+      <h2 class="display small" id="notif-form-title">Add channel</h2>
+    </header>
+    <input type="hidden" name="id" />
+    <input type="hidden" name="kind" />
+
+    <div class="grid-2">
+      <label><span>Channel name</span><input name="name" required placeholder="e.g. Ops Discord" /></label>
+      <label class="checkbox-row"><input type="checkbox" name="enabled" checked /> <span>Enabled</span></label>
+    </div>
+
+    <!-- Per-kind field groups. Each group is hidden by default and shown
+         when its kind matches the form's `kind` hidden input. -->
+    <div data-kind-fields="discord" hidden>
+      <p class="muted small">Discord channel webhook URL. From your channel settings → Integrations → Webhooks.</p>
+      <label class="full"><span>Webhook URL</span><input name="cfg_discord_url" type="password" placeholder="https://discord.com/api/webhooks/..." /></label>
+    </div>
+
+    <div data-kind-fields="slack" hidden>
+      <p class="muted small">Slack incoming webhook URL. From your Slack app → Incoming Webhooks.</p>
+      <label class="full"><span>Webhook URL</span><input name="cfg_slack_url" type="password" placeholder="https://hooks.slack.com/services/..." /></label>
+    </div>
+
+    <div data-kind-fields="ntfy" hidden>
+      <p class="muted small">Public ntfy.sh or self-hosted server. Topic is public unless an auth method is set.</p>
+      <div class="grid-2">
+        <label><span>Server URL</span><input name="cfg_ntfy_server" placeholder="https://ntfy.sh" /></label>
+        <label><span>Topic</span><input name="cfg_ntfy_topic" placeholder="vitriol-alerts" /></label>
+        <label><span>Auth</span>
+          <select name="cfg_ntfy_auth_kind">
+            <option value="none">None (public topic)</option>
+            <option value="bearer">Bearer token</option>
+            <option value="basic">Basic auth (user:pass)</option>
+          </select>
+        </label>
+        <label><span>Token / user:pass</span><input name="cfg_ntfy_secret" type="password" placeholder="(unchanged when editing)" /></label>
+      </div>
+    </div>
+
+    <div data-kind-fields="gotify" hidden>
+      <p class="muted small">Self-hosted Gotify server + per-app token (Apps tab in the Gotify UI).</p>
+      <div class="grid-2">
+        <label><span>Server URL</span><input name="cfg_gotify_server" placeholder="https://gotify.example.com" /></label>
+        <label><span>App token</span><input name="cfg_gotify_token" type="password" placeholder="(unchanged when editing)" /></label>
+      </div>
+    </div>
+
+    <div data-kind-fields="telegram" hidden>
+      <p class="muted small">Bot token from @BotFather; chat ID from /start'ing your bot then GET https://api.telegram.org/bot&lt;token&gt;/getUpdates.</p>
+      <div class="grid-2">
+        <label><span>Bot token</span><input name="cfg_telegram_token" type="password" placeholder="(unchanged when editing)" /></label>
+        <label><span>Chat ID</span><input name="cfg_telegram_chat" placeholder="-1001234567890" /></label>
+      </div>
+    </div>
+
+    <div data-kind-fields="generic_webhook" hidden>
+      <p class="muted small">Any HTTP endpoint. <code>{message}</code> in the body template gets replaced with the notification text.</p>
+      <div class="grid-2">
+        <label><span>URL</span><input name="cfg_gw_url" placeholder="https://hooks.example.com/notify" /></label>
+        <label><span>Method</span>
+          <select name="cfg_gw_method">
+            <option value="POST">POST</option>
+            <option value="PUT">PUT</option>
+            <option value="PATCH">PATCH</option>
+          </select>
+        </label>
+        <label class="full"><span>Headers (JSON object)</span><input name="cfg_gw_headers" placeholder='{"X-Source": "vitriol"}' /></label>
+        <label class="full"><span>Body template</span><input name="cfg_gw_body" placeholder='{"text": "{message}"}' /></label>
+        <label class="full"><span>Bearer token (optional)</span><input name="cfg_gw_secret" type="password" placeholder="(unchanged when editing)" /></label>
+      </div>
+    </div>
+
+    <div data-kind-fields="script" hidden>
+      <p class="muted small">Runs as <code>bash -c</code>. The notification text is in <code>$VITRIOL_MESSAGE</code>. 15s timeout.</p>
+      <label class="full"><span>Script body</span>
+        <textarea name="cfg_script_body" rows="8" spellcheck="false" placeholder="#!/usr/bin/env bash&#10;curl -fsSL --data-urlencode &quot;text=$VITRIOL_MESSAGE&quot; https://your.api/notify"></textarea>
+      </label>
+    </div>
+
+    <div data-kind-fields="bluesky" hidden>
+      <p class="muted small">Posts as the configured handle via the AT Protocol. Use an <a href="https://bsky.app/settings/app-passwords" target="_blank" rel="noopener">app password</a>, not your account password. 280-char cap.</p>
+      <div class="grid-2">
+        <label><span>Handle</span><input name="cfg_bsky_handle" placeholder="vitriol.bsky.social" /></label>
+        <label><span>App password</span><input name="cfg_bsky_password" type="password" placeholder="(unchanged when editing)" /></label>
+        <label class="full"><span>Server (PDS)</span><input name="cfg_bsky_server" placeholder="https://bsky.social" /></label>
+      </div>
+    </div>
+
+    <footer class="dialog-actions">
+      <button type="button" id="notif-form-test" class="btn btn-secondary" hidden>Test</button>
+      <button type="button" id="notif-form-delete" class="btn btn-danger" hidden>Delete</button>
+      <span style="flex:1;"></span>
+      <button type="button" class="btn btn-ghost" data-close>Cancel</button>
+      <button type="submit" class="btn btn-primary">Save</button>
+    </footer>
+    <p id="notif-form-msg" class="ok small" hidden></p>
   </form>
 </dialog>
 

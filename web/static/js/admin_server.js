@@ -771,6 +771,336 @@ if (document.getElementById('oidc-form-delete')) {
 if (oidcTbody) loadOidcProviders();
 
 // ============================================================
+// Notification channels — multi-row replacement for the old singleton
+// Discord webhook. Same Sonarr-style catalog → per-kind form pattern as
+// OIDC, but the form's visible field set switches based on the chosen
+// kind (Discord wants one URL, ntfy wants 4 fields, generic webhook
+// wants 5+, etc.).
+// ============================================================
+
+const NOTIFICATION_TEMPLATES = [
+  { kind: 'discord',         name: 'Discord',         description: 'Channel webhook → posts as a bot.' },
+  { kind: 'slack',           name: 'Slack',           description: 'Incoming webhook → posts to a channel.' },
+  { kind: 'ntfy',            name: 'ntfy',            description: 'Public ntfy.sh or self-hosted topic.' },
+  { kind: 'gotify',          name: 'Gotify',          description: 'Self-hosted push gateway.' },
+  { kind: 'telegram',        name: 'Telegram',        description: 'Bot token + chat ID via @BotFather.' },
+  { kind: 'generic_webhook', name: 'Generic webhook', description: 'Arbitrary URL/method/headers/body.' },
+  { kind: 'script',          name: 'Script',          description: 'Bash with $VITRIOL_MESSAGE in env.' },
+  { kind: 'bluesky',         name: 'Bluesky',         description: 'AT Protocol post via app password.' },
+];
+
+const notifTbody = document.getElementById('notif-tbody');
+const notifAddBtn = document.getElementById('notif-add-btn');
+const notifCatalogDialog = document.getElementById('notif-catalog-dialog');
+const notifCatalogGrid = document.getElementById('notif-catalog-grid');
+const notifFormDialog = document.getElementById('notif-form-dialog');
+const notifForm = document.getElementById('notif-form');
+
+async function loadNotificationChannels() {
+  if (!notifTbody) return;
+  let rows = [];
+  try { rows = await api.get('/server/notification-channels'); } catch (_) { rows = []; }
+  notifTbody.innerHTML = '';
+  if (!Array.isArray(rows) || rows.length === 0) {
+    const tr = document.createElement('tr');
+    tr.innerHTML = '<td colspan="5" class="empty-state">No channels yet. Click "+ Add channel" below.</td>';
+    notifTbody.appendChild(tr);
+    paintNotifSummaryPill(rows);
+    return;
+  }
+  for (const ch of rows) {
+    const tr = document.createElement('tr');
+    tr.className = 'user-row clickable';
+    tr.dataset.id = ch.id;
+    let lastTest = '—';
+    if (ch.last_test_at) {
+      const when = new Date(ch.last_test_at).toLocaleString();
+      lastTest = ch.last_test_ok
+        ? `<span class="status-pill ok">ok</span> <span class="muted small">${when}</span>`
+        : `<span class="status-pill failed">failed</span> <span class="muted small">${when}</span>`;
+    }
+    tr.innerHTML = `
+      <td>${escapeHtmlSimple(ch.name)}</td>
+      <td><code>${escapeHtmlSimple(ch.kind)}</code></td>
+      <td>${ch.enabled ? '<span class="status-pill ok">on</span>' : '<span class="status-pill missing">off</span>'}</td>
+      <td>${lastTest}</td>
+      <td class="row-manage-cell"><button type="button" class="btn btn-secondary btn-manage">Edit</button></td>
+    `;
+    tr.addEventListener('click', () => openNotifForm(ch));
+    notifTbody.appendChild(tr);
+  }
+  paintNotifSummaryPill(rows);
+}
+
+function paintNotifSummaryPill(rows) {
+  const pill = document.getElementById('notif-status-pill');
+  if (!pill) return;
+  const total = Array.isArray(rows) ? rows.length : 0;
+  const enabled = total ? rows.filter(r => r.enabled).length : 0;
+  if (total === 0) {
+    pill.textContent = 'none';
+    pill.className = 'status-pill missing';
+    return;
+  }
+  if (enabled === 0) {
+    pill.textContent = `${total} all off`;
+    pill.className = 'status-pill warn';
+    return;
+  }
+  pill.textContent = `${enabled} active`;
+  pill.className = 'status-pill ok';
+}
+
+function renderNotifCatalog() {
+  if (!notifCatalogGrid) return;
+  notifCatalogGrid.innerHTML = '';
+  for (const tpl of NOTIFICATION_TEMPLATES) {
+    const card = document.createElement('button');
+    card.type = 'button';
+    card.className = 'provider-card';
+    card.innerHTML = `
+      <span class="pc-name">${escapeHtmlSimple(tpl.name)}</span>
+      <span class="pc-desc">${escapeHtmlSimple(tpl.description)}</span>
+    `;
+    card.addEventListener('click', () => {
+      notifCatalogDialog.close();
+      openNotifFormFromTemplate(tpl);
+    });
+    notifCatalogGrid.appendChild(card);
+  }
+}
+
+// Show only the field-group matching the form's current `kind`. Toggling
+// happens via the `data-kind-fields` attribute on each container.
+function applyNotifKindVisibility(kind) {
+  document.querySelectorAll('#notif-form [data-kind-fields]').forEach(div => {
+    div.hidden = div.dataset.kindFields !== kind;
+  });
+}
+
+// Map each kind's UI fields to/from the API config + secret shape that
+// services/notifications.py expects. Centralising this here keeps the
+// per-kind branching out of the submit handler.
+function notifFormToPayload() {
+  const kind = notifForm.kind.value;
+  const config = {};
+  let secret = null;
+  const v = (n) => (notifForm.elements[n] || { value: '' }).value;
+  switch (kind) {
+    case 'discord':
+      secret = v('cfg_discord_url') || null;
+      break;
+    case 'slack':
+      secret = v('cfg_slack_url') || null;
+      break;
+    case 'ntfy':
+      config.server_url = v('cfg_ntfy_server');
+      config.topic = v('cfg_ntfy_topic');
+      config.auth_kind = v('cfg_ntfy_auth_kind') || 'none';
+      secret = v('cfg_ntfy_secret') || null;
+      break;
+    case 'gotify':
+      config.server_url = v('cfg_gotify_server');
+      secret = v('cfg_gotify_token') || null;
+      break;
+    case 'telegram':
+      config.chat_id = v('cfg_telegram_chat');
+      secret = v('cfg_telegram_token') || null;
+      break;
+    case 'generic_webhook':
+      config.url = v('cfg_gw_url');
+      config.method = v('cfg_gw_method') || 'POST';
+      config.headers_json = v('cfg_gw_headers');
+      config.body_template = v('cfg_gw_body');
+      secret = v('cfg_gw_secret') || null;
+      break;
+    case 'script':
+      config.script = v('cfg_script_body');
+      break;
+    case 'bluesky':
+      config.handle = v('cfg_bsky_handle');
+      config.server = v('cfg_bsky_server') || 'https://bsky.social';
+      secret = v('cfg_bsky_password') || null;
+      break;
+  }
+  return {
+    name: v('name'),
+    enabled: !!notifForm.elements['enabled'].checked,
+    config,
+    secret,    // null = don't change on edit, "" wouldn't be sent here
+  };
+}
+
+function notifPayloadToForm(ch) {
+  // Reset all per-kind fields. Empty values are correct on Add; on Edit
+  // we then fill in what the server gave us.
+  for (const el of notifForm.elements) {
+    if (el.type === 'checkbox') el.checked = false;
+    else if (el.tagName === 'SELECT') el.selectedIndex = 0;
+    else el.value = '';
+  }
+  const cfg = ch?.config || {};
+  notifForm.id.value = ch ? ch.id : '';
+  notifForm.kind.value = ch ? ch.kind : '';
+  notifForm.elements['name'].value = ch ? ch.name : '';
+  notifForm.elements['enabled'].checked = ch ? !!ch.enabled : true;
+
+  // For each per-kind input, populate from cfg AND set placeholders for
+  // saved-secret slots so the operator can see "this is configured" vs
+  // "this is empty" without us echoing plaintext back.
+  const setSecretPlaceholder = (fieldName, isSet) => {
+    const el = notifForm.elements[fieldName];
+    if (!el) return;
+    el.placeholder = isSet ? SAVED_SECRET_PLACEHOLDER : EMPTY_SECRET_PLACEHOLDER;
+  };
+
+  switch (ch?.kind) {
+    case 'discord':
+      setSecretPlaceholder('cfg_discord_url', ch.secret_set);
+      break;
+    case 'slack':
+      setSecretPlaceholder('cfg_slack_url', ch.secret_set);
+      break;
+    case 'ntfy':
+      notifForm.elements['cfg_ntfy_server'].value = cfg.server_url || '';
+      notifForm.elements['cfg_ntfy_topic'].value = cfg.topic || '';
+      notifForm.elements['cfg_ntfy_auth_kind'].value = cfg.auth_kind || 'none';
+      setSecretPlaceholder('cfg_ntfy_secret', ch.secret_set);
+      break;
+    case 'gotify':
+      notifForm.elements['cfg_gotify_server'].value = cfg.server_url || '';
+      setSecretPlaceholder('cfg_gotify_token', ch.secret_set);
+      break;
+    case 'telegram':
+      notifForm.elements['cfg_telegram_chat'].value = cfg.chat_id || '';
+      setSecretPlaceholder('cfg_telegram_token', ch.secret_set);
+      break;
+    case 'generic_webhook':
+      notifForm.elements['cfg_gw_url'].value = cfg.url || '';
+      notifForm.elements['cfg_gw_method'].value = cfg.method || 'POST';
+      notifForm.elements['cfg_gw_headers'].value = cfg.headers_json || '';
+      notifForm.elements['cfg_gw_body'].value = cfg.body_template || '';
+      setSecretPlaceholder('cfg_gw_secret', ch.secret_set);
+      break;
+    case 'script':
+      notifForm.elements['cfg_script_body'].value = cfg.script || '';
+      break;
+    case 'bluesky':
+      notifForm.elements['cfg_bsky_handle'].value = cfg.handle || '';
+      notifForm.elements['cfg_bsky_server'].value = cfg.server || 'https://bsky.social';
+      setSecretPlaceholder('cfg_bsky_password', ch.secret_set);
+      break;
+  }
+}
+
+function openNotifFormFromTemplate(tpl) {
+  notifPayloadToForm(null);
+  notifForm.kind.value = tpl.kind;
+  notifForm.elements['name'].value = tpl.name;
+  notifForm.elements['enabled'].checked = true;
+  applyNotifKindVisibility(tpl.kind);
+  document.getElementById('notif-form-title').textContent = `Add ${tpl.name}`;
+  document.getElementById('notif-form-delete').hidden = true;
+  document.getElementById('notif-form-test').hidden = true;
+  document.getElementById('notif-form-msg').hidden = true;
+  notifFormDialog.showModal();
+}
+
+function openNotifForm(ch) {
+  notifPayloadToForm(ch);
+  applyNotifKindVisibility(ch.kind);
+  document.getElementById('notif-form-title').textContent = `Edit — ${ch.name}`;
+  document.getElementById('notif-form-delete').hidden = false;
+  document.getElementById('notif-form-test').hidden = false;
+  document.getElementById('notif-form-msg').hidden = true;
+  notifFormDialog.showModal();
+}
+
+if (notifAddBtn) notifAddBtn.addEventListener('click', () => {
+  if (notifCatalogDialog) {
+    renderNotifCatalog();
+    notifCatalogDialog.showModal();
+  }
+});
+
+if (notifForm) notifForm.addEventListener('submit', async (e) => {
+  e.preventDefault();
+  const id = notifForm.id.value;
+  const msg = document.getElementById('notif-form-msg');
+  msg.hidden = true;
+  const payload = notifFormToPayload();
+  // On create, the server requires the kind. On edit we don't send it
+  // — kind is immutable for an existing row.
+  if (!id) payload.kind = notifForm.kind.value;
+  // Don't send `secret: null` on create — the server treats that as
+  // "set to null". We want "no secret yet" to mean "field omitted" so
+  // the row goes in with secret_enc=null cleanly.
+  if (payload.secret == null && !id) delete payload.secret;
+  // On edit, an unchanged password field has secret=null which we
+  // *also* want stripped so the existing encrypted value is preserved.
+  if (payload.secret == null && id) delete payload.secret;
+  try {
+    if (id) {
+      await api.patch(`/server/notification-channels/${id}`, payload);
+    } else {
+      await api.post('/server/notification-channels', payload);
+    }
+    notifFormDialog.close();
+    await loadNotificationChannels();
+  } catch (ex) {
+    msg.textContent = (ex && ex.detail) || 'Save failed';
+    msg.className = 'error small';
+    msg.hidden = false;
+  }
+});
+
+const notifFormDelete = document.getElementById('notif-form-delete');
+if (notifFormDelete) notifFormDelete.addEventListener('click', async () => {
+  const id = notifForm.id.value;
+  if (!id) return;
+  const name = notifForm.elements['name'].value || 'this channel';
+  if (!confirm(`Delete ${name}?`)) return;
+  try {
+    await api.del(`/server/notification-channels/${id}`);
+    notifFormDialog.close();
+    await loadNotificationChannels();
+  } catch (ex) {
+    const msg = document.getElementById('notif-form-msg');
+    msg.textContent = (ex && ex.detail) || 'Delete failed';
+    msg.className = 'error small';
+    msg.hidden = false;
+  }
+});
+
+const notifFormTest = document.getElementById('notif-form-test');
+if (notifFormTest) notifFormTest.addEventListener('click', async () => {
+  const id = notifForm.id.value;
+  if (!id) return;
+  const msg = document.getElementById('notif-form-msg');
+  msg.hidden = true;
+  notifFormTest.disabled = true;
+  const original = notifFormTest.textContent;
+  notifFormTest.textContent = 'Testing…';
+  try {
+    const r = await api.post(`/server/notification-channels/${id}/test`, {});
+    msg.textContent = r.message || 'Test sent.';
+    msg.className = 'ok small';
+    msg.hidden = false;
+    await loadNotificationChannels();   // refresh last_test pill
+  } catch (ex) {
+    msg.textContent = (ex && ex.detail) || 'Test failed';
+    msg.className = 'error small';
+    msg.hidden = false;
+    await loadNotificationChannels();
+  } finally {
+    notifFormTest.disabled = false;
+    notifFormTest.textContent = original;
+  }
+});
+
+if (notifTbody) loadNotificationChannels();
+
+// ============================================================
 // SMTP + Discord pill state — uses last_test_ok/at to drive colour
 // ============================================================
 //

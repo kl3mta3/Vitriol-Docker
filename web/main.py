@@ -19,13 +19,14 @@ from .routes import convert as convert_routes
 from .routes import jobs_ws
 from .routes import me as me_routes
 from .routes import files as files_routes
+from .routes import notification_channels as notification_routes
 from .routes import oidc_providers as oidc_routes
 from .routes import roles as roles_routes
 from .routes import server as server_routes
 from .routes import setup as setup_routes
 from .routes import ui as ui_routes
 from .routes import users as users_routes
-from .services.bootstrap import apply_recovery_config, ensure_schema, ensure_server_settings, ensure_super_admin, migrate_legacy_oidc, super_admin_exists
+from .services.bootstrap import apply_recovery_config, ensure_schema, ensure_server_settings, ensure_super_admin, migrate_legacy_discord, migrate_legacy_oidc, super_admin_exists
 
 logging.basicConfig(level=logging.INFO, format="%(asctime)s %(levelname)s %(name)s: %(message)s")
 _log = logging.getLogger("vitriol")
@@ -52,6 +53,7 @@ async def lifespan(app: FastAPI):
         apply_recovery_config(db)
         ensure_super_admin(db)
         migrate_legacy_oidc(db)
+        migrate_legacy_discord(db)
         # The legacy Host-header lock has been retired (see note in
         # create_app). Wipe any value left over from older deploys so the
         # /admin/server form shows it empty and stops looking like an
@@ -215,6 +217,7 @@ def create_app() -> FastAPI:
     app.include_router(roles_routes.router, prefix="/api/v1")
     app.include_router(server_routes.router, prefix="/api/v1")
     app.include_router(oidc_routes.router, prefix="/api/v1")
+    app.include_router(notification_routes.router, prefix="/api/v1")
     app.include_router(convert_routes.router, prefix="/api/v1")
     app.include_router(files_routes.router, prefix="/api/v1")
 

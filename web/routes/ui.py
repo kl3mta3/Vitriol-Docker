@@ -179,7 +179,8 @@ async def verify_email_page(
         await email_svc.send_pending_approval_notification(
             db, target, [a.email for a in admins if a.email],
         )
-        await discord_svc.notify(
+        from ..services.notifications import notify_all
+        await notify_all(
             db,
             f":hourglass: New pending user **{target.username}** ({target.email}) awaits approval.",
         )

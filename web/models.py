@@ -31,6 +31,27 @@ class Status(str, enum.Enum):
     unverified = "unverified"
 
 
+class NotificationKind(str, enum.Enum):
+    """Outbound notification channel types. Each kind has a small per-kind
+    config schema documented in `web/services/notifications.py` plus a
+    matching template card in the admin UI catalog. Adding a new kind:
+      1. Extend this enum.
+      2. Add a `_send_<kind>` handler in services/notifications.py.
+      3. Add a template in admin_server.js NOTIFICATION_TEMPLATES.
+      4. Add field rendering for that kind in the per-kind add/edit form.
+    """
+    discord = "discord"                  # webhook URL → POST {content}
+    slack = "slack"                      # webhook URL → POST {text}
+    ntfy = "ntfy"                        # POST plaintext to <server>/<topic>
+    gotify = "gotify"                    # POST {title,message} with app token
+    telegram = "telegram"                # GET sendMessage?chat_id=&text=
+    generic_webhook = "generic_webhook"  # arbitrary URL/method/headers/body
+    script = "script"                    # bash script with $VITRIOL_MESSAGE
+    bluesky = "bluesky"                  # AT Protocol post via app password
+    # signal + twitter intentionally deferred — Signal needs signal-cli
+    # infra, Twitter/X needs paid API tier + OAuth 2.0 user-context auth.
+
+
 class JobStatus(str, enum.Enum):
     queued = "queued"
     running = "running"
@@ -136,6 +157,57 @@ class OidcProvider(Base):
     created_at = Column(DateTime, nullable=False, default=datetime.utcnow)
     updated_at = Column(DateTime, nullable=False, default=datetime.utcnow, onupdate=datetime.utcnow)
     created_by_user_id = Column(Integer, ForeignKey("users.id"), nullable=True)
+
+
+class NotificationChannel(Base):
+    """One outbound notification destination — Discord webhook, Slack
+    webhook, ntfy topic, Gotify app, Telegram chat, generic webhook,
+    bash script, or Bluesky post.
+
+    Multiple channels can be active at once. ``services.notifications.notify_all``
+    fans out a single message to every enabled row. The legacy
+    ``ServerSettings.discord_webhook_url`` is auto-migrated into a row
+    here on first boot so existing setups keep working without re-config.
+
+    Per-kind config layout (always in ``config_json``; secrets in
+    ``secret_enc``):
+
+    - discord: config={}, secret_enc=<webhook_url>
+    - slack: config={}, secret_enc=<webhook_url>
+    - ntfy: config={server_url, topic, auth_kind: 'none'|'bearer'|'basic'},
+            secret_enc=<token or "user:pass"> (or null)
+    - gotify: config={server_url}, secret_enc=<app_token>
+    - telegram: config={chat_id}, secret_enc=<bot_token>
+    - generic_webhook: config={url, method, headers_json, body_template},
+                       secret_enc=<bearer_token> (optional)
+    - script: config={script}, secret_enc=null
+    - bluesky: config={handle, server: 'https://bsky.social'},
+               secret_enc=<app_password>
+    """
+    __tablename__ = "notification_channels"
+
+    id = Column(Integer, primary_key=True)
+    kind = Column(SAEnum(NotificationKind, native_enum=False), nullable=False, index=True)
+    name = Column(String(64), nullable=False)
+    enabled = Column(Boolean, nullable=False, default=True, server_default="1")
+
+    # Per-kind, non-secret config (URL paths, topics, chat IDs, etc.).
+    # Stored as JSON so adding a new kind doesn't require a migration.
+    config_json = Column(Text, nullable=False, default="{}", server_default="{}")
+
+    # Per-kind secret material (webhook URL itself, bot token, app
+    # password, etc.) — Fernet-encrypted at rest using the same key as
+    # the rest of the encrypted columns.
+    secret_enc = Column(Text, nullable=True)
+
+    # Last-test bookkeeping — drives the green/red pill on each row in
+    # the admin UI without forcing a probe on every page load.
+    last_test_at = Column(DateTime, nullable=True)
+    last_test_ok = Column(Boolean, nullable=True)
+    last_test_error = Column(String(500), nullable=True)
+
+    created_at = Column(DateTime, nullable=False, default=datetime.utcnow)
+    updated_at = Column(DateTime, nullable=False, default=datetime.utcnow, onupdate=datetime.utcnow)
 
 
 class CustomRole(Base):

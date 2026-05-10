@@ -231,7 +231,8 @@ async def _notify_admins_of_pending(db: Session, user: User) -> None:
     )
     recipients = [a.email for a in admins if a.email]
     await email_svc.send_pending_approval_notification(db, user, recipients)
-    await discord_svc.notify(
+    from ..services.notifications import notify_all
+    await notify_all(
         db, f":hourglass: New pending user **{user.username}** ({user.email}) awaits approval."
     )
 
