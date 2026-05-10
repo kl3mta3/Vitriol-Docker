@@ -6,6 +6,7 @@ don't crash on signup.
 from __future__ import annotations
 import asyncio
 import hashlib
+import logging
 import secrets
 from datetime import datetime, timedelta
 from email.message import EmailMessage
@@ -16,6 +17,8 @@ from sqlalchemy.orm import Session
 from ..models import EmailVerificationToken, PasswordResetToken, ServerSettings, TokenPurpose, User
 from .crypto import decrypt
 
+logger = logging.getLogger("vitriol.email")
+
 
 def _settings_row(db: Session) -> Optional[ServerSettings]:
     return db.query(ServerSettings).get(1)
@@ -24,6 +27,11 @@ def _settings_row(db: Session) -> Optional[ServerSettings]:
 async def _send(db: Session, to: str, subject: str, body: str) -> bool:
     s = _settings_row(db)
     if s is None or not s.smtp_host or not s.smtp_from:
+        logger.warning(
+            "SMTP not configured — skipping email to %s (subject=%r). "
+            "Host set=%s, From set=%s.",
+            to, subject, bool(s and s.smtp_host), bool(s and s.smtp_from),
+        )
         return False
     msg = EmailMessage()
     msg["From"] = s.smtp_from
@@ -42,8 +50,28 @@ async def _send(db: Session, to: str, subject: str, body: str) -> bool:
             password=password or None,
             start_tls=bool(s.smtp_use_tls),
         )
+        # Stamp success on the settings row so the admin UI banner +
+        # status pill can reflect "SMTP works" without re-running the
+        # explicit test button after a real signup proves it.
+        try:
+            s.smtp_last_test_at = datetime.utcnow()
+            s.smtp_last_test_ok = True
+            db.commit()
+        except Exception:  # don't let a bookkeeping failure mask success
+            db.rollback()
         return True
-    except Exception:
+    except Exception as e:
+        logger.exception(
+            "SMTP send failed for %s (subject=%r) via %s:%s as %s — %s",
+            to, subject, s.smtp_host, s.smtp_port or 587,
+            s.smtp_user or "(no auth)", e,
+        )
+        try:
+            s.smtp_last_test_at = datetime.utcnow()
+            s.smtp_last_test_ok = False
+            db.commit()
+        except Exception:
+            db.rollback()
         return False
 
 

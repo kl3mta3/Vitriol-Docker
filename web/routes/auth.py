@@ -76,6 +76,22 @@ def signin(req: SignInRequest, request: Request, response: Response, db: Session
         raise HTTPException(status_code=403, detail="Account banned")
     if user.status == Status.suspended and user.suspended_until and user.suspended_until > datetime.utcnow():
         raise HTTPException(status_code=403, detail=f"Account suspended until {user.suspended_until.isoformat()}Z")
+    # Block sign-in for unverified users when the operator requires email
+    # verification. Bootstrap super-admins (created from env or wizard) are
+    # exempt — they're the only path back into the app if SMTP breaks. SSO
+    # users are also exempt because the IdP already vouched for the email.
+    s = db.query(ServerSettings).get(1)
+    if (
+        s is not None
+        and bool(s.require_email_verification)
+        and user.email_verified_at is None
+        and user.role != Role.super_admin
+        and user.password_hash  # password-based sign-in only; SSO has no hash
+    ):
+        raise HTTPException(
+            status_code=403,
+            detail="Please verify your email before signing in. Check your inbox for the verification link.",
+        )
     if needs_rehash(user.password_hash):
         user.password_hash = hash_password(req.password)
     user.last_login_at = datetime.utcnow()

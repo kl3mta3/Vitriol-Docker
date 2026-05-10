@@ -141,10 +141,17 @@ async function load() {
   paintServicePill('discord-status-pill', discordConfigured, s.discord_last_test_ok);
   const banner = document.getElementById('smtp-warning');
   if (banner) {
-    // Only nag about SMTP when sign-up is on AND the verification email
-    // is required. Operators who explicitly turned verification off don't
-    // need SMTP for sign-ups.
-    const showBanner = !!s.allow_signup && !smtpConfigured && !!s.require_email_verification;
+    // Hide the banner when either:
+    //   - self sign-up is off (no verification emails to worry about), OR
+    //   - SMTP last-test passed (a successful real send also stamps this,
+    //     so the banner clears the moment a real email goes through).
+    // Show only when sign-up is on, verification is required, AND SMTP
+    // is either not fully configured or the last send/test failed.
+    const smtpReady = smtpConfigured && s.smtp_last_test_ok === true;
+    const showBanner =
+      !!s.allow_signup &&
+      !!s.require_email_verification &&
+      !smtpReady;
     banner.hidden = !showBanner;
     if (showBanner) {
       const det = document.getElementById('smtp');
