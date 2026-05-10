@@ -408,53 +408,97 @@ async def sso_start(provider: str, request: Request, db: Session = Depends(get_d
 async def sso_callback(
     provider: str, request: Request, response: Response, db: Session = Depends(get_db),
 ):
+    import logging as _logging
+    _sso_log = _logging.getLogger("vitriol.sso")
+
     oauth, registered = build_oauth(db)
     if provider not in registered:
         raise HTTPException(status_code=404, detail="SSO provider not configured")
     kind = registered[provider]   # 'google' | 'github' | 'oidc'
     client = getattr(oauth, provider)
-    token = await client.authorize_access_token(request)
+
+    # Token exchange. Authlib pulls the redirect_uri it stashed during the
+    # start step out of the session and re-sends it; if that's missing
+    # (samesite cookie dropped, session middleware misconfigured) the call
+    # blows up with a MismatchingStateError. Surface a real message rather
+    # than a bare 500 so the operator can fix the config.
+    try:
+        token = await client.authorize_access_token(request)
+    except Exception as e:
+        _sso_log.exception("SSO token exchange failed for provider=%s", provider)
+        raise HTTPException(
+            status_code=502,
+            detail=f"SSO token exchange failed ({type(e).__name__}): {e}",
+        )
 
     sub: Optional[str] = None
     email: Optional[str] = None
     name: Optional[str] = None
-    if kind == "google":
-        info = token.get("userinfo") or await client.userinfo(token=token)
-        sub = info.get("sub")
-        email = info.get("email")
-        name = info.get("name") or info.get("given_name")
-    elif kind == "github":
-        resp = await client.get("user", token=token)
-        info = resp.json()
-        sub = str(info.get("id"))
-        name = info.get("login")
-        if not info.get("email"):
-            er = await client.get("user/emails", token=token)
-            for entry in er.json():
-                if entry.get("primary") and entry.get("verified"):
-                    email = entry["email"]
-                    break
-        else:
-            email = info["email"]
-    elif kind == "oidc":
-        # Any operator-defined OIDC provider (Authentik, Keycloak, Auth0,
-        # Okta, Zitadel, ...). Authlib validates the ID token against
-        # JWKS pulled from the discovery doc; `userinfo` returns the
-        # standard OIDC claims set.
-        info = token.get("userinfo")
-        if info is None:
-            try:
-                info = await client.userinfo(token=token)
-            except Exception:
-                info = {}
-        sub = info.get("sub") or info.get("subject")
-        email = info.get("email")
-        name = (
-            info.get("preferred_username")
-            or info.get("nickname")
-            or info.get("name")
-            or info.get("given_name")
+    try:
+        if kind == "google":
+            info = token.get("userinfo") or await client.userinfo(token=token)
+            sub = info.get("sub")
+            email = info.get("email")
+            name = info.get("name") or info.get("given_name")
+        elif kind == "github":
+            # GitHub doesn't issue an OIDC id_token — fetch the profile
+            # via the REST API. The Authlib ``client.get`` call uses the
+            # access token from the OAuth dance.
+            resp = await client.get("user", token=token)
+            if resp.status_code >= 400:
+                raise RuntimeError(
+                    f"GitHub /user returned {resp.status_code}: {resp.text[:200]}"
+                )
+            info = resp.json() if resp.text else {}
+            sub = str(info.get("id") or "")
+            name = info.get("login")
+            if not info.get("email"):
+                er = await client.get("user/emails", token=token)
+                if er.status_code >= 400:
+                    # Common cause: the OAuth app doesn't have the
+                    # `user:email` scope. Fall through with email=None
+                    # rather than 500'ing — name+sub is enough to create
+                    # the account, and email can be added later.
+                    _sso_log.warning(
+                        "GitHub /user/emails returned %s — proceeding without email. "
+                        "Add 'user:email' to the OAuth app scopes to capture it.",
+                        er.status_code,
+                    )
+                else:
+                    for entry in (er.json() or []):
+                        if entry.get("primary") and entry.get("verified"):
+                            email = entry["email"]
+                            break
+            else:
+                email = info["email"]
+        elif kind == "oidc":
+            # Any operator-defined OIDC provider (Authentik, Keycloak, Auth0,
+            # Okta, Zitadel, ...). Authlib validates the ID token against
+            # JWKS pulled from the discovery doc; `userinfo` returns the
+            # standard OIDC claims set.
+            info = token.get("userinfo")
+            if info is None:
+                try:
+                    info = await client.userinfo(token=token)
+                except Exception:
+                    info = {}
+            sub = info.get("sub") or info.get("subject")
+            email = info.get("email")
+            name = (
+                info.get("preferred_username")
+                or info.get("nickname")
+                or info.get("name")
+                or info.get("given_name")
+            )
+    except HTTPException:
+        raise
+    except Exception as e:
+        _sso_log.exception("SSO profile fetch failed for provider=%s", provider)
+        raise HTTPException(
+            status_code=502,
+            detail=f"SSO profile fetch failed ({type(e).__name__}): {e}",
         )
+
     if not sub:
         raise HTTPException(status_code=400, detail="SSO provider returned no subject id")
 
