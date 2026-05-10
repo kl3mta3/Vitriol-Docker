@@ -401,6 +401,15 @@ async def sso_start(provider: str, request: Request, db: Session = Depends(get_d
         from fastapi.responses import PlainTextResponse
         return PlainTextResponse(body)
 
+    # Test mode: stash a flag in the session so the callback can render
+    # a "test successful" page WITHOUT creating a user, linking an
+    # OAuthIdentity, or issuing session cookies. The flag rides through
+    # the whole IdP round-trip in the same session that Authlib uses to
+    # track OAuth state, so it's automatically scoped to this single
+    # auth attempt.
+    if request.query_params.get("test") == "1":
+        request.session["sso_test"] = provider
+
     return await getattr(oauth, provider).authorize_redirect(request, redirect_uri)
 
 
@@ -501,6 +510,29 @@ async def sso_callback(
 
     if not sub:
         raise HTTPException(status_code=400, detail="SSO provider returned no subject id")
+
+    # Test mode: the start endpoint stamped session["sso_test"] = provider
+    # so we can detect a "Test sign-in" round-trip vs. a real one. Render
+    # a styled success page (no user creation, no identity link, no
+    # session cookies) and bail. The operator sees a green "Test passed"
+    # screen with the IdP's reported sub/email/name so they can confirm
+    # the round-trip worked end-to-end, without polluting the user list
+    # with a pending account.
+    if request.session.pop("sso_test", None) == provider:
+        from fastapi.templating import Jinja2Templates
+        _templates = Jinja2Templates(directory="web/templates")
+        return _templates.TemplateResponse(
+            request,
+            "sso_test_result.html",
+            {
+                "request": request,
+                "provider": provider,
+                "kind": kind,
+                "sub": sub,
+                "email": email or "(not provided)",
+                "name": name or "(not provided)",
+            },
+        )
 
     identity: Optional[OAuthIdentity] = (
         db.query(OAuthIdentity)
