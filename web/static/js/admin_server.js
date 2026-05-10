@@ -470,6 +470,17 @@ if (oidcForm) {
 
 if (oidcAddBtn) oidcAddBtn.addEventListener('click', () => openOidcForm(null));
 
+// Generic Cancel/Close handler for any dialog button marked data-close —
+// wires up the OIDC modal, export-dialog, import-dialog, etc. so they all
+// dismiss without submitting their parent form.
+document.querySelectorAll('[data-close]').forEach(btn => {
+  btn.addEventListener('click', (e) => {
+    e.preventDefault();
+    const d = btn.closest('dialog');
+    if (d) d.close();
+  });
+});
+
 if (oidcForm) oidcForm.addEventListener('submit', async (e) => {
   e.preventDefault();
   const id = oidcForm.id.value;

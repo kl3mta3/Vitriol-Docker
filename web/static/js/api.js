@@ -45,7 +45,19 @@ async function _send(path, opts) {
       return;
     }
   }
-  if (!r.ok) throw await r.json().catch(() => ({ detail: r.statusText }));
+  if (!r.ok) {
+    // Surface the most useful error string available — JSON `detail`
+    // wins, then plain-text body, then statusText. Avoids the silent
+    // "Failed" message ops have to debug from container logs.
+    let err;
+    try { err = await r.json(); }
+    catch (_) {
+      try { err = { detail: (await r.text()) || r.statusText }; }
+      catch (_e) { err = { detail: r.statusText || `HTTP ${r.status}` }; }
+    }
+    if (!err.detail) err.detail = `HTTP ${r.status} ${r.statusText}`;
+    throw err;
+  }
   return r.status === 204 ? null : r.json();
 }
 

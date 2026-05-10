@@ -106,6 +106,11 @@ h2.display.small, .display.small { font-size: 18px; letter-spacing: 1.2px; }
 body:not(:has(.nav)) .page { padding-top: 88px; }
 
 /* ---------- Buttons ---------- */
+/* HTML's [hidden] attribute is a UA `display: none` rule — but our
+   `.btn { display: inline-flex }` would override it without !important,
+   leaving "hidden" buttons (e.g. the OIDC Delete button on Add) visible. */
+[hidden] { display: none !important; }
+
 .btn {
   display: inline-flex; align-items: center; gap: 8px;
   padding: 8px 14px; border-radius: var(--radius);

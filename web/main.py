@@ -174,6 +174,19 @@ def create_app() -> FastAPI:
 
     @app.middleware("http")
     async def _domain_lock(request: Request, call_next):
+        # Always exempt setup, static, and the admin/server settings page +
+        # API. If the operator typo'd allowed_origin and locked themselves
+        # out, they need a way back in to fix it without console access.
+        path = request.url.path
+        if (
+            path.startswith("/setup")
+            or path.startswith("/static")
+            or path.startswith("/admin/server")
+            or path.startswith("/api/v1/server/")
+            or path.startswith("/api/v1/auth/")  # signin/refresh/logout
+            or path == "/healthz"
+        ):
+            return await call_next(request)
         # Read settings off the DB once per request — cheap on SQLite.
         try:
             db = SessionLocal()
@@ -183,9 +196,20 @@ def create_app() -> FastAPI:
         except Exception:
             allowed = None
         if allowed:
-            host = (request.headers.get("host") or "").split(":")[0]
-            if host and host != allowed:
-                return PlainTextResponse("Host not allowed", status_code=403)
+            # Be tolerant of common operator mistakes — pasting
+            # "https://app.vitriol.rocks" or "app.vitriol.rocks/" should
+            # still match a Host header of "app.vitriol.rocks".
+            allowed_host = allowed.strip()
+            if "://" in allowed_host:
+                allowed_host = allowed_host.split("://", 1)[1]
+            allowed_host = allowed_host.split("/", 1)[0].split(":", 1)[0].lower()
+            host = (request.headers.get("host") or "").split(":", 1)[0].lower()
+            if allowed_host and host and host != allowed_host:
+                return PlainTextResponse(
+                    f"Host not allowed (got {host!r}, expected {allowed_host!r}). "
+                    f"Visit /admin/server to fix the Allowed origin field.",
+                    status_code=403,
+                )
         return await call_next(request)
 
     @app.exception_handler(404)

@@ -50,28 +50,15 @@ async def _send(db: Session, to: str, subject: str, body: str) -> bool:
             password=password or None,
             start_tls=bool(s.smtp_use_tls),
         )
-        # Stamp success on the settings row so the admin UI banner +
-        # status pill can reflect "SMTP works" without re-running the
-        # explicit test button after a real signup proves it.
-        try:
-            s.smtp_last_test_at = datetime.utcnow()
-            s.smtp_last_test_ok = True
-            db.commit()
-        except Exception:  # don't let a bookkeeping failure mask success
-            db.rollback()
         return True
     except Exception as e:
+        # Log the full exception so operators can see *why* a real signup
+        # email is failing instead of getting a silent "no email arrived".
         logger.exception(
             "SMTP send failed for %s (subject=%r) via %s:%s as %s — %s",
             to, subject, s.smtp_host, s.smtp_port or 587,
             s.smtp_user or "(no auth)", e,
         )
-        try:
-            s.smtp_last_test_at = datetime.utcnow()
-            s.smtp_last_test_ok = False
-            db.commit()
-        except Exception:
-            db.rollback()
         return False
 
 
