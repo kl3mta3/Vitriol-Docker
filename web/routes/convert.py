@@ -27,6 +27,33 @@ router = APIRouter(prefix="", tags=["convert"])
 _cfg = get_settings()
 
 
+def _disabled_for(s: ServerSettings, user: User) -> tuple[set[str], set[str]]:
+    """Compute the (disabled_inputs, disabled_outputs) sets that apply to
+    this caller's role. Tiers cascade downward:
+      - global  → applies to everyone, including super admin
+      - admin   → applies to admin and below (super admin can still use)
+      - user    → applies to user and below (admin + super admin can use)
+    The dropdown / submission gate uses the union.
+    """
+    def _load(col: str) -> set[str]:
+        try:
+            return set(json.loads(getattr(s, col, None) or "[]"))
+        except json.JSONDecodeError:
+            return set()
+    role = user.role.value if hasattr(user.role, "value") else str(user.role)
+    in_set: set[str] = set()
+    out_set: set[str] = set()
+    in_set |= _load("disabled_input_formats_json")
+    out_set |= _load("disabled_output_formats_json")
+    if role != "super_admin":
+        in_set |= _load("disabled_admin_input_formats_json")
+        out_set |= _load("disabled_admin_output_formats_json")
+    if role not in ("super_admin", "admin"):
+        in_set |= _load("disabled_user_input_formats_json")
+        out_set |= _load("disabled_user_output_formats_json")
+    return in_set, out_set
+
+
 @router.get("/formats", response_model=FormatsResponse)
 def formats(
     user: User = Depends(get_current_user),
@@ -35,11 +62,7 @@ def formats(
     data = conv_svc.supported_formats()
     s: Optional[ServerSettings] = db.query(ServerSettings).get(1)
     if s:
-        try:
-            disabled_in = set(json.loads(s.disabled_input_formats_json or "[]"))
-            disabled_out = set(json.loads(s.disabled_output_formats_json or "[]"))
-        except json.JSONDecodeError:
-            disabled_in, disabled_out = set(), set()
+        disabled_in, disabled_out = _disabled_for(s, user)
         data["inputs"] = [e for e in data["inputs"] if e not in disabled_in]
         data["outputs"] = [e for e in data["outputs"] if e not in disabled_out]
         for k, v in list(data["targets_for"].items()):
@@ -77,15 +100,14 @@ async def submit_conversion(
     src_ext = "." + (file.filename.rsplit(".", 1)[-1] if file.filename and "." in file.filename else "bin").lower()
     dst_ext_norm = dst_ext if dst_ext.startswith(".") else "." + dst_ext
 
-    # Honor disabled-format toggles.
+    # Honor disabled-format toggles, applying tiered policy based on
+    # the caller's role (global → admin → user, see _disabled_for).
     if s:
-        try:
-            if src_ext in set(json.loads(s.disabled_input_formats_json or "[]")):
-                raise HTTPException(status_code=400, detail=f"Input format {src_ext} is disabled.")
-            if dst_ext_norm in set(json.loads(s.disabled_output_formats_json or "[]")):
-                raise HTTPException(status_code=400, detail=f"Output format {dst_ext_norm} is disabled.")
-        except json.JSONDecodeError:
-            pass
+        disabled_in, disabled_out = _disabled_for(s, user)
+        if src_ext in disabled_in:
+            raise HTTPException(status_code=400, detail=f"Input format {src_ext} is disabled for your role.")
+        if dst_ext_norm in disabled_out:
+            raise HTTPException(status_code=400, detail=f"Output format {dst_ext_norm} is disabled for your role.")
 
     # Stage upload to disk (streamed; no in-memory hold).
     job_token = secrets.token_hex(8)

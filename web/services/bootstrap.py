@@ -13,7 +13,7 @@ from sqlalchemy.orm import Session
 
 from ..auth.password import hash_password
 from ..config import get_settings
-from ..models import Role, ServerSettings, Status, User
+from ..models import OidcProvider, Role, ServerSettings, Status, User
 
 _log = logging.getLogger(__name__)
 
@@ -30,6 +30,40 @@ def ensure_server_settings(db: Session) -> ServerSettings:
 
 def super_admin_exists(db: Session) -> bool:
     return db.query(User).filter(User.role == Role.super_admin).count() > 0
+
+
+def migrate_legacy_oidc(db: Session) -> None:
+    """One-time copy of the deprecated single-OIDC fields on
+    ServerSettings into a row in the new oidc_providers table.
+
+    Triggers when:
+      - the new table is empty (first boot after the multi-OIDC change)
+      - AND ServerSettings has a complete legacy config (issuer +
+        client_id + encrypted secret).
+
+    The legacy slug is hard-coded to 'oidc' so any redirect URI the
+    operator already registered with their IdP — pointing at
+    /api/v1/auth/sso/oidc/callback — keeps working without a re-config.
+    """
+    if db.query(OidcProvider).count() > 0:
+        return
+    s: Optional[ServerSettings] = db.query(ServerSettings).get(1)
+    if s is None:
+        return
+    if not (s.oidc_issuer and s.oidc_client_id and s.oidc_client_secret_enc):
+        return
+    row = OidcProvider(
+        slug="oidc",
+        display_name=s.oidc_display_name or "Continue with SSO",
+        issuer=s.oidc_issuer,
+        client_id=s.oidc_client_id,
+        client_secret_enc=s.oidc_client_secret_enc,
+        scopes=s.oidc_scopes or "openid email profile",
+        enabled=bool(s.oidc_enabled),
+    )
+    db.add(row)
+    db.commit()
+    _log.info("Migrated legacy single-OIDC config into oidc_providers (slug=oidc).")
 
 
 # Additive column migrations. Each entry: (table, column_name, ALTER fragment).
@@ -97,6 +131,24 @@ _ADDITIVE_COLUMNS: list[tuple[str, str, str]] = [
      "ALTER TABLE custom_roles ADD COLUMN can_download_others_files BOOLEAN NOT NULL DEFAULT 0"),
     ("custom_roles", "can_delete_others_files",
      "ALTER TABLE custom_roles ADD COLUMN can_delete_others_files BOOLEAN NOT NULL DEFAULT 0"),
+    # SMTP / Discord last-test tracking — drives the "configured" pill.
+    ("server_settings", "smtp_last_test_at",
+     "ALTER TABLE server_settings ADD COLUMN smtp_last_test_at TIMESTAMP"),
+    ("server_settings", "smtp_last_test_ok",
+     "ALTER TABLE server_settings ADD COLUMN smtp_last_test_ok BOOLEAN"),
+    ("server_settings", "discord_last_test_at",
+     "ALTER TABLE server_settings ADD COLUMN discord_last_test_at TIMESTAMP"),
+    ("server_settings", "discord_last_test_ok",
+     "ALTER TABLE server_settings ADD COLUMN discord_last_test_ok BOOLEAN"),
+    # Tiered format disabling.
+    ("server_settings", "disabled_admin_input_formats_json",
+     "ALTER TABLE server_settings ADD COLUMN disabled_admin_input_formats_json TEXT NOT NULL DEFAULT '[]'"),
+    ("server_settings", "disabled_admin_output_formats_json",
+     "ALTER TABLE server_settings ADD COLUMN disabled_admin_output_formats_json TEXT NOT NULL DEFAULT '[]'"),
+    ("server_settings", "disabled_user_input_formats_json",
+     "ALTER TABLE server_settings ADD COLUMN disabled_user_input_formats_json TEXT NOT NULL DEFAULT '[]'"),
+    ("server_settings", "disabled_user_output_formats_json",
+     "ALTER TABLE server_settings ADD COLUMN disabled_user_output_formats_json TEXT NOT NULL DEFAULT '[]'"),
 ]
 
 

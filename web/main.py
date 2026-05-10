@@ -19,12 +19,13 @@ from .routes import convert as convert_routes
 from .routes import jobs_ws
 from .routes import me as me_routes
 from .routes import files as files_routes
+from .routes import oidc_providers as oidc_routes
 from .routes import roles as roles_routes
 from .routes import server as server_routes
 from .routes import setup as setup_routes
 from .routes import ui as ui_routes
 from .routes import users as users_routes
-from .services.bootstrap import apply_recovery_config, ensure_schema, ensure_server_settings, ensure_super_admin, super_admin_exists
+from .services.bootstrap import apply_recovery_config, ensure_schema, ensure_server_settings, ensure_super_admin, migrate_legacy_oidc, super_admin_exists
 
 logging.basicConfig(level=logging.INFO, format="%(asctime)s %(levelname)s %(name)s: %(message)s")
 _log = logging.getLogger("vitriol")
@@ -50,6 +51,7 @@ async def lifespan(app: FastAPI):
         ensure_server_settings(db)
         apply_recovery_config(db)
         ensure_super_admin(db)
+        migrate_legacy_oidc(db)
     finally:
         db.close()
     _log.info("Vitriol web v%s started; data dir=%s", __version__, cfg.data_dir)
@@ -204,6 +206,7 @@ def create_app() -> FastAPI:
     app.include_router(users_routes.router, prefix="/api/v1")
     app.include_router(roles_routes.router, prefix="/api/v1")
     app.include_router(server_routes.router, prefix="/api/v1")
+    app.include_router(oidc_routes.router, prefix="/api/v1")
     app.include_router(convert_routes.router, prefix="/api/v1")
     app.include_router(files_routes.router, prefix="/api/v1")
 

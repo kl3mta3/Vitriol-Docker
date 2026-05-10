@@ -1,10 +1,17 @@
-"""OAuth (Google, GitHub, generic OIDC) via Authlib.
+"""OAuth (Google, GitHub, plus N OpenID Connect providers) via Authlib.
 
-Provider creds live in `server_settings`; SSO can be reconfigured at
-runtime without a restart. The generic `oidc` slot uses OpenID Connect
-discovery (`.well-known/openid-configuration`), so anything that speaks
-OIDC — Authentik, Keycloak, Auth0, Okta, Zitadel, etc. — works with
-just an issuer URL + client id/secret.
+Google + GitHub are singletons configured in `server_settings`. OIDC is
+a list — operators can register multiple IdPs (e.g. Authentik for staff,
+Auth0 for customers) and each shows up as its own button on the sign-in
+page. Each OIDC row's `slug` becomes the URL fragment in its callback
+(`/api/v1/auth/sso/<slug>/callback`).
+
+`build_oauth(db)` returns an Authlib `OAuth` instance with one client
+per configured-and-enabled provider, keyed by its slug. The slug
+namespace is shared with the hard-coded `google` / `github` names —
+operators are advised not to use those slugs for OIDC entries (the
+sign-in dispatcher would prefer the OIDC row, which is fine, but the
+behavioral overload is confusing).
 """
 from __future__ import annotations
 from typing import Optional
@@ -12,41 +19,56 @@ from typing import Optional
 from authlib.integrations.starlette_client import OAuth
 from sqlalchemy.orm import Session
 
-from ..models import ServerSettings
+from ..models import OidcProvider, ServerSettings
 from .crypto import decrypt
 
 
-def _provider_meta(s: ServerSettings) -> list[dict]:
-    """Public-facing list — what to show on the sign-in page."""
+def list_providers(db: Session) -> list[dict]:
+    """Public — what to render on the sign-in page. Returns one entry per
+    configured-and-enabled provider in this order: google, github, then
+    each OIDC row sorted by display_name. Each entry is
+    `{id: <slug>, label: <button text>, kind: 'google'|'github'|'oidc'}`.
+    """
     out: list[dict] = []
-    if s.oauth_google_client_id and s.oauth_google_client_secret_enc:
-        out.append({"id": "google", "label": "Continue with Google"})
-    if s.oauth_github_client_id and s.oauth_github_client_secret_enc:
-        out.append({"id": "github", "label": "Continue with GitHub"})
-    if (s.oidc_enabled and s.oidc_issuer
-            and s.oidc_client_id and s.oidc_client_secret_enc):
-        label = s.oidc_display_name or "Continue with SSO"
-        out.append({"id": "oidc", "label": label})
+    s: Optional[ServerSettings] = db.query(ServerSettings).get(1)
+    if s is not None:
+        if s.oauth_google_client_id and s.oauth_google_client_secret_enc:
+            out.append({"id": "google", "label": "Continue with Google", "kind": "google"})
+        if s.oauth_github_client_id and s.oauth_github_client_secret_enc:
+            out.append({"id": "github", "label": "Continue with GitHub", "kind": "github"})
+
+    rows = (
+        db.query(OidcProvider)
+        .filter(OidcProvider.enabled.is_(True))
+        .order_by(OidcProvider.display_name)
+        .all()
+    )
+    for r in rows:
+        if not (r.issuer and r.client_id and r.client_secret_enc):
+            continue
+        out.append({"id": r.slug, "label": r.display_name or "Continue with SSO", "kind": "oidc"})
     return out
 
 
-def list_providers(db: Session) -> list[dict]:
-    s: Optional[ServerSettings] = db.query(ServerSettings).get(1)
-    if s is None:
-        return []
-    return _provider_meta(s)
+def _normalize_metadata_url(issuer: str) -> str:
+    """OIDC discovery URL from issuer. Accepts the issuer with or without
+    the `.well-known/openid-configuration` suffix, since some IdP UIs
+    show one and some show the other."""
+    issuer = issuer.rstrip("/")
+    if issuer.endswith("/.well-known/openid-configuration"):
+        return issuer
+    return f"{issuer}/.well-known/openid-configuration"
 
 
 def build_oauth(db: Session) -> tuple[OAuth, dict]:
-    """Returns (oauth, registered) where `registered` maps provider name → True."""
+    """Returns (oauth, registered) where `registered` maps each
+    configured provider's slug → its `kind` ('google'|'github'|'oidc')."""
     oauth = OAuth()
-    registered: dict[str, bool] = {}
+    registered: dict[str, str] = {}
 
     s: Optional[ServerSettings] = db.query(ServerSettings).get(1)
-    if s is None:
-        return oauth, registered
 
-    if s.oauth_google_client_id and s.oauth_google_client_secret_enc:
+    if s is not None and s.oauth_google_client_id and s.oauth_google_client_secret_enc:
         oauth.register(
             name="google",
             client_id=s.oauth_google_client_id,
@@ -54,9 +76,9 @@ def build_oauth(db: Session) -> tuple[OAuth, dict]:
             server_metadata_url="https://accounts.google.com/.well-known/openid-configuration",
             client_kwargs={"scope": "openid email profile"},
         )
-        registered["google"] = True
+        registered["google"] = "google"
 
-    if s.oauth_github_client_id and s.oauth_github_client_secret_enc:
+    if s is not None and s.oauth_github_client_id and s.oauth_github_client_secret_enc:
         oauth.register(
             name="github",
             client_id=s.oauth_github_client_id,
@@ -66,27 +88,36 @@ def build_oauth(db: Session) -> tuple[OAuth, dict]:
             api_base_url="https://api.github.com/",
             client_kwargs={"scope": "user:email"},
         )
-        registered["github"] = True
+        registered["github"] = "github"
 
-    if (s.oidc_enabled and s.oidc_issuer
-            and s.oidc_client_id and s.oidc_client_secret_enc):
-        # OIDC discovery — Authlib pulls authorization, token, userinfo,
-        # and JWKS endpoints from the .well-known doc. The issuer URL
-        # may or may not include the /.well-known suffix; we add it if
-        # missing so admins can paste either form.
-        issuer = s.oidc_issuer.rstrip("/")
-        if issuer.endswith("/.well-known/openid-configuration"):
-            metadata_url = issuer
-        else:
-            metadata_url = f"{issuer}/.well-known/openid-configuration"
-        scopes = s.oidc_scopes or "openid email profile"
-        oauth.register(
-            name="oidc",
-            client_id=s.oidc_client_id,
-            client_secret=decrypt(s.oidc_client_secret_enc),
-            server_metadata_url=metadata_url,
-            client_kwargs={"scope": scopes},
-        )
-        registered["oidc"] = True
+    rows = (
+        db.query(OidcProvider)
+        .filter(OidcProvider.enabled.is_(True))
+        .all()
+    )
+    for r in rows:
+        if not (r.issuer and r.client_id and r.client_secret_enc):
+            continue
+        if r.slug in registered:
+            # Slug collision with google/github or another OIDC row —
+            # skip rather than overload behaviour. The CRUD layer
+            # rejects collisions on save, so this only happens via
+            # external DB tampering.
+            continue
+        try:
+            oauth.register(
+                name=r.slug,
+                client_id=r.client_id,
+                client_secret=decrypt(r.client_secret_enc),
+                server_metadata_url=_normalize_metadata_url(r.issuer),
+                client_kwargs={"scope": r.scopes or "openid email profile"},
+            )
+            registered[r.slug] = "oidc"
+        except Exception:
+            # A bad issuer URL or unreachable discovery doc shouldn't
+            # crash the rest of the auth surface. The caller will hit a
+            # 404 / 502 when actually starting the flow for this slug,
+            # which is the right place to surface the error.
+            continue
 
     return oauth, registered

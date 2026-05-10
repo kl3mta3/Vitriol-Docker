@@ -106,6 +106,34 @@ class User(Base):
     )
 
 
+class OidcProvider(Base):
+    """Operator-defined OpenID Connect provider.
+
+    Multiple providers can coexist (e.g. Authentik for staff + Auth0 for
+    customers). The slug becomes the URL fragment in the SSO callback —
+    `/api/v1/auth/sso/<slug>/callback` — so it's URL-safe and stable
+    across renames. Display name is what shows on the sign-in button.
+
+    The legacy single-OIDC fields on `ServerSettings` are auto-migrated
+    into a row here on first boot (slug=`oidc` to preserve any redirect
+    URI an operator may have already registered with their IdP).
+    """
+    __tablename__ = "oidc_providers"
+
+    id = Column(Integer, primary_key=True)
+    slug = Column(String(32), unique=True, nullable=False, index=True)
+    display_name = Column(String(64), nullable=False)
+    issuer = Column(String(512), nullable=False)
+    client_id = Column(String(255), nullable=False)
+    client_secret_enc = Column(Text, nullable=False)
+    scopes = Column(String(255), nullable=False, default="openid email profile")
+    enabled = Column(Boolean, nullable=False, default=True)
+
+    created_at = Column(DateTime, nullable=False, default=datetime.utcnow)
+    updated_at = Column(DateTime, nullable=False, default=datetime.utcnow, onupdate=datetime.utcnow)
+    created_by_user_id = Column(Integer, ForeignKey("users.id"), nullable=True)
+
+
 class CustomRole(Base):
     """Operator-defined role that overlays a built-in base role.
 
@@ -293,8 +321,19 @@ class ServerSettings(Base):
     default_admin_daily_limit = Column(Integer, nullable=False, default=500)
     default_admin_rate_limit = Column(Integer, nullable=False, default=120)
 
+    # Format-disable tiers. The original two are *globally* off — nobody,
+    # including the super admin, can use those formats. The two pairs
+    # below cap each role tier:
+    #   admin_*  → admins and below can't use these (super admin still can)
+    #   user_*   → users and below can't use these (admin + super still can)
+    # Conversion gate: if src/dst is in any list that applies to the
+    # caller's role, reject. Stored as JSON arrays of extension strings.
     disabled_input_formats_json = Column(Text, nullable=False, default="[]")
     disabled_output_formats_json = Column(Text, nullable=False, default="[]")
+    disabled_admin_input_formats_json = Column(Text, nullable=False, default="[]", server_default="[]")
+    disabled_admin_output_formats_json = Column(Text, nullable=False, default="[]", server_default="[]")
+    disabled_user_input_formats_json = Column(Text, nullable=False, default="[]", server_default="[]")
+    disabled_user_output_formats_json = Column(Text, nullable=False, default="[]", server_default="[]")
 
     allow_signup = Column(Boolean, nullable=False, default=False)
     signup_default_role = Column(SAEnum(Role, native_enum=False), nullable=False, default=Role.viewer)
@@ -312,8 +351,15 @@ class ServerSettings(Base):
     smtp_password_enc = Column(Text, nullable=True)
     smtp_from = Column(String(255), nullable=True)
     smtp_use_tls = Column(Boolean, nullable=False, default=True)
+    # Last test-email outcome: drives the green "configured" pill on the
+    # admin page so a successful test sticks across reloads. NULL = never
+    # tested. last_test_ok=False = failed and we should warn.
+    smtp_last_test_at = Column(DateTime, nullable=True)
+    smtp_last_test_ok = Column(Boolean, nullable=True)
 
     discord_webhook_url = Column(String(512), nullable=True)
+    discord_last_test_at = Column(DateTime, nullable=True)
+    discord_last_test_ok = Column(Boolean, nullable=True)
 
     oauth_google_client_id = Column(String(255), nullable=True)
     oauth_google_client_secret_enc = Column(Text, nullable=True)

@@ -153,6 +153,10 @@ class ServerSettingsOut(BaseModel):
     default_admin_rate_limit: int
     disabled_input_formats_json: str
     disabled_output_formats_json: str
+    disabled_admin_input_formats_json: str = "[]"
+    disabled_admin_output_formats_json: str = "[]"
+    disabled_user_input_formats_json: str = "[]"
+    disabled_user_output_formats_json: str = "[]"
     allow_signup: bool
     signup_default_role: str
     signup_default_custom_role_id: Optional[int] = None
@@ -163,7 +167,11 @@ class ServerSettingsOut(BaseModel):
     smtp_from: Optional[str]
     smtp_use_tls: bool
     smtp_password_set: bool = False
+    smtp_last_test_at: Optional[datetime] = None
+    smtp_last_test_ok: Optional[bool] = None
     discord_webhook_url: Optional[str]
+    discord_last_test_at: Optional[datetime] = None
+    discord_last_test_ok: Optional[bool] = None
     oauth_google_client_id: Optional[str]
     oauth_google_secret_set: bool = False
     oauth_github_client_id: Optional[str]
@@ -204,6 +212,10 @@ class ServerSettingsPatch(BaseModel):
     default_admin_rate_limit: Optional[int] = None
     disabled_input_formats: Optional[List[str]] = None
     disabled_output_formats: Optional[List[str]] = None
+    disabled_admin_input_formats: Optional[List[str]] = None
+    disabled_admin_output_formats: Optional[List[str]] = None
+    disabled_user_input_formats: Optional[List[str]] = None
+    disabled_user_output_formats: Optional[List[str]] = None
     allow_signup: Optional[bool] = None
     signup_default_role: Optional[str] = None
     signup_default_custom_role_id: Optional[int] = None

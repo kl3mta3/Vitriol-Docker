@@ -335,6 +335,10 @@ input:focus, select:focus, textarea:focus { outline: none; border-color: var(--p
 }
 .status-pill.ok { background: rgba(46,204,113,0.15); color: var(--green); border: 1px solid var(--green); }
 .status-pill.missing { background: rgba(245,158,11,0.15); color: var(--amber); border: 1px solid var(--amber); }
+/* Configured but never tested — softer amber to differentiate from
+   "not configured at all". Same family, lighter weight. */
+.status-pill.warn { background: rgba(245,158,11,0.10); color: var(--amber); border: 1px dashed var(--amber); }
+.status-pill.failed { background: rgba(192,57,43,0.18); color: var(--red-hot); border: 1px solid var(--red); }
 .status-pill:empty { display: none; }
 
 /* SMTP test-email row inside the SMTP fieldset. */
@@ -425,6 +429,25 @@ input:focus, select:focus, textarea:focus { outline: none; border-color: var(--p
 .retention-table input[type="number"] { width: 90px; }
 .retention-table select { width: 100px; }
 .retention-table input[type="checkbox"] { transform: scale(1.2); }
+
+/* OIDC providers list inside admin_server SSO section. Same shape as
+   the users table but tighter — short rows, click-to-edit cursor. */
+.oidc-table {
+  width: 100%; border-collapse: collapse; margin-top: 12px;
+  background: var(--surface-2); border: 1px solid var(--border);
+  border-radius: var(--radius); overflow: hidden;
+}
+.oidc-table th, .oidc-table td {
+  padding: 8px 10px; border-bottom: 1px solid var(--border);
+  font-size: 12px; vertical-align: middle; text-align: left;
+}
+.oidc-table thead th {
+  background: var(--surface); color: var(--ink-muted);
+  text-transform: uppercase; letter-spacing: 1px; font-size: 10px;
+}
+.oidc-table tbody tr.clickable { cursor: pointer; }
+.oidc-table tbody tr.clickable:hover { background: var(--surface); }
+.oidc-table .empty-state { color: var(--ink-faint); text-align: center; padding: 18px; }
 
 .users-table { width: 100%; border-collapse: collapse; background: var(--surface); border: 1px solid var(--border); border-radius: var(--radius); overflow: hidden; }
 .users-table th, .users-table td { padding: 10px 12px; border-bottom: 1px solid var(--border); text-align: left; font-size: 12px; }

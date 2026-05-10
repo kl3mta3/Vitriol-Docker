@@ -75,8 +75,33 @@
           <span>Require email verification on sign-up <em class="muted small">(turn off for SMTP-less or closed-network deployments — accounts are accepted immediately)</em></span>
         </label>
       </div>
-      <label class="full"><span>Disabled input formats (comma-separated, e.g. .pdf,.docx)</span><input name="disabled_input_formats" /></label>
-      <label class="full"><span>Disabled output formats</span><input name="disabled_output_formats" /></label>
+      <h3 class="display small" style="margin-top: 16px;">Disabled formats (per tier)</h3>
+      <p class="muted small">
+        Three tiers cascade — global is hardest, user is softest.
+        <strong>Globally</strong>: nobody can use these (including you).
+        <strong>Admin+below</strong>: super admin can still use, but anyone with admin role or lower is blocked.
+        <strong>User+below</strong>: users / viewers / pending blocked; admin and super admin can still use.
+        Comma-separated extension list with leading dots, e.g. <code>.exe,.dmg,.iso</code>.
+      </p>
+      <table class="retention-table" id="format-tiers-table">
+        <thead>
+          <tr><th></th><th>Globally</th><th>Admin + below</th><th>User + below</th></tr>
+        </thead>
+        <tbody>
+          <tr>
+            <th>Disabled inputs</th>
+            <td><input data-tier="global" data-dir="input" placeholder=".exe,.dmg" /></td>
+            <td><input data-tier="admin"  data-dir="input" placeholder=".bat" /></td>
+            <td><input data-tier="user"   data-dir="input" placeholder=".pdf" /></td>
+          </tr>
+          <tr>
+            <th>Disabled outputs</th>
+            <td><input data-tier="global" data-dir="output" placeholder=".exe" /></td>
+            <td><input data-tier="admin"  data-dir="output" placeholder=".py" /></td>
+            <td><input data-tier="user"   data-dir="output" placeholder=".exe,.py" /></td>
+          </tr>
+        </tbody>
+      </table>
     </details>
 
     <details id="smtp"><summary>SMTP (verification + admin notifications) <span id="smtp-status-pill" class="status-pill"></span></summary>
@@ -96,8 +121,12 @@
       </div>
     </details>
 
-    <details><summary>Discord webhook</summary>
+    <details><summary>Discord webhook <span id="discord-status-pill" class="status-pill"></span></summary>
       <label class="full"><span>Webhook URL</span><input name="discord_webhook_url" /></label>
+      <div class="smtp-test">
+        <button type="button" id="discord-test-btn" class="btn btn-secondary">Send test message</button>
+        <p id="discord-test-msg" class="ok" hidden></p>
+      </div>
     </details>
 
     <details><summary>SSO providers</summary>
@@ -108,17 +137,62 @@
         <label><span>GitHub secret</span><input name="oauth_github_client_secret" type="password" placeholder="(unchanged)" /></label>
       </div>
 
-      <h3 class="display small" style="margin-top:18px;">OpenID Connect (Authentik / Keycloak / Auth0 / Okta)</h3>
-      <p class="muted small">Generic OIDC. Paste your provider's issuer URL (with or without <code>/.well-known/openid-configuration</code>) — discovery handles the rest. Redirect URI: <code id="oidc-redirect-uri">/api/v1/auth/sso/oidc/callback</code></p>
-      <div class="grid-2">
-        <label class="checkbox-row"><input type="checkbox" name="oidc_enabled" /> <span>Enable OIDC sign-in</span></label>
-        <label><span>Display name (button label)</span><input name="oidc_display_name" placeholder="Authentik" /></label>
-        <label class="full"><span>Issuer URL</span><input name="oidc_issuer" placeholder="https://auth.example.com/application/o/vitriol/" /></label>
-        <label><span>Client ID</span><input name="oidc_client_id" /></label>
-        <label><span>Client secret</span><input name="oidc_client_secret" type="password" placeholder="(unchanged)" /></label>
-        <label class="full"><span>Scopes (space-separated)</span><input name="oidc_scopes" placeholder="openid email profile" /></label>
+      <h3 class="display small" style="margin-top:18px;">OpenID Connect providers</h3>
+      <p class="muted small">
+        Add as many OIDC providers as you need (Authentik for staff, Auth0 for customers, Okta for partners, etc.).
+        Each row's <strong>slug</strong> becomes the path fragment of its callback URL — paste
+        <code id="oidc-redirect-uri-template">https://YOUR_HOST/api/v1/auth/sso/&lt;slug&gt;/callback</code>
+        into your IdP's allowed redirect URIs.
+      </p>
+
+      <table class="oidc-table" id="oidc-table">
+        <thead>
+          <tr><th>Display name</th><th>Slug</th><th>Issuer</th><th>Enabled</th><th></th></tr>
+        </thead>
+        <tbody id="oidc-tbody"></tbody>
+      </table>
+      <div style="margin-top: 8px;">
+        <button type="button" id="oidc-add-btn" class="btn btn-secondary">+ Add OIDC provider</button>
       </div>
     </details>
+
+<dialog id="oidc-form-dialog" class="manage-dialog">
+  <form id="oidc-form">
+    <header class="manage-head">
+      <h2 class="display small" id="oidc-form-title">Add OIDC provider</h2>
+    </header>
+    <input type="hidden" name="id" />
+
+    <details open>
+      <summary>Identity</summary>
+      <div class="grid-2">
+        <label><span>Display name (button label)</span><input name="display_name" required placeholder="Authentik" /></label>
+        <label><span>Slug (URL-safe — auto from display name if blank)</span><input name="slug" placeholder="authentik" pattern="[a-z0-9][a-z0-9-]{1,30}[a-z0-9]" /></label>
+        <label class="full"><span>Issuer URL</span><input name="issuer" required placeholder="https://auth.example.com/application/o/vitriol/" /></label>
+        <label class="full"><span>Scopes</span><input name="scopes" placeholder="openid email profile" /></label>
+        <label class="checkbox-row"><input type="checkbox" name="enabled" checked /> <span>Enabled</span></label>
+      </div>
+    </details>
+
+    <details open>
+      <summary>Credentials</summary>
+      <div class="grid-2">
+        <label><span>Client ID</span><input name="client_id" required /></label>
+        <label><span>Client secret</span><input name="client_secret" type="password" autocomplete="new-password" placeholder="(unchanged when editing)" /></label>
+      </div>
+      <p class="muted small">Redirect URI to register with this provider's IdP:</p>
+      <pre id="oidc-form-redirect" class="cli-block">https://YOUR_HOST/api/v1/auth/sso/&lt;slug&gt;/callback</pre>
+    </details>
+
+    <footer class="dialog-actions">
+      <button type="button" id="oidc-form-delete" class="btn btn-danger" hidden>Delete</button>
+      <span style="flex:1;"></span>
+      <button type="button" class="btn btn-ghost" data-close>Cancel</button>
+      <button type="submit" class="btn btn-primary">Save</button>
+    </footer>
+    <p id="oidc-form-msg" class="ok small" hidden></p>
+  </form>
+</dialog>
 
     <details><summary>Server secret key</summary>
       <p class="muted small">

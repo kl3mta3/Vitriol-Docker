@@ -36,6 +36,10 @@ def _to_out(s: ServerSettings) -> ServerSettingsOut:
         default_admin_rate_limit=s.default_admin_rate_limit,
         disabled_input_formats_json=s.disabled_input_formats_json,
         disabled_output_formats_json=s.disabled_output_formats_json,
+        disabled_admin_input_formats_json=s.disabled_admin_input_formats_json or "[]",
+        disabled_admin_output_formats_json=s.disabled_admin_output_formats_json or "[]",
+        disabled_user_input_formats_json=s.disabled_user_input_formats_json or "[]",
+        disabled_user_output_formats_json=s.disabled_user_output_formats_json or "[]",
         allow_signup=s.allow_signup,
         signup_default_role=s.signup_default_role.value if hasattr(s.signup_default_role, "value") else str(s.signup_default_role),
         signup_default_custom_role_id=s.signup_default_custom_role_id,
@@ -43,7 +47,11 @@ def _to_out(s: ServerSettings) -> ServerSettingsOut:
         smtp_host=s.smtp_host, smtp_port=s.smtp_port, smtp_user=s.smtp_user,
         smtp_from=s.smtp_from, smtp_use_tls=s.smtp_use_tls,
         smtp_password_set=bool(s.smtp_password_enc),
+        smtp_last_test_at=s.smtp_last_test_at,
+        smtp_last_test_ok=s.smtp_last_test_ok,
         discord_webhook_url=s.discord_webhook_url,
+        discord_last_test_at=s.discord_last_test_at,
+        discord_last_test_ok=s.discord_last_test_ok,
         oauth_google_client_id=s.oauth_google_client_id,
         oauth_google_secret_set=bool(s.oauth_google_client_secret_enc),
         oauth_github_client_id=s.oauth_github_client_id,
@@ -166,6 +174,14 @@ def patch_server_settings(
         s.disabled_input_formats_json = json.dumps(req.disabled_input_formats)
     if req.disabled_output_formats is not None:
         s.disabled_output_formats_json = json.dumps(req.disabled_output_formats)
+    if req.disabled_admin_input_formats is not None:
+        s.disabled_admin_input_formats_json = json.dumps(req.disabled_admin_input_formats)
+    if req.disabled_admin_output_formats is not None:
+        s.disabled_admin_output_formats_json = json.dumps(req.disabled_admin_output_formats)
+    if req.disabled_user_input_formats is not None:
+        s.disabled_user_input_formats_json = json.dumps(req.disabled_user_input_formats)
+    if req.disabled_user_output_formats is not None:
+        s.disabled_user_output_formats_json = json.dumps(req.disabled_user_output_formats)
     if req.output_retention is not None:
         # Sanitize incoming structure — accept only known roles + fields,
         # coerce types so a misbehaving frontend can't poison the JSON.
@@ -283,6 +299,7 @@ async def test_email(
         "If you can read this, SMTP is wired up correctly.\n\n"
         f"Sent by Vitriol via {s.smtp_host}:{s.smtp_port or 587} as {s.smtp_user or '(no auth)'}.\n"
     )
+    from datetime import datetime as _dt
     try:
         await aiosmtplib.send(
             msg,
@@ -293,9 +310,50 @@ async def test_email(
             start_tls=bool(s.smtp_use_tls),
         )
     except Exception as e:
+        s.smtp_last_test_at = _dt.utcnow()
+        s.smtp_last_test_ok = False
+        db.commit()
         raise HTTPException(status_code=502, detail=f"SMTP delivery failed: {e}")
+    s.smtp_last_test_at = _dt.utcnow()
+    s.smtp_last_test_ok = True
+    db.commit()
     audit.log(db, actor.id, "smtp_test", metadata={"to": to})
     return MessageResponse(message=f"Test email sent to {to}.")
+
+
+@router.post("/test-discord", response_model=MessageResponse)
+async def test_discord(
+    actor: User = Depends(require_super_admin),
+    db: Session = Depends(get_db),
+):
+    """Send a one-off message to the configured Discord webhook so the
+    super admin can verify their URL works without waiting for a real
+    pending-approval event."""
+    s = db.query(ServerSettings).get(1)
+    if s is None or not s.discord_webhook_url:
+        raise HTTPException(status_code=400, detail="Discord webhook URL is empty.")
+    import httpx as _httpx
+    from datetime import datetime as _dt
+    payload = {
+        "content": (
+            ":zap: Vitriol test message — your Discord integration is working. "
+            "(This was triggered manually from the Server settings page.)"
+        )
+    }
+    try:
+        async with _httpx.AsyncClient(timeout=10) as client:
+            r = await client.post(s.discord_webhook_url, json=payload)
+            r.raise_for_status()
+    except Exception as e:
+        s.discord_last_test_at = _dt.utcnow()
+        s.discord_last_test_ok = False
+        db.commit()
+        raise HTTPException(status_code=502, detail=f"Discord post failed: {e}")
+    s.discord_last_test_at = _dt.utcnow()
+    s.discord_last_test_ok = True
+    db.commit()
+    audit.log(db, actor.id, "discord_test")
+    return MessageResponse(message="Discord test message posted.")
 
 
 @router.post("/refresh-certs", response_model=MessageResponse)

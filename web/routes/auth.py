@@ -260,6 +260,13 @@ def auth_policy(db: Session = Depends(get_db)):
 
 @router.get("/sso/{provider}/start")
 async def sso_start(provider: str, request: Request, db: Session = Depends(get_db)):
+    """Start the OAuth/OIDC dance for a named provider.
+
+    `provider` is the registry slug — `google`, `github`, or any of the
+    OIDC slugs the super admin defined under Server settings. The
+    `oauth.<slug>.authorize_redirect` call generates the IdP-specific
+    authorization URL and 302s the browser there.
+    """
     oauth, registered = build_oauth(db)
     if provider not in registered:
         raise HTTPException(status_code=404, detail="SSO provider not configured")
@@ -274,18 +281,19 @@ async def sso_callback(
     oauth, registered = build_oauth(db)
     if provider not in registered:
         raise HTTPException(status_code=404, detail="SSO provider not configured")
+    kind = registered[provider]   # 'google' | 'github' | 'oidc'
     client = getattr(oauth, provider)
     token = await client.authorize_access_token(request)
 
     sub: Optional[str] = None
     email: Optional[str] = None
     name: Optional[str] = None
-    if provider == "google":
+    if kind == "google":
         info = token.get("userinfo") or await client.userinfo(token=token)
         sub = info.get("sub")
         email = info.get("email")
         name = info.get("name") or info.get("given_name")
-    elif provider == "github":
+    elif kind == "github":
         resp = await client.get("user", token=token)
         info = resp.json()
         sub = str(info.get("id"))
@@ -298,10 +306,11 @@ async def sso_callback(
                     break
         else:
             email = info["email"]
-    else:
-        # Generic OIDC (Authentik, Keycloak, Auth0, ...). Authlib does the
-        # ID-token validation against JWKS pulled from the discovery doc;
-        # `userinfo` returns the standard OIDC claims set.
+    elif kind == "oidc":
+        # Any operator-defined OIDC provider (Authentik, Keycloak, Auth0,
+        # Okta, Zitadel, ...). Authlib validates the ID token against
+        # JWKS pulled from the discovery doc; `userinfo` returns the
+        # standard OIDC claims set.
         info = token.get("userinfo")
         if info is None:
             try:

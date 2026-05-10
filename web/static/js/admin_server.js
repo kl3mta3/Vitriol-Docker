@@ -120,13 +120,14 @@ async function load() {
     }
   }
 
-  // SMTP status pill + signup-without-SMTP warning banner.
+  // SMTP / Discord status pills — reflect last-test state so a green
+  // "configured" sticks across reloads (vs. the old "configured the
+  // moment fields are non-empty" which was misleading after a failed
+  // test).
   const smtpConfigured = !!(s.smtp_host && s.smtp_from);
-  const pill = document.getElementById('smtp-status-pill');
-  if (pill) {
-    pill.textContent = smtpConfigured ? 'configured' : 'not configured';
-    pill.className = 'status-pill ' + (smtpConfigured ? 'ok' : 'missing');
-  }
+  paintServicePill('smtp-status-pill', smtpConfigured, s.smtp_last_test_ok);
+  const discordConfigured = !!s.discord_webhook_url;
+  paintServicePill('discord-status-pill', discordConfigured, s.discord_last_test_ok);
   const banner = document.getElementById('smtp-warning');
   if (banner) {
     // Only nag about SMTP when sign-up is on AND the verification email
@@ -353,6 +354,212 @@ async function populateSignupRoleSelect(s) {
     ? `custom:${s.signup_default_custom_role_id}`
     : `builtin:${s.signup_default_role}`;
 }
+
+// ============================================================
+// OIDC providers — list + click-to-edit + delete
+// ============================================================
+//
+// Same pattern as the custom-roles list: fetch, render rows, clicking a
+// row (or the inline Edit-style icon) opens a modal pre-populated with
+// that provider's fields. The "+ Add" button opens the same dialog
+// blank. Save POSTs (new) or PATCHes (existing); Delete only shows when
+// editing an existing row.
+
+const oidcTbody = document.getElementById('oidc-tbody');
+const oidcDialog = document.getElementById('oidc-form-dialog');
+const oidcForm = document.getElementById('oidc-form');
+const oidcAddBtn = document.getElementById('oidc-add-btn');
+const oidcRedirectPreview = document.getElementById('oidc-form-redirect');
+
+async function loadOidcProviders() {
+  if (!oidcTbody) return;
+  let rows = [];
+  try { rows = await api.get('/server/oidc-providers'); } catch (_) { rows = []; }
+  oidcTbody.innerHTML = '';
+  if (!Array.isArray(rows) || rows.length === 0) {
+    const tr = document.createElement('tr');
+    tr.innerHTML = '<td colspan="5" class="empty-state">No OIDC providers yet. Click "+ Add OIDC provider" below.</td>';
+    oidcTbody.appendChild(tr);
+    return;
+  }
+  for (const p of rows) {
+    const tr = document.createElement('tr');
+    tr.className = 'user-row clickable';
+    tr.dataset.id = p.id;
+    tr.innerHTML = `
+      <td>${escapeHtmlSimple(p.display_name)}</td>
+      <td><code>${escapeHtmlSimple(p.slug)}</code></td>
+      <td class="muted small" style="max-width: 320px; overflow: hidden; text-overflow: ellipsis; white-space: nowrap;">${escapeHtmlSimple(p.issuer)}</td>
+      <td>${p.enabled ? '<span class="status-pill ok">on</span>' : '<span class="status-pill missing">off</span>'}</td>
+      <td class="row-manage-cell"><button type="button" class="btn btn-secondary btn-manage">Edit</button></td>
+    `;
+    tr.addEventListener('click', () => openOidcForm(p));
+    oidcTbody.appendChild(tr);
+  }
+}
+
+function escapeHtmlSimple(s) {
+  return String(s == null ? '' : s).replace(/[&<>"']/g, c => ({
+    '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;', "'": '&#39;'
+  }[c]));
+}
+
+function openOidcForm(p) {
+  // p === null → blank dialog for "Add". p === object → populated for "Edit".
+  oidcForm.id.value = p ? p.id : '';
+  oidcForm.display_name.value = p ? p.display_name : '';
+  oidcForm.slug.value = p ? p.slug : '';
+  oidcForm.issuer.value = p ? p.issuer : '';
+  oidcForm.scopes.value = p ? (p.scopes || 'openid email profile') : 'openid email profile';
+  oidcForm.client_id.value = p ? p.client_id : '';
+  oidcForm.client_secret.value = '';
+  oidcForm.enabled.checked = p ? !!p.enabled : true;
+  document.getElementById('oidc-form-title').textContent = p ? `Edit — ${p.display_name}` : 'Add OIDC provider';
+  document.getElementById('oidc-form-delete').hidden = !p;
+  document.getElementById('oidc-form-msg').hidden = true;
+  updateOidcRedirectPreview();
+  oidcDialog.showModal();
+}
+
+function updateOidcRedirectPreview() {
+  if (!oidcRedirectPreview) return;
+  const slug = (oidcForm.slug.value || '').trim() ||
+               (oidcForm.display_name.value || '').toLowerCase().replace(/[^a-z0-9-]+/g, '-').replace(/^-+|-+$/g, '') ||
+               '<slug>';
+  const base = (form.elements['public_base_url'] && form.elements['public_base_url'].value) || location.origin;
+  oidcRedirectPreview.textContent = `${base.replace(/\/+$/, '')}/api/v1/auth/sso/${slug}/callback`;
+}
+if (oidcForm) {
+  oidcForm.slug.addEventListener('input', updateOidcRedirectPreview);
+  oidcForm.display_name.addEventListener('input', updateOidcRedirectPreview);
+}
+
+if (oidcAddBtn) oidcAddBtn.addEventListener('click', () => openOidcForm(null));
+
+if (oidcForm) oidcForm.addEventListener('submit', async (e) => {
+  e.preventDefault();
+  const id = oidcForm.id.value;
+  const msg = document.getElementById('oidc-form-msg');
+  msg.hidden = true;
+  // Build payload — only include client_secret if the user actually
+  // typed something (blank means "don't change" on edit; required on
+  // create — server validates).
+  const payload = {
+    slug: oidcForm.slug.value.trim() || null,
+    display_name: oidcForm.display_name.value.trim(),
+    issuer: oidcForm.issuer.value.trim(),
+    client_id: oidcForm.client_id.value.trim(),
+    scopes: oidcForm.scopes.value.trim() || 'openid email profile',
+    enabled: oidcForm.enabled.checked,
+  };
+  if (oidcForm.client_secret.value) payload.client_secret = oidcForm.client_secret.value;
+  try {
+    if (id) {
+      await api.patch(`/server/oidc-providers/${id}`, payload);
+    } else {
+      // New providers REQUIRE a secret — surface inline rather than 400.
+      if (!payload.client_secret) {
+        msg.textContent = 'Client secret is required for new providers.';
+        msg.className = 'error small';
+        msg.hidden = false;
+        return;
+      }
+      await api.post('/server/oidc-providers', payload);
+    }
+    oidcDialog.close();
+    await loadOidcProviders();
+  } catch (ex) {
+    msg.textContent = (ex && ex.detail) || 'Save failed';
+    msg.className = 'error small';
+    msg.hidden = false;
+  }
+});
+
+if (document.getElementById('oidc-form-delete')) {
+  document.getElementById('oidc-form-delete').addEventListener('click', async () => {
+    const id = oidcForm.id.value;
+    if (!id) return;
+    const name = oidcForm.display_name.value || 'this provider';
+    if (!confirm(`Delete ${name}? Users who signed in via it will lose that link.`)) return;
+    try {
+      await api.del(`/server/oidc-providers/${id}`);
+      oidcDialog.close();
+      await loadOidcProviders();
+    } catch (ex) {
+      const msg = document.getElementById('oidc-form-msg');
+      msg.textContent = (ex && ex.detail) || 'Delete failed';
+      msg.className = 'error small';
+      msg.hidden = false;
+    }
+  });
+}
+
+// Kick off the initial load when the SSO section is in the DOM.
+if (oidcTbody) loadOidcProviders();
+
+// ============================================================
+// SMTP + Discord pill state — uses last_test_ok/at to drive colour
+// ============================================================
+//
+// Pill states:
+//   ok        — host/from set AND last test passed → green "configured"
+//   untested  — host/from set, never tested        → amber "untested"
+//   missing   — required fields empty              → amber "not configured"
+//   failed    — last test failed                   → red   "test failed"
+
+function paintServicePill(pillId, configured, lastTestOk, untestedLabel = 'untested') {
+  const pill = document.getElementById(pillId);
+  if (!pill) return;
+  if (!configured) {
+    pill.textContent = 'not configured';
+    pill.className = 'status-pill missing';
+    return;
+  }
+  if (lastTestOk === true) {
+    pill.textContent = 'configured';
+    pill.className = 'status-pill ok';
+    return;
+  }
+  if (lastTestOk === false) {
+    pill.textContent = 'last test failed';
+    pill.className = 'status-pill failed';
+    return;
+  }
+  pill.textContent = untestedLabel;
+  pill.className = 'status-pill warn';
+}
+
+// ============================================================
+// Discord test button — same shape as SMTP test
+// ============================================================
+
+const discordTestBtn = document.getElementById('discord-test-btn');
+if (discordTestBtn) discordTestBtn.addEventListener('click', async () => {
+  const msg = document.getElementById('discord-test-msg');
+  msg.hidden = true; msg.className = 'ok small';
+  discordTestBtn.disabled = true;
+  const original = discordTestBtn.textContent;
+  discordTestBtn.textContent = 'Posting…';
+  try {
+    // Auto-save first so a freshly-pasted webhook URL is persisted
+    // before we try to use it.
+    form.dispatchEvent(new Event('submit', { cancelable: true }));
+    await new Promise(r => setTimeout(r, 350));
+    const r = await api.post('/server/test-discord', {});
+    msg.textContent = r.message || 'Posted.';
+    msg.className = 'ok small';
+    msg.hidden = false;
+    await load();   // refresh pill state
+  } catch (ex) {
+    msg.textContent = (ex && ex.detail) || 'Failed';
+    msg.className = 'error small';
+    msg.hidden = false;
+    await load();
+  } finally {
+    discordTestBtn.disabled = false;
+    discordTestBtn.textContent = original;
+  }
+});
 
 // Send a test email through the saved SMTP settings — no DB writes.
 const testBtn = document.getElementById('smtp-test-btn');
