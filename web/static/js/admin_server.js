@@ -842,6 +842,10 @@ if (testBtn) testBtn.addEventListener('click', async () => {
   testBtn.disabled = true;
   testBtn.textContent = 'Sending…';
   try {
+    // Persist any unsaved field edits (host, port, password, etc.) so the
+    // server tests against what the admin sees on screen.
+    form.dispatchEvent(new Event('submit', { cancelable: true }));
+    await new Promise(r => setTimeout(r, 350));
     const r = await api.post('/server/test-email', { to });
     msg.textContent = r.message;
     msg.className = 'ok';
@@ -852,7 +856,49 @@ if (testBtn) testBtn.addEventListener('click', async () => {
     msg.hidden = false;
     testBtn.disabled = false;
     testBtn.textContent = 'Send test email';
+    // Refresh pill state from server so the banner + pill reflect the
+    // new last_test_ok flag persisted by the test endpoint.
+    try { await load(); } catch {}
   }
 });
+
+// ============================================================
+// SSO test buttons — opens /auth/sso/<provider>/start in a new tab.
+// The flow itself proves the redirect URI + client credentials are
+// configured correctly (any misconfig surfaces as a provider error
+// page in the popup window).
+// ============================================================
+
+function wireSsoTest(btnId, msgId, provider) {
+  const btn = document.getElementById(btnId);
+  if (!btn) return;
+  btn.addEventListener('click', async () => {
+    const msg = document.getElementById(msgId);
+    msg.hidden = true;
+    btn.disabled = true;
+    const original = btn.textContent;
+    btn.textContent = 'Saving…';
+    try {
+      // Persist any field edits first so the test uses what's on screen.
+      form.dispatchEvent(new Event('submit', { cancelable: true }));
+      await new Promise(r => setTimeout(r, 350));
+      const url = `/api/v1/auth/sso/${provider}/start?test=1`;
+      window.open(url, '_blank', 'noopener,width=600,height=700');
+      msg.textContent = 'Opened sign-in window — complete it to verify config.';
+      msg.className = 'muted small';
+      msg.hidden = false;
+    } catch (ex) {
+      msg.textContent = (ex && ex.detail) || 'Failed to launch test.';
+      msg.className = 'error small';
+      msg.hidden = false;
+    } finally {
+      btn.disabled = false;
+      btn.textContent = original;
+    }
+  });
+}
+
+wireSsoTest('google-test-btn', 'google-test-msg', 'google');
+wireSsoTest('github-test-btn', 'github-test-msg', 'github');
 
 load();

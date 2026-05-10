@@ -258,6 +258,22 @@ def auth_policy(db: Session = Depends(get_db)):
     }
 
 
+def _sso_redirect_uri(request: Request, db: Session, provider: str) -> str:
+    """Build the redirect URI Google/GitHub/OIDC must redirect back to.
+
+    Prefers the operator-configured ``public_base_url`` so the URL exactly
+    matches what was registered with the IdP. Falls back to
+    ``request.url_for()`` only when no public URL is set (dev/localhost).
+    Behind a proxy ``request.url_for`` can produce ``http://internal-host``
+    which never matches the IdP's registered URI.
+    """
+    s = db.query(ServerSettings).filter(ServerSettings.id == 1).first()
+    base = (s.public_base_url if s and s.public_base_url else "").strip().rstrip("/")
+    if base:
+        return f"{base}/api/v1/auth/sso/{provider}/callback"
+    return str(request.url_for("sso_callback", provider=provider))
+
+
 @router.get("/sso/{provider}/start")
 async def sso_start(provider: str, request: Request, db: Session = Depends(get_db)):
     """Start the OAuth/OIDC dance for a named provider.
@@ -270,7 +286,7 @@ async def sso_start(provider: str, request: Request, db: Session = Depends(get_d
     oauth, registered = build_oauth(db)
     if provider not in registered:
         raise HTTPException(status_code=404, detail="SSO provider not configured")
-    redirect_uri = str(request.url_for("sso_callback", provider=provider))
+    redirect_uri = _sso_redirect_uri(request, db, provider)
     return await getattr(oauth, provider).authorize_redirect(request, redirect_uri)
 
 
