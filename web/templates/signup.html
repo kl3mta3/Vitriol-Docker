@@ -3,6 +3,8 @@
 {% block content %}
 <section class="auth-card">
   <h1 class="display">Create an account</h1>
+
+  {% if password_signin_enabled %}
   <form id="signup-form" class="stack">
     <label><span>Username</span><input name="username" type="text" required minlength="3" maxlength="64" /></label>
     <label><span>Email</span><input name="email" type="email" required /></label>
@@ -11,6 +13,24 @@
     <p id="signup-error" class="error" hidden></p>
     <p id="signup-ok" class="ok" hidden></p>
   </form>
+
+  {# Divider — only shown when both password and SSO paths are
+     available, so it doesn't look weird above an SSO-only screen. #}
+  <p id="signup-divider" class="muted small" style="text-align: center; margin: 16px 0 12px 0;" hidden>
+    — or sign up with —
+  </p>
+  {% else %}
+  <p class="muted small" style="text-align: center; margin: 16px 0;">
+    Password sign-up is disabled. Use one of the providers below.
+  </p>
+  {% endif %}
+
+  {# Populated by signup.js from /api/v1/auth/policy — same providers
+     as on the sign-in page. SSO sign-up reuses the existing /sso/<id>/start
+     flow; the callback creates a new Vitriol account from the IdP-supplied
+     email + name (passwordless until the user sets one in Profile). #}
+  <div class="sso-row" id="sso-row" hidden></div>
+
   <div class="auth-foot"><a href="/signin">Already have an account?</a></div>
 </section>
 {% endblock %}

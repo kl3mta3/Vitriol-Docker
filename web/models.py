@@ -118,6 +118,12 @@ class User(Base):
     def custom_role_name(self):
         return self.custom_role.name if self.custom_role is not None else None
 
+    # Surfaced via UserOut so the profile UI can render "Set password" vs
+    # "Change password" for SSO-only users without ever seeing the hash.
+    @property
+    def has_password(self) -> bool:
+        return bool(self.password_hash)
+
     __table_args__ = (
         # Only one super admin row may exist. Partial unique indexes are
         # supported by SQLite and Postgres.

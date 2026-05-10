@@ -57,6 +57,10 @@ class UserOut(BaseModel):
     theme: str = "default"
     custom_role_id: Optional[int] = None
     custom_role_name: Optional[str] = None
+    # Surfaced as a boolean rather than the hash itself so the UI can
+    # decide whether to show "Change password" or "Set password" without
+    # ever seeing the actual credential material.
+    has_password: bool = False
     created_at: datetime
     last_login_at: Optional[datetime]
 

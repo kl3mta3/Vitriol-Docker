@@ -1,3 +1,29 @@
+// Adapt the password card based on whether the current user has a
+// password set. SSO-only users (signed up via Google/GitHub/OIDC with
+// no password ever assigned) see "Set password" with no "Current"
+// field. Users with a password see the standard "Change password"
+// flow that requires the current password as a re-auth step.
+(async function configurePasswordCard() {
+  let me = null;
+  try { me = await api.get('/me'); } catch (_) { return; }
+  if (!me) return;
+  const heading = document.getElementById('password-heading');
+  const submit = document.getElementById('password-submit');
+  const currentLabel = document.getElementById('password-current-label');
+  const ssoHint = document.getElementById('password-sso-hint');
+  if (me.has_password) {
+    if (heading) heading.textContent = 'Password';
+    if (submit) submit.textContent = 'Change password';
+    if (currentLabel) currentLabel.hidden = false;
+    if (ssoHint) ssoHint.hidden = true;
+  } else {
+    if (heading) heading.textContent = 'Set password';
+    if (submit) submit.textContent = 'Set password';
+    if (currentLabel) currentLabel.hidden = true;
+    if (ssoHint) ssoHint.hidden = false;
+  }
+})();
+
 document.getElementById('profile-form').addEventListener('submit', async (e) => {
   e.preventDefault();
   const data = Object.fromEntries(new FormData(e.target));

@@ -27,11 +27,15 @@
   </div>
 
   <div class="card">
-    <h2 class="display small">Password</h2>
+    <h2 class="display small" id="password-heading">Password</h2>
+    <p id="password-sso-hint" class="muted small" hidden>
+      You signed in via SSO and don't have a password yet. Set one here
+      if you want to also sign in with a username and password.
+    </p>
     <form id="password-form" class="stack">
-      <label><span>Current</span><input name="current_password" type="password" /></label>
-      <label><span>New password</span><input name="new_password" type="password" minlength="8" required /></label>
-      <button class="btn btn-primary" type="submit">Change password</button>
+      <label id="password-current-label"><span>Current</span><input name="current_password" type="password" autocomplete="current-password" /></label>
+      <label><span>New password</span><input name="new_password" type="password" minlength="8" autocomplete="new-password" required /></label>
+      <button class="btn btn-primary" type="submit" id="password-submit">Change password</button>
       <p id="password-msg" class="ok" hidden></p>
     </form>
   </div>
