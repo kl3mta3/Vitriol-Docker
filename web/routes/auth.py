@@ -421,7 +421,20 @@ async def sso_callback(
     import logging as _logging
     _sso_log = _logging.getLogger("vitriol.sso")
 
-    oauth, registered = build_oauth(db)
+    # build_oauth decrypts every client secret on the way out. If the
+    # secrets were encrypted with a previous SECRET_KEY (e.g. saved
+    # before the dual-storage fix landed), decrypt returns None and
+    # Authlib later 500s deep inside the token exchange. Wrap the whole
+    # registration step so the operator sees a useful error instead of
+    # "Internal Server Error".
+    try:
+        oauth, registered = build_oauth(db)
+    except Exception as e:
+        _sso_log.exception("build_oauth failed")
+        raise HTTPException(
+            status_code=502,
+            detail=f"SSO provider registry failed ({type(e).__name__}): {e}",
+        )
     if provider not in registered:
         raise HTTPException(status_code=404, detail="SSO provider not configured")
     kind = registered[provider]   # 'google' | 'github' | 'oidc'
@@ -535,11 +548,27 @@ async def sso_callback(
             },
         )
 
-    identity: Optional[OAuthIdentity] = (
-        db.query(OAuthIdentity)
-        .filter(OAuthIdentity.provider == provider, OAuthIdentity.subject == sub)
-        .one_or_none()
-    )
+    # Honor the operator's allow_signup toggle for *new* SSO accounts too.
+    # An existing identity (case 1) or an email match against an existing
+    # user (case 2) is always allowed — those aren't sign-ups, they're
+    # sign-ins for an account that already exists. Only case 3 (truly
+    # new email never seen before) goes through the toggle.
+    settings_for_signup: Optional[ServerSettings] = db.query(ServerSettings).get(1)
+    sso_allow_signup = bool(settings_for_signup and settings_for_signup.allow_signup)
+
+    try:
+        identity: Optional[OAuthIdentity] = (
+            db.query(OAuthIdentity)
+            .filter(OAuthIdentity.provider == provider, OAuthIdentity.subject == sub)
+            .one_or_none()
+        )
+    except Exception as e:
+        _sso_log.exception("SSO identity lookup failed")
+        raise HTTPException(
+            status_code=502,
+            detail=f"SSO identity lookup failed ({type(e).__name__}): {e}",
+        )
+
     if identity is not None:
         # Existing identity row — sign in as the linked user.
         user = db.query(User).get(identity.user_id)
@@ -590,29 +619,51 @@ async def sso_callback(
         else:
             # Truly new — create a fresh account with the configured
             # signup default role. (This path is what makes "Sign up via
-            # Google" work for first-time users.)
-            s: Optional[ServerSettings] = db.query(ServerSettings).get(1)
-            default_role = (s.signup_default_role if s else Role.viewer) or Role.viewer
-            username = (name or f"{provider}_{sub}")[:64]
-            i = 1
-            while db.query(User).filter(User.username == username).count():
-                username = f"{(name or provider)[:60]}_{i}"
-                i += 1
-            user = User(
-                username=username, email=email,
-                password_hash=None,
-                role=default_role,
-                status=Status.active,
-                email_verified_at=datetime.utcnow() if email else None,
-            )
-            db.add(user)
-            db.commit()
-            db.refresh(user)
-            identity = OAuthIdentity(
-                user_id=user.id, provider=provider, subject=sub, email=email,
-            )
-            db.add(identity)
-            db.commit()
+            # Google" work for first-time users.) Gated on the operator's
+            # allow_signup toggle: if sign-ups are disabled, this path
+            # rejects the SSO attempt the same way the password sign-up
+            # endpoint does.
+            if not sso_allow_signup:
+                raise HTTPException(
+                    status_code=403,
+                    detail=(
+                        "Sign-up is disabled. Ask an administrator to "
+                        "create your account first, then sign in via SSO."
+                    ),
+                )
+            try:
+                default_role = (
+                    settings_for_signup.signup_default_role
+                    if settings_for_signup else Role.viewer
+                ) or Role.viewer
+                username = (name or f"{provider}_{sub}")[:64]
+                i = 1
+                while db.query(User).filter(User.username == username).count():
+                    username = f"{(name or provider)[:60]}_{i}"
+                    i += 1
+                user = User(
+                    username=username, email=email,
+                    password_hash=None,
+                    role=default_role,
+                    status=Status.active,
+                    email_verified_at=datetime.utcnow() if email else None,
+                )
+                db.add(user)
+                db.commit()
+                db.refresh(user)
+                identity = OAuthIdentity(
+                    user_id=user.id, provider=provider, subject=sub, email=email,
+                )
+                db.add(identity)
+                db.commit()
+            except HTTPException:
+                raise
+            except Exception as e:
+                _sso_log.exception("SSO new-user creation failed")
+                raise HTTPException(
+                    status_code=502,
+                    detail=f"SSO user creation failed ({type(e).__name__}): {e}",
+                )
 
     user.last_login_at = datetime.utcnow()
     db.commit()
