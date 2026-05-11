@@ -16,6 +16,7 @@ from .db import Base, SessionLocal, engine
 from .models import ServerSettings  # noqa: F401 — ensure metadata is populated
 from .routes import auth as auth_routes
 from .routes import convert as convert_routes
+from .routes import db_providers as db_providers_routes
 from .routes import jobs_ws
 from .routes import me as me_routes
 from .routes import files as files_routes
@@ -66,6 +67,16 @@ async def lifespan(app: FastAPI):
             )
             s_.allowed_origin = None
             db.commit()
+        # Push the operator's streaming-safety divisor into the engine
+        # so the Performance slider actually controls in-memory-vs-stream
+        # selection. set_safety_divisor() silently clamps to 2..8 so a
+        # stale/corrupt row can't push the engine into a bad state.
+        if s_ is not None:
+            try:
+                from app.core.config import set_safety_divisor as _set_div
+                _set_div(int(s_.streaming_safety_divisor or 4))
+            except Exception:
+                _log.exception("Failed to apply streaming_safety_divisor override")
     finally:
         db.close()
     _log.info("Vitriol web v%s started; data dir=%s", __version__, cfg.data_dir)
@@ -205,6 +216,7 @@ def create_app() -> FastAPI:
     app.include_router(users_routes.router, prefix="/api/v1")
     app.include_router(roles_routes.router, prefix="/api/v1")
     app.include_router(server_routes.router, prefix="/api/v1")
+    app.include_router(db_providers_routes.router, prefix="/api/v1")
     app.include_router(oidc_routes.router, prefix="/api/v1")
     app.include_router(notification_routes.router, prefix="/api/v1")
     app.include_router(convert_routes.router, prefix="/api/v1")

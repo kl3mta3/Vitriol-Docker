@@ -613,8 +613,91 @@ class ServerSettings(Base):
         ),
     )
 
+    # ------------------------------------------------------------- storage
+    # Where converted outputs (and uploaded sources) physically live.
+    # 'local' = the on-disk /data/{uploads,outputs}/ tree the app has
+    # always used. 's3' = a configured S3-compatible endpoint. New writes
+    # go to the active backend; existing rows are resolved by the URI
+    # scheme stored on the Job row, so a switch doesn't break links to
+    # files written before the flip.
+    storage_backend = Column(String(16), nullable=False, default="local", server_default="local")
+    s3_endpoint_url = Column(String(512), nullable=True)
+    s3_bucket = Column(String(255), nullable=True)
+    s3_region = Column(String(64), nullable=True)
+    s3_access_key = Column(String(255), nullable=True)
+    s3_secret_key_enc = Column(Text, nullable=True)
+    s3_path_prefix = Column(String(255), nullable=True)
+    # Path-style URLs ("https://endpoint/bucket/key") are required by
+    # MinIO and some other S3 clones; virtual-hosted-style ("https://
+    # bucket.endpoint/key") is the AWS default. Default off matches AWS.
+    s3_force_path_style = Column(Boolean, nullable=False, default=False, server_default="0")
+    s3_last_test_at = Column(DateTime, nullable=True)
+    s3_last_test_ok = Column(Boolean, nullable=True)
+    # One-shot flag — flipped to True the first time the boot routine
+    # rewrites any bare Job.{src,dst}_path values to file:// URIs so the
+    # backend resolver can dispatch by scheme uniformly. Idempotent.
+    storage_uris_backfilled = Column(Boolean, nullable=False, default=False, server_default="0")
+
+    # ---------------------------------------------------------- performance
+    # Worker pool size for the conversion executor. Applies at boot —
+    # changing this requires a container restart so the executor can be
+    # re-sized cleanly (resizing a running ThreadPoolExecutor isn't
+    # supported by the stdlib).
+    max_concurrent_conversions = Column(Integer, nullable=False, default=3, server_default="3")
+    # Divisor on `available RAM` that produces the in-memory streaming
+    # threshold (higher = more conservative = more jobs go to the
+    # streaming path). 4 = the original hardcoded value; 2 lets jobs use
+    # up to half of available RAM in-memory before falling back to
+    # streaming. Range clamp lives in the route handler, not the column.
+    streaming_safety_divisor = Column(Integer, nullable=False, default=4, server_default="4")
+
     updated_at = Column(DateTime, nullable=False, default=datetime.utcnow, onupdate=datetime.utcnow)
     updated_by_user_id = Column(Integer, ForeignKey("users.id"), nullable=True)
+
+
+class DbProvider(Base):
+    """Operator-defined alternative database connection.
+
+    Lets the operator describe a Postgres / MySQL / MariaDB / MSSQL /
+    SQLite target via the admin UI (templates pattern, same as
+    NotificationChannel) so they can test the connection, optionally
+    `CREATE DATABASE`, and run `Base.metadata.create_all` against an
+    empty target *before* committing to a switch. Switching the live
+    DB still requires the operator to restart the container after
+    pointing DATABASE_URL (or the active-db file) at the new target —
+    rows here are infrastructure metadata, not a live failover system.
+
+    The actual data migration ("copy every row from old to new") is
+    a deliberate next step — this table only buys you the prepared
+    landing zone.
+    """
+    __tablename__ = "db_providers"
+
+    id = Column(Integer, primary_key=True)
+    # URL-safe identifier; stable across renames so audit log + flag
+    # files keep pointing at the right row.
+    slug = Column(String(32), unique=True, nullable=False, index=True)
+    display_name = Column(String(64), nullable=False)
+    # One of: 'sqlite' | 'postgres' | 'mysql' | 'mariadb' | 'mssql'.
+    # Drives URL builder + driver selection + dialect-specific
+    # CREATE DATABASE syntax in the routes layer.
+    kind = Column(String(16), nullable=False)
+    # JSON: kind-specific config (host, port, user, db_name, sslmode,
+    # extra_args, etc.). Same shape pattern as NotificationChannel.
+    config_json = Column(Text, nullable=False, default="{}", server_default="{}")
+    # Fernet-encrypted password / DSN secret. NULL = no password
+    # (peer auth, local SQLite, etc.).
+    secret_enc = Column(Text, nullable=True)
+    # Test bookkeeping — same shape as oidc_providers / s3 / SMTP.
+    last_test_at = Column(DateTime, nullable=True)
+    last_test_ok = Column(Boolean, nullable=True)
+    # Stamped when the operator runs "Initialize schema" — gives the
+    # UI a "ready to switch to" badge without re-running the DDL.
+    last_init_at = Column(DateTime, nullable=True)
+
+    created_at = Column(DateTime, nullable=False, default=datetime.utcnow)
+    updated_at = Column(DateTime, nullable=False, default=datetime.utcnow, onupdate=datetime.utcnow)
+    created_by_user_id = Column(Integer, ForeignKey("users.id"), nullable=True)
 
 
 class AuditLog(Base):

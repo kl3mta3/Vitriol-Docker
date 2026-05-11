@@ -226,6 +226,22 @@ class ServerSettingsOut(BaseModel):
     super_admin_can_self_compile: bool
     admin_can_self_compile: bool
     output_retention: dict = {}
+    # Storage backend selection + S3 config. Secret returned as a
+    # `*_set` boolean so the actual value never round-trips through GET.
+    storage_backend: str = "local"
+    s3_endpoint_url: Optional[str] = None
+    s3_bucket: Optional[str] = None
+    s3_region: Optional[str] = None
+    s3_access_key: Optional[str] = None
+    s3_secret_key_set: bool = False
+    s3_path_prefix: Optional[str] = None
+    s3_force_path_style: bool = False
+    s3_last_test_at: Optional[datetime] = None
+    s3_last_test_ok: Optional[bool] = None
+    # Performance knobs (apply on restart for max_concurrent_conversions;
+    # live for streaming_safety_divisor once the runtime hook is wired).
+    max_concurrent_conversions: int = 3
+    streaming_safety_divisor: int = 4
 
 
 class ServerSettingsPatch(BaseModel):
@@ -283,6 +299,16 @@ class ServerSettingsPatch(BaseModel):
     super_admin_can_self_compile: Optional[bool] = None
     admin_can_self_compile: Optional[bool] = None
     output_retention: Optional[dict] = None
+    storage_backend: Optional[str] = None
+    s3_endpoint_url: Optional[str] = None
+    s3_bucket: Optional[str] = None
+    s3_region: Optional[str] = None
+    s3_access_key: Optional[str] = None
+    s3_secret_key: Optional[str] = None      # write-only (cleartext); persisted Fernet-encrypted
+    s3_path_prefix: Optional[str] = None
+    s3_force_path_style: Optional[bool] = None
+    max_concurrent_conversions: Optional[int] = None
+    streaming_safety_divisor: Optional[int] = None
 
 
 class CustomRoleOut(BaseModel):
@@ -384,3 +410,39 @@ class FormatsResponse(BaseModel):
     outputs: List[str]
     targets_for: dict   # src_ext -> [dst_ext...]
     media_categories: dict
+
+
+# ------------------------------------------------------ database providers
+
+class DbProviderOut(BaseModel):
+    model_config = ConfigDict(from_attributes=True)
+    id: int
+    slug: str
+    display_name: str
+    kind: str
+    # Kind-specific connection params (host, port, user, db_name, sslmode,
+    # db_path, extra_args). Shape mirrors NotificationChannel.config.
+    config: dict = {}
+    # Secret never returned in cleartext — UI just learns whether one
+    # is set so it can render "(set)" vs prompting for one.
+    secret_set: bool = False
+    last_test_at: Optional[datetime] = None
+    last_test_ok: Optional[bool] = None
+    last_init_at: Optional[datetime] = None
+    created_at: datetime
+
+
+class DbProviderCreateRequest(BaseModel):
+    slug: str = Field(min_length=1, max_length=32)
+    display_name: str = Field(min_length=1, max_length=64)
+    kind: str    # validated server-side against the known kinds
+    config: dict = {}
+    # Optional — write-only; never returned. Stored Fernet-encrypted.
+    secret: Optional[str] = None
+
+
+class DbProviderUpdateRequest(BaseModel):
+    display_name: Optional[str] = Field(default=None, min_length=1, max_length=64)
+    kind: Optional[str] = None
+    config: Optional[dict] = None
+    secret: Optional[str] = None   # null = leave existing; empty string = clear

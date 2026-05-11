@@ -67,17 +67,23 @@ def list_files(
         q = q.filter(Job.user_id == actor.id)
     q = q.order_by(Job.finished_at.desc().nullslast(), Job.id.desc()).limit(min(max(1, limit), 2000))
 
+    from ..services.storage import backend_for_uri
     out: list[FileEntry] = []
     for job, owner in q.all():
         # Skip rows whose file was already cleaned up — UI is "what's
-        # currently retrievable", not full job history.
+        # currently retrievable", not full job history. Dispatch by URI
+        # scheme so file:// rows hit local disk and s3:// rows hit the
+        # bucket — both even after the active backend has been flipped.
+        backend = backend_for_uri(job.dst_path)
         try:
-            if not Path(job.dst_path).exists():
+            if not backend.exists(job.dst_path):
                 continue
             if job.bytes_out is None:
                 # Backfill on read for older rows.
-                job.bytes_out = Path(job.dst_path).stat().st_size
-        except OSError:
+                sz = backend.size(job.dst_path)
+                if sz is not None:
+                    job.bytes_out = sz
+        except Exception:
             continue
         out.append(FileEntry(
             id=job.id,
@@ -111,11 +117,10 @@ def delete_file(
         # for the existence of someone else's files.
         raise HTTPException(status_code=404, detail="File not found")
 
+    from ..services.storage import backend_for_uri
     try:
-        p = Path(job.dst_path)
-        if p.exists():
-            p.unlink()
-    except OSError as e:
+        backend_for_uri(job.dst_path).delete(job.dst_path)
+    except Exception as e:
         raise HTTPException(status_code=500, detail=f"Could not delete file: {e}")
 
     audit.log(db, actor.id, "file_delete", target_user_id=job.user_id, metadata={"job_id": job_id})

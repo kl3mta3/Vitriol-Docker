@@ -53,6 +53,7 @@ const SECRET_FIELD_MAP = {
   oauth_github_secret_set:                      'oauth_github_client_secret',
   ssl_cert_pull_webhook_secret_set:             'ssl_cert_pull_webhook_secret',
   ssl_cert_pull_webhook_header_value_set:       'ssl_cert_pull_webhook_header_value',
+  s3_secret_key_set:                            's3_secret_key',
 };
 
 // Track which password fields the user has *actually* typed into during
@@ -1760,4 +1761,354 @@ function wireSsoTest(btnId, msgId, provider) {
 wireSsoTest('google-test-btn', 'google-test-msg', 'google');
 wireSsoTest('github-test-btn', 'github-test-msg', 'github');
 
-load();
+// ============================================================
+//   Storage section — config edits are saved on regular Save;
+//   activating S3 (or reverting to local) is an explicit second
+//   step that requires a passing test + a typed confirmation.
+// ============================================================
+
+function paintStoragePill(s) {
+  const pill = document.getElementById('storage-status-pill');
+  if (!pill) return;
+  if (s.storage_backend !== 's3') {
+    pill.textContent = 'local';
+    pill.className = 'status-pill ok';
+    return;
+  }
+  pill.textContent = `s3: ${s.s3_bucket || '?'}`;
+  pill.className = 'status-pill ok';
+}
+
+function paintStorageActiveReadout(s) {
+  const el = document.getElementById('storage-active-readout');
+  if (!el) return;
+  if (s.storage_backend === 's3') {
+    el.textContent = `S3 (${s.s3_bucket || '?'})`;
+    el.className = 'role-tag role-admin';
+  } else {
+    el.textContent = 'Local disk (/data)';
+    el.className = 'role-tag role-user';
+  }
+}
+
+function paintS3LastTest(s) {
+  const el = document.getElementById('s3-last-test');
+  if (!el) return;
+  if (!s.s3_last_test_at) { el.textContent = ''; return; }
+  const when = new Date(s.s3_last_test_at).toLocaleString();
+  el.textContent = `Last test: ${when} — ${s.s3_last_test_ok === true ? 'ok' : 'failed'}`;
+}
+
+function updateActivateButtons(s) {
+  const activateBtn = document.getElementById('s3-activate-btn');
+  const revertBtn = document.getElementById('s3-revert-btn');
+  const hint = document.getElementById('s3-activate-hint');
+  if (!activateBtn || !revertBtn) return;
+  const isS3 = s.storage_backend === 's3';
+  activateBtn.hidden = isS3;
+  revertBtn.hidden = !isS3;
+  const cfgComplete = !!(s.s3_bucket && s.s3_access_key && s.s3_secret_key_set);
+  const testOk = s.s3_last_test_ok === true;
+  activateBtn.disabled = !(cfgComplete && testOk);
+  if (hint) {
+    if (isS3) {
+      hint.textContent = 'S3 is active. Click "Revert to local" to send new writes back to /data.';
+    } else if (!cfgComplete) {
+      hint.textContent = 'Fill in bucket, access key, and secret key (then Save) before testing.';
+    } else if (!testOk) {
+      hint.textContent = 'Run "Test connection" successfully to unlock Activate S3.';
+    } else {
+      hint.textContent = 'Test passed — Activate S3 is unlocked. Activation requires a typed confirmation.';
+    }
+  }
+}
+
+const s3TestBtn = document.getElementById('s3-test-btn');
+if (s3TestBtn) {
+  s3TestBtn.addEventListener('click', async () => {
+    const out = document.getElementById('s3-last-test');
+    if (out) { out.textContent = 'Testing…'; }
+    try {
+      const r = await api.post('/server/test-s3', {});
+      if (out) out.textContent = r.message || 'ok';
+    } catch (ex) {
+      if (out) out.textContent = ex.detail || 'Test failed';
+    }
+    await refreshStorageSection();
+  });
+}
+
+// Confirmation modal — typed-phrase gate. Same dialog handles both
+// "enable s3" and "revert to local" by swapping the title + phrase.
+const storageConfirmDialog = document.getElementById('storage-confirm-dialog');
+const storageConfirmInput = document.getElementById('storage-confirm-input');
+const storageConfirmSubmit = document.getElementById('storage-confirm-submit');
+const storageConfirmPhraseEl = document.getElementById('storage-confirm-phrase');
+let _storageConfirmMode = null;   // 's3' or 'local'
+
+function openStorageConfirm(targetBackend) {
+  if (!storageConfirmDialog) return;
+  _storageConfirmMode = targetBackend;
+  const title = document.getElementById('storage-confirm-title');
+  const body = document.getElementById('storage-confirm-body');
+  if (targetBackend === 's3') {
+    title.textContent = 'Activate S3 storage?';
+    body.textContent = 'New uploads and conversion outputs will go to the configured S3 bucket from this moment forward. Files already on local disk remain downloadable until they hit their retention window — this switch does not move or delete them.';
+    storageConfirmPhraseEl.textContent = 'enable s3';
+  } else {
+    title.textContent = 'Revert to local storage?';
+    body.textContent = 'New uploads and conversion outputs will go back to /data. Files already in S3 remain downloadable as long as the bucket creds stay valid — this switch does not migrate them off.';
+    storageConfirmPhraseEl.textContent = 'use local';
+  }
+  storageConfirmInput.value = '';
+  storageConfirmSubmit.disabled = true;
+  document.getElementById('storage-confirm-msg').hidden = true;
+  storageConfirmDialog.showModal();
+}
+
+if (storageConfirmInput) {
+  storageConfirmInput.addEventListener('input', () => {
+    storageConfirmSubmit.disabled =
+      storageConfirmInput.value.trim().toLowerCase() !== storageConfirmPhraseEl.textContent;
+  });
+}
+
+if (document.getElementById('storage-confirm-form')) {
+  document.getElementById('storage-confirm-form').addEventListener('submit', async (e) => {
+    e.preventDefault();
+    const target = _storageConfirmMode;
+    const m = document.getElementById('storage-confirm-msg');
+    try {
+      await api.patch('/server/settings', { storage_backend: target });
+      storageConfirmDialog.close();
+      await refreshStorageSection();
+    } catch (ex) {
+      m.textContent = ex.detail || 'Switch failed';
+      m.hidden = false;
+    }
+  });
+}
+
+const s3ActivateBtn = document.getElementById('s3-activate-btn');
+if (s3ActivateBtn) s3ActivateBtn.addEventListener('click', () => openStorageConfirm('s3'));
+const s3RevertBtn = document.getElementById('s3-revert-btn');
+if (s3RevertBtn) s3RevertBtn.addEventListener('click', () => openStorageConfirm('local'));
+
+// One-shot painters called after load() (which we trigger from the
+// bottom of this file).
+async function refreshStorageSection() {
+  try {
+    const s = await api.get('/server/settings');
+    paintStoragePill(s);
+    paintStorageActiveReadout(s);
+    paintS3LastTest(s);
+    updateActivateButtons(s);
+  } catch (_) { /* ignore */ }
+}
+
+// ============================================================
+//   Database providers — list + dialog (test / create-db / init).
+// ============================================================
+
+const dbProviderDialog = document.getElementById('db-provider-dialog');
+const dbProviderForm = document.getElementById('db-provider-form');
+const dbProvidersTbody = document.getElementById('db-providers-tbody');
+
+let _dbProviders = [];
+
+async function reloadDbProviders() {
+  if (!dbProvidersTbody) return;
+  try {
+    _dbProviders = await api.get('/server/db-providers');
+  } catch (_) {
+    _dbProviders = [];
+  }
+  renderDbProvidersTable();
+  paintDbProvidersPill();
+}
+
+function renderDbProvidersTable() {
+  if (!dbProvidersTbody) return;
+  dbProvidersTbody.innerHTML = '';
+  if (!_dbProviders.length) {
+    const tr = document.createElement('tr');
+    tr.innerHTML = `<td colspan="5" class="muted small empty-state">No database providers yet — click "+ Add provider" to define one.</td>`;
+    dbProvidersTbody.appendChild(tr);
+    return;
+  }
+  for (const p of _dbProviders) {
+    const tr = document.createElement('tr');
+    const lastTest = p.last_test_at
+      ? `${new Date(p.last_test_at).toLocaleString()} — ${p.last_test_ok ? 'ok' : 'failed'}`
+      : 'never';
+    const initd = p.last_init_at ? new Date(p.last_init_at).toLocaleDateString() : '—';
+    tr.innerHTML = `
+      <td>${escapeHtml(p.display_name)} <em class="muted small">(${escapeHtml(p.slug)})</em></td>
+      <td>${escapeHtml(p.kind)}</td>
+      <td class="small">${escapeHtml(lastTest)}</td>
+      <td class="small">${escapeHtml(initd)}</td>
+      <td><button type="button" class="btn btn-secondary btn-manage" data-edit-id="${p.id}">Edit</button></td>
+    `;
+    dbProvidersTbody.appendChild(tr);
+  }
+  dbProvidersTbody.querySelectorAll('[data-edit-id]').forEach(btn => {
+    btn.addEventListener('click', () => {
+      const id = Number(btn.dataset.editId);
+      const row = _dbProviders.find(x => x.id === id);
+      if (row) openDbProviderDialog(row);
+    });
+  });
+}
+
+function paintDbProvidersPill() {
+  const pill = document.getElementById('db-providers-status-pill');
+  if (!pill) return;
+  if (!_dbProviders.length) { pill.textContent = ''; pill.className = 'status-pill'; return; }
+  const ok = _dbProviders.filter(p => p.last_test_ok === true).length;
+  pill.textContent = `${ok}/${_dbProviders.length} tested ok`;
+  pill.className = ok === _dbProviders.length ? 'status-pill ok' : 'status-pill';
+}
+
+function escapeHtml(s) {
+  return String(s == null ? '' : s)
+    .replaceAll('&', '&amp;').replaceAll('<', '&lt;').replaceAll('>', '&gt;')
+    .replaceAll('"', '&quot;').replaceAll("'", '&#39;');
+}
+
+const dbProviderAddBtn = document.getElementById('db-provider-add-btn');
+if (dbProviderAddBtn) {
+  dbProviderAddBtn.addEventListener('click', () => openDbProviderDialog(null));
+}
+
+function openDbProviderDialog(p) {
+  if (!dbProviderForm) return;
+  const f = dbProviderForm;
+  f.id.value = p ? p.id : '';
+  f.display_name.value = p ? p.display_name : '';
+  f.slug.value = p ? p.slug : '';
+  f.slug.disabled = !!p;   // slug is immutable once saved
+  f.kind.value = p ? p.kind : 'postgres';
+  const cfg = (p && p.config) || {};
+  for (const name of ['host', 'port', 'user', 'db_name', 'sslmode', 'db_path']) {
+    if (f[name]) f[name].value = cfg[name] ?? '';
+  }
+  f.secret.value = '';
+  const hint = document.getElementById('db-provider-secret-set-hint');
+  if (hint) hint.textContent = p && p.secret_set ? '✓ saved' : '';
+  document.getElementById('db-provider-title').textContent = p ? `Edit — ${p.display_name}` : 'New database provider';
+  document.getElementById('db-provider-delete-btn').hidden = !p;
+  // Test / create / init are only meaningful for saved rows.
+  document.getElementById('db-provider-test-btn').hidden = !p;
+  document.getElementById('db-provider-create-btn').hidden = !p;
+  document.getElementById('db-provider-init-btn').hidden = !p;
+  applyDbProviderKindVisibility();
+  document.getElementById('db-provider-msg').hidden = true;
+  dbProviderDialog.showModal();
+}
+
+function applyDbProviderKindVisibility() {
+  if (!dbProviderForm) return;
+  const k = dbProviderForm.kind.value;
+  dbProviderForm.querySelectorAll('[data-kind-only]').forEach(el => {
+    el.hidden = el.dataset.kindOnly !== k;
+  });
+  dbProviderForm.querySelectorAll('[data-kind-not]').forEach(el => {
+    el.hidden = el.dataset.kindNot === k;
+  });
+}
+if (dbProviderForm) {
+  dbProviderForm.kind.addEventListener('change', applyDbProviderKindVisibility);
+}
+
+function _readDbProviderForm() {
+  const f = dbProviderForm;
+  const kind = f.kind.value;
+  const cfg = {};
+  if (kind === 'sqlite') {
+    cfg.db_path = (f.db_path.value || '').trim();
+  } else {
+    cfg.host = (f.host.value || '').trim();
+    if (f.port.value) cfg.port = Number(f.port.value);
+    cfg.user = (f.user.value || '').trim();
+    cfg.db_name = (f.db_name.value || '').trim();
+    if (kind === 'postgres' && f.sslmode.value) cfg.sslmode = f.sslmode.value;
+  }
+  return {
+    display_name: f.display_name.value.trim(),
+    slug: f.slug.value.trim(),
+    kind,
+    config: cfg,
+    secret: f.secret.value || null,
+  };
+}
+
+if (dbProviderForm) {
+  dbProviderForm.addEventListener('submit', async (e) => {
+    e.preventDefault();
+    const id = dbProviderForm.id.value;
+    const msgEl = document.getElementById('db-provider-msg');
+    msgEl.hidden = true;
+    const payload = _readDbProviderForm();
+    try {
+      if (id) {
+        // PATCH — slug is locked, so omit it
+        const { slug, ...rest } = payload;
+        await api.patch(`/server/db-providers/${id}`, rest);
+      } else {
+        await api.post('/server/db-providers', payload);
+      }
+      dbProviderDialog.close();
+      await reloadDbProviders();
+    } catch (ex) {
+      msgEl.textContent = ex.detail || 'Save failed';
+      msgEl.className = 'error small';
+      msgEl.hidden = false;
+    }
+  });
+
+  document.getElementById('db-provider-delete-btn').addEventListener('click', async () => {
+    const id = dbProviderForm.id.value;
+    if (!id) return;
+    if (!confirm('Delete this provider? Saved connection details will be lost.')) return;
+    try {
+      await api.del(`/server/db-providers/${id}`);
+      dbProviderDialog.close();
+      await reloadDbProviders();
+    } catch (ex) {
+      const m = document.getElementById('db-provider-msg');
+      m.textContent = ex.detail || 'Delete failed';
+      m.className = 'error small';
+      m.hidden = false;
+    }
+  });
+
+  async function _runAction(path, busyLabel) {
+    const id = dbProviderForm.id.value;
+    if (!id) return;
+    const m = document.getElementById('db-provider-msg');
+    m.textContent = busyLabel + '…';
+    m.className = 'muted small';
+    m.hidden = false;
+    try {
+      await api.post(`/server/db-providers/${id}/${path}`, {});
+      m.textContent = busyLabel + ' ok';
+      m.className = 'ok small';
+      await reloadDbProviders();
+    } catch (ex) {
+      m.textContent = ex.detail || (busyLabel + ' failed');
+      m.className = 'error small';
+    }
+  }
+  document.getElementById('db-provider-test-btn').addEventListener('click', () => _runAction('test', 'Test'));
+  document.getElementById('db-provider-create-btn').addEventListener('click', () => _runAction('create-db', 'Create DB'));
+  document.getElementById('db-provider-init-btn').addEventListener('click', () => _runAction('initialize-schema', 'Initialize schema'));
+}
+
+// Kick everything off. load() populates the bulk of the form;
+// refreshStorageSection + reloadDbProviders paint the new sections
+// that need post-load wiring (visibility, pills, table render).
+(async () => {
+  await load();
+  await refreshStorageSection();
+  await reloadDbProviders();
+})();

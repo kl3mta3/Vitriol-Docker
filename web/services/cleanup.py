@@ -105,14 +105,15 @@ def effective_retention_for(user: User, server_policy: dict) -> dict:
 
 
 def _delete_file(job: Job) -> bool:
+    # Dispatch by URI scheme so a row written under ``file://`` still
+    # gets deleted from local disk even when the active backend is
+    # now S3 (and vice versa). LocalBackend.delete swallows OSError.
+    from .storage import backend_for_uri
     try:
-        p = Path(job.dst_path)
-        if p.exists():
-            p.unlink()
-            return True
-    except OSError as e:
+        return backend_for_uri(job.dst_path).delete(job.dst_path)
+    except Exception as e:
         _log.warning("cleanup: failed to delete %s: %s", job.dst_path, e)
-    return False
+        return False
 
 
 def run_once(db: Session) -> dict:
@@ -212,7 +213,8 @@ def run_once(db: Session) -> dict:
 
 
 def _file_exists(job: Job) -> bool:
+    from .storage import backend_for_uri
     try:
-        return Path(job.dst_path).exists()
-    except OSError:
+        return backend_for_uri(job.dst_path).exists(job.dst_path)
+    except Exception:
         return False

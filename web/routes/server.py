@@ -88,6 +88,18 @@ def _to_out(s: ServerSettings) -> ServerSettingsOut:
         super_admin_can_self_compile=s.super_admin_can_self_compile,
         admin_can_self_compile=s.admin_can_self_compile,
         output_retention=_load_retention(s),
+        storage_backend=(s.storage_backend or "local"),
+        s3_endpoint_url=s.s3_endpoint_url,
+        s3_bucket=s.s3_bucket,
+        s3_region=s.s3_region,
+        s3_access_key=s.s3_access_key,
+        s3_secret_key_set=bool(s.s3_secret_key_enc),
+        s3_path_prefix=s.s3_path_prefix,
+        s3_force_path_style=bool(s.s3_force_path_style),
+        s3_last_test_at=s.s3_last_test_at,
+        s3_last_test_ok=s.s3_last_test_ok,
+        max_concurrent_conversions=int(s.max_concurrent_conversions or 3),
+        streaming_safety_divisor=int(s.streaming_safety_divisor or 4),
     )
 
 
@@ -160,6 +172,16 @@ def patch_server_settings(
         "ssl_cert_pull_webhook_method", "ssl_cert_pull_webhook_header_name",
         "ssl_cert_pull_response_cert_field", "ssl_cert_pull_response_key_field",
         "super_admin_can_self_compile", "admin_can_self_compile",
+        # Storage backend selection + non-secret S3 config. The secret
+        # is encrypt-on-write below; everything else is a plain set.
+        "storage_backend",
+        "s3_endpoint_url", "s3_bucket", "s3_region", "s3_access_key",
+        "s3_path_prefix", "s3_force_path_style",
+        # Performance knobs. Both clamped at the route layer below
+        # rather than as Pydantic validators so the column accepts
+        # historical out-of-range values (defensive — the column
+        # default is in the safe range).
+        "max_concurrent_conversions", "streaming_safety_divisor",
     }
     for f in plain_fields:
         v = getattr(req, f)
@@ -223,10 +245,44 @@ def patch_server_settings(
     if req.ssl_cert_pull_webhook_header_value is not None:
         # Empty string explicitly clears the header auth.
         s.ssl_cert_pull_webhook_header_value_enc = encrypt(req.ssl_cert_pull_webhook_header_value) if req.ssl_cert_pull_webhook_header_value else None
+    if req.s3_secret_key is not None:
+        # Empty string explicitly clears the saved key (operator deleting
+        # creds); non-empty replaces it.
+        s.s3_secret_key_enc = encrypt(req.s3_secret_key) if req.s3_secret_key else None
+
+    # Clamp the perf knobs into safe ranges so a manually crafted PATCH
+    # can't push us into a runaway-thread or zero-RAM-budget state.
+    if s.max_concurrent_conversions is not None:
+        s.max_concurrent_conversions = max(1, min(16, int(s.max_concurrent_conversions)))
+    if s.streaming_safety_divisor is not None:
+        s.streaming_safety_divisor = max(2, min(8, int(s.streaming_safety_divisor)))
+    # Likewise constrain storage_backend to known values.
+    if s.storage_backend not in ("local", "s3"):
+        s.storage_backend = "local"
 
     s.updated_by_user_id = actor.id
     db.commit()
     db.refresh(s)
+    # Any storage_*-affecting PATCH invalidates the cached backend so
+    # the very next upload picks up the new config. Cheap — the cache
+    # is just a single module-level reference. Doing it unconditionally
+    # is fine; the next current_backend() call rebuilds from the row.
+    try:
+        from ..services.storage import invalidate_cache as _inv
+        _inv()
+    except Exception:
+        pass
+    # Same idea for the engine's streaming-safety divisor — push the
+    # current value down so the Performance slider takes effect for the
+    # next conversion without a restart. (max_concurrent_conversions
+    # genuinely needs a restart — the ThreadPoolExecutor isn't
+    # resizable — and the UI labels that field accordingly.)
+    if req.streaming_safety_divisor is not None:
+        try:
+            from app.core.config import set_safety_divisor as _set_div
+            _set_div(int(s.streaming_safety_divisor or 4))
+        except Exception:
+            pass
     audit.log(db, actor.id, "server_settings_update")
     return _to_out(s)
 
@@ -443,6 +499,51 @@ async def test_discord(
     db.commit()
     audit.log(db, actor.id, "discord_test")
     return MessageResponse(message="Discord test message posted.")
+
+
+@router.post("/test-s3", response_model=MessageResponse)
+def test_s3(
+    actor: User = Depends(require_super_admin),
+    db: Session = Depends(get_db),
+):
+    """HEAD the configured S3 bucket as a connectivity + permissions
+    smoke test. Stamps ``s3_last_test_*`` so the UI badge sticks across
+    reloads (mirrors the SMTP / Discord / OIDC test pattern)."""
+    from datetime import datetime as _dt
+    s = db.query(ServerSettings).get(1)
+    if s is None:
+        raise HTTPException(status_code=500, detail="Settings row missing")
+    if not (s.s3_bucket and s.s3_access_key and s.s3_secret_key_enc):
+        raise HTTPException(
+            status_code=400,
+            detail="S3 config incomplete — bucket, access key, and secret key are all required.",
+        )
+    from ..services.storage import S3Backend
+    err: str | None = None
+    try:
+        backend = S3Backend(
+            endpoint_url=s.s3_endpoint_url,
+            bucket=s.s3_bucket,
+            region=s.s3_region,
+            access_key=s.s3_access_key,
+            secret_key=decrypt(s.s3_secret_key_enc) or "",
+            path_prefix=s.s3_path_prefix,
+            force_path_style=bool(s.s3_force_path_style),
+        )
+        backend.head_bucket()
+    except Exception as e:
+        err = f"{type(e).__name__}: {e}"
+    s.s3_last_test_at = _dt.utcnow()
+    s.s3_last_test_ok = err is None
+    db.commit()
+    audit.log(db, actor.id, "s3_test", metadata={"ok": s.s3_last_test_ok, "error": err})
+    if err is not None:
+        raise HTTPException(status_code=502, detail=f"S3 test failed: {err}")
+    # Cache invalidation so the next storage operation picks up the
+    # freshly-saved config without a restart.
+    from ..services.storage import invalidate_cache as _inv
+    _inv()
+    return MessageResponse(message="S3 connection ok.")
 
 
 @router.post("/refresh-certs", response_model=MessageResponse)

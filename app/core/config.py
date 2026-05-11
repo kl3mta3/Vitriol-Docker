@@ -26,6 +26,40 @@ PROGRESS_EMIT_THROTTLE_MS = 500           # max one bytes_progress emit per 500 
 # behavior conservative rather than aggressively triggering streaming.
 _FALLBACK_THRESHOLD = 500 * 1024 * 1024   # 500 MB
 
+
+# Streaming-safety divisor. The default 4 leaves 75% of available RAM as
+# headroom for everything else in the process (Qt + format handlers on
+# the desktop side; FastAPI workers + handlers on the web side). The
+# web layer overrides this at boot from ServerSettings.streaming_safety_divisor
+# and re-overrides it on every settings PATCH, so the operator's
+# Performance slider takes effect without a restart.
+#
+# Range expected: 2..8 (clamped at the web layer). Lower = more
+# in-memory work (faster but RAM-hungry); higher = streaming kicks in
+# earlier (slower but kinder to memory).
+_SAFETY_DIVISOR: int = 4
+
+
+def set_safety_divisor(divisor: int) -> None:
+    """Runtime override for the streaming-vs-in-memory threshold.
+
+    Called from the web boot routine (lifespan) and from the server
+    settings PATCH handler. Silently clamps to [2, 8] so a misbehaving
+    caller can't blow up the budgeting math by passing 0 or a negative.
+    """
+    global _SAFETY_DIVISOR
+    try:
+        v = int(divisor)
+    except (TypeError, ValueError):
+        return
+    _SAFETY_DIVISOR = max(2, min(8, v))
+
+
+def safety_divisor() -> int:
+    """Read the current override. Public so admin/debug surfaces can
+    show what value the engine is actually using right now."""
+    return _SAFETY_DIVISOR
+
 # Per-format expected memory multiplier (whole-file decoded size / on-disk size).
 _MULTIPLIERS = {
     "image": 8,        # rgba decode + alpha + intermediate buffers
@@ -82,7 +116,9 @@ def category_for(ext: str) -> str:
 def streaming_threshold(ext: str) -> int:
     """Bytes — files at/above this size should use the streaming path.
 
-    safe_budget = available RAM // 4 (leave 75% headroom for Qt + handlers)
+    safe_budget = available RAM // _SAFETY_DIVISOR  (default 4 = 75%
+                                                    headroom; operator
+                                                    can dial 2..8)
     threshold   = safe_budget // multiplier(category)
 
     Floors at 64 MB so we don't pathologically stream tiny files on a host
@@ -90,9 +126,10 @@ def streaming_threshold(ext: str) -> int:
     """
     cat = category_for(ext)
     mult = _MULTIPLIERS.get(cat, _MULTIPLIERS["default"])
+    div = max(2, _SAFETY_DIVISOR)   # defensive — should already be clamped
     if not _HAS_PSUTIL:
         return _FALLBACK_THRESHOLD // mult
-    safe = psutil.virtual_memory().available // 4
+    safe = psutil.virtual_memory().available // div
     return max(64 * 1024 * 1024, safe // mult)
 
 

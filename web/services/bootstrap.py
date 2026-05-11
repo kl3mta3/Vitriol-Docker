@@ -239,6 +239,40 @@ _ADDITIVE_COLUMNS: list[tuple[str, str, str]] = [
      "ALTER TABLE server_settings ADD COLUMN disabled_user_input_formats_json TEXT NOT NULL DEFAULT '[]'"),
     ("server_settings", "disabled_user_output_formats_json",
      "ALTER TABLE server_settings ADD COLUMN disabled_user_output_formats_json TEXT NOT NULL DEFAULT '[]'"),
+    # Storage backend (local default vs operator-configured S3-compatible
+    # endpoint). All s3_* columns are nullable — they only matter when
+    # storage_backend='s3'. Secret is Fernet-encrypted at rest, same as
+    # every other *_enc column on this table.
+    ("server_settings", "storage_backend",
+     "ALTER TABLE server_settings ADD COLUMN storage_backend VARCHAR(16) NOT NULL DEFAULT 'local'"),
+    ("server_settings", "s3_endpoint_url",
+     "ALTER TABLE server_settings ADD COLUMN s3_endpoint_url VARCHAR(512)"),
+    ("server_settings", "s3_bucket",
+     "ALTER TABLE server_settings ADD COLUMN s3_bucket VARCHAR(255)"),
+    ("server_settings", "s3_region",
+     "ALTER TABLE server_settings ADD COLUMN s3_region VARCHAR(64)"),
+    ("server_settings", "s3_access_key",
+     "ALTER TABLE server_settings ADD COLUMN s3_access_key VARCHAR(255)"),
+    ("server_settings", "s3_secret_key_enc",
+     "ALTER TABLE server_settings ADD COLUMN s3_secret_key_enc TEXT"),
+    ("server_settings", "s3_path_prefix",
+     "ALTER TABLE server_settings ADD COLUMN s3_path_prefix VARCHAR(255)"),
+    ("server_settings", "s3_force_path_style",
+     "ALTER TABLE server_settings ADD COLUMN s3_force_path_style BOOLEAN NOT NULL DEFAULT 0"),
+    ("server_settings", "s3_last_test_at",
+     "ALTER TABLE server_settings ADD COLUMN s3_last_test_at TIMESTAMP"),
+    ("server_settings", "s3_last_test_ok",
+     "ALTER TABLE server_settings ADD COLUMN s3_last_test_ok BOOLEAN"),
+    ("server_settings", "storage_uris_backfilled",
+     "ALTER TABLE server_settings ADD COLUMN storage_uris_backfilled BOOLEAN NOT NULL DEFAULT 0"),
+    # Performance knobs. max_concurrent_conversions applies on next boot
+    # (the ThreadPoolExecutor isn't resizable in the stdlib); the safety
+    # divisor is read live from the DB by app/core/config via a runtime
+    # override hook that the web layer wires up on settings change.
+    ("server_settings", "max_concurrent_conversions",
+     "ALTER TABLE server_settings ADD COLUMN max_concurrent_conversions INTEGER NOT NULL DEFAULT 3"),
+    ("server_settings", "streaming_safety_divisor",
+     "ALTER TABLE server_settings ADD COLUMN streaming_safety_divisor INTEGER NOT NULL DEFAULT 4"),
 ]
 
 

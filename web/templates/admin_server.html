@@ -318,6 +318,113 @@
       </table>
     </details>
 
+    <details name="server-settings" id="storage"><summary>Storage <span id="storage-status-pill" class="status-pill"></span></summary>
+      <p class="muted small">
+        Where converted outputs and uploaded sources live. <strong>Local</strong>
+        (the default) keeps everything on the container's <code>/data</code>
+        volume. Configuring an S3-compatible endpoint here <em>doesn't</em>
+        change anything — it only becomes active after you successfully
+        Test the connection and then explicitly click <strong>Activate
+        S3</strong> below.
+      </p>
+      <div class="storage-active-row" style="margin-bottom: 12px;">
+        <strong>Active backend:</strong>
+        <span id="storage-active-readout" class="role-tag">local</span>
+      </div>
+      <p class="muted small" id="storage-fields-hint" style="margin-top: 0;">
+        S3 connection settings (saved on regular "Save settings" — they
+        sit dormant until activated):
+      </p>
+      <div class="grid-2">
+        <label><span>Endpoint URL <em class="muted small">(blank = AWS)</em></span><input name="s3_endpoint_url" type="text" placeholder="https://s3.us-east-005.backblazeb2.com" /></label>
+        <label><span>Bucket</span><input name="s3_bucket" type="text" /></label>
+        <label><span>Region</span><input name="s3_region" type="text" placeholder="us-east-1" /></label>
+        <label><span>Path prefix <em class="muted small">(optional)</em></span><input name="s3_path_prefix" type="text" placeholder="vitriol/" /></label>
+        <label><span>Access key</span><input name="s3_access_key" type="text" autocomplete="off" /></label>
+        <label><span>Secret key <span id="s3-secret-set-hint" class="muted small"></span></span><input name="s3_secret_key" type="password" autocomplete="new-password" placeholder="(leave blank to keep existing)" /></label>
+      </div>
+      <label class="checkbox-row"><input type="checkbox" name="s3_force_path_style" /> <span>Force path-style URLs <em class="muted small">(required for MinIO; off for AWS)</em></span></label>
+      <div class="form-actions" style="margin-top: 12px; gap: 8px;">
+        <button type="button" id="s3-test-btn" class="btn btn-secondary">Test connection</button>
+        <span id="s3-last-test" class="muted small"></span>
+        <span style="flex:1;"></span>
+        <button type="button" id="s3-activate-btn" class="btn btn-primary" disabled>Activate S3</button>
+        <button type="button" id="s3-revert-btn" class="btn btn-danger" hidden>Revert to local</button>
+      </div>
+      <p class="muted small" id="s3-activate-hint" style="margin-top: 4px;">
+        Activate is unlocked once "Test connection" succeeds.
+      </p>
+    </details>
+
+    <!-- Confirmation dialog for the storage-backend flip. The operator
+         must type the exact phrase to enable — a hard stop against
+         accidental clicks. -->
+    <dialog id="storage-confirm-dialog" class="manage-dialog">
+      <form id="storage-confirm-form">
+        <header class="manage-head">
+          <h2 class="display small" id="storage-confirm-title">Activate S3 storage?</h2>
+        </header>
+        <p id="storage-confirm-body" class="muted">
+          New uploads and conversion outputs will go to the configured S3
+          bucket from this moment forward. Files already on local disk
+          remain downloadable until they hit their retention window —
+          this switch does not move or delete them.
+        </p>
+        <p class="muted small">
+          Type <code id="storage-confirm-phrase">enable s3</code> exactly to confirm:
+        </p>
+        <input id="storage-confirm-input" type="text" autocomplete="off" />
+        <p id="storage-confirm-msg" class="error small" hidden></p>
+        <footer class="dialog-actions">
+          <button type="button" class="btn btn-ghost" data-close>Cancel</button>
+          <button type="submit" id="storage-confirm-submit" class="btn btn-primary" disabled>Confirm</button>
+        </footer>
+      </form>
+    </dialog>
+
+    <details name="server-settings"><summary>Performance</summary>
+      <p class="muted small">
+        Worker pool size + how aggressively the conversion engine uses
+        memory before falling back to streaming. Lower divisor = more
+        in-memory use (faster, but the host needs the RAM); higher =
+        more conservative.
+      </p>
+      <div class="grid-2">
+        <label>
+          <span>Max concurrent conversions <em class="muted small">(applies on restart)</em></span>
+          <input name="max_concurrent_conversions" type="number" min="1" max="16" step="1" />
+        </label>
+        <label>
+          <span>Streaming safety divisor <em class="muted small">(2 = aggressive, 8 = conservative)</em></span>
+          <input name="streaming_safety_divisor" type="number" min="2" max="8" step="1" />
+        </label>
+      </div>
+    </details>
+
+    <details name="server-settings" id="db-providers"><summary>Database providers <span id="db-providers-status-pill" class="status-pill"></span></summary>
+      <p class="muted small">
+        Define alternative database targets (PostgreSQL, MySQL, MariaDB,
+        SQL Server, or another SQLite file). Saving a row lets you test
+        the connection, optionally create a blank database on the
+        target, and initialize the Vitriol schema there — all without
+        switching the live database. To actually move Vitriol onto a
+        saved target you still need to update <code>DATABASE_URL</code> and
+        restart. Row-level data migration ("copy everything over") will
+        come as a follow-up.
+      </p>
+      <table class="retention-table" id="db-providers-table">
+        <thead>
+          <tr><th>Name</th><th>Kind</th><th>Last tested</th><th>Schema initialized</th><th></th></tr>
+        </thead>
+        <tbody id="db-providers-tbody">
+          <tr><td colspan="5" class="muted small empty-state">No database providers yet — click "+ Add provider" to define one.</td></tr>
+        </tbody>
+      </table>
+      <div class="form-actions" style="margin-top: 8px;">
+        <button type="button" id="db-provider-add-btn" class="btn btn-secondary">+ Add provider</button>
+      </div>
+    </details>
+
     <details name="server-settings"><summary>Self-compile defaults</summary>
       <label class="checkbox-row"><input type="checkbox" name="super_admin_can_self_compile" /> <span>Super admin can self-compile</span></label>
       <label class="checkbox-row"><input type="checkbox" name="admin_can_self_compile" /> <span>Admins can self-compile</span></label>
@@ -611,6 +718,68 @@
     <footer class="dialog-actions">
       <button type="button" class="btn btn-ghost" data-close>Cancel</button>
       <button type="submit" id="import-submit" class="btn btn-primary">Continue</button>
+    </footer>
+  </form>
+</dialog>
+
+<!-- Database-provider edit dialog. Mirrors the notification-channel
+     pattern: template-driven field set, secret as write-only blank-=-keep.
+     Test / Create DB / Initialize-schema buttons hit dedicated routes
+     so each operation is atomic and visible in the audit log. -->
+<dialog id="db-provider-dialog" class="manage-dialog">
+  <form id="db-provider-form">
+    <header class="manage-head">
+      <h2 class="display small" id="db-provider-title">New database provider</h2>
+    </header>
+    <input type="hidden" name="id" />
+    <details open>
+      <summary>Basics</summary>
+      <div class="grid-2">
+        <label><span>Display name</span><input name="display_name" required minlength="1" maxlength="64" /></label>
+        <label><span>Slug <em class="muted small">(URL-safe identifier)</em></span><input name="slug" required minlength="1" maxlength="32" pattern="[a-z0-9][a-z0-9_\-]*" /></label>
+        <label><span>Kind</span>
+          <select name="kind" id="db-provider-kind">
+            <option value="postgres">PostgreSQL</option>
+            <option value="mysql">MySQL</option>
+            <option value="mariadb">MariaDB</option>
+            <option value="mssql">SQL Server</option>
+            <option value="sqlite">SQLite (file)</option>
+          </select>
+        </label>
+      </div>
+    </details>
+    <details open>
+      <summary>Connection</summary>
+      <div class="grid-2" data-kind-fields data-kind-not="sqlite">
+        <label><span>Host</span><input name="host" type="text" placeholder="db.example.com" /></label>
+        <label><span>Port <em class="muted small">(blank = dialect default)</em></span><input name="port" type="number" min="1" max="65535" /></label>
+        <label><span>User</span><input name="user" type="text" autocomplete="off" /></label>
+        <label><span>Database name</span><input name="db_name" type="text" /></label>
+        <label><span>Password <span id="db-provider-secret-set-hint" class="muted small"></span></span><input name="secret" type="password" autocomplete="new-password" placeholder="(leave blank to keep existing)" /></label>
+        <label data-kind-only="postgres"><span>sslmode</span>
+          <select name="sslmode">
+            <option value="">(unset)</option>
+            <option value="disable">disable</option>
+            <option value="prefer">prefer</option>
+            <option value="require">require</option>
+            <option value="verify-ca">verify-ca</option>
+            <option value="verify-full">verify-full</option>
+          </select>
+        </label>
+      </div>
+      <div class="grid-2" data-kind-fields data-kind-only="sqlite">
+        <label class="full"><span>File path <em class="muted small">(relative paths land under /data)</em></span><input name="db_path" type="text" placeholder="vitriol-target.db" /></label>
+      </div>
+    </details>
+    <p id="db-provider-msg" class="ok small" hidden></p>
+    <footer class="dialog-actions">
+      <button type="button" id="db-provider-delete-btn" class="btn btn-danger" hidden>Delete</button>
+      <span style="flex:1;"></span>
+      <button type="button" id="db-provider-test-btn" class="btn btn-secondary" hidden>Test connection</button>
+      <button type="button" id="db-provider-create-btn" class="btn btn-secondary" hidden>Create blank DB</button>
+      <button type="button" id="db-provider-init-btn" class="btn btn-secondary" hidden>Initialize schema</button>
+      <button type="button" class="btn btn-ghost" data-close>Close</button>
+      <button type="submit" class="btn btn-primary">Save</button>
     </footer>
   </form>
 </dialog>

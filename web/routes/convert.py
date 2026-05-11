@@ -27,6 +27,25 @@ router = APIRouter(prefix="", tags=["convert"])
 _cfg = get_settings()
 
 
+def _placeholder_uri_for(backend, key: str) -> str:
+    """Compute the URI a backend *would* write to for ``key`` without
+    actually writing anything. We need this so the Job row can hold a
+    stable dst_path before the conversion worker materializes the file.
+
+    LocalBackend produces a deterministic ``file://`` URI from the
+    data_dir + key; S3Backend produces ``s3://bucket/<prefix><key>``.
+    """
+    from .. services.storage import LocalBackend, S3Backend
+    if isinstance(backend, LocalBackend):
+        p = backend._data_dir / key
+        return backend._path_to_uri(p)
+    if isinstance(backend, S3Backend):
+        return backend._make_uri(backend._prefixed(key))
+    # Unknown backend — fall back to local convention so callers still
+    # have something to work with.
+    return f"file:///data/{key}"
+
+
 def _disabled_for(s: ServerSettings, user: User) -> tuple[set[str], set[str]]:
     """Compute the (disabled_inputs, disabled_outputs) sets that apply to
     this caller's role. Tiers cascade downward:
@@ -111,11 +130,17 @@ async def submit_conversion(
         if dst_ext_norm in disabled_out:
             raise HTTPException(status_code=400, detail=f"Output format {dst_ext_norm} is disabled for your role.")
 
-    # Stage upload to disk (streamed; no in-memory hold).
+    # Stage upload to disk first, *then* hand off to the storage backend.
+    # We tee through a local tempfile because (a) we need to enforce
+    # max_size mid-stream (cheap on local disk, awkward on a remote
+    # backend), and (b) the conversion engine needs a Path to work from
+    # regardless of backend. The intermediate file lives under the
+    # always-local /data/uploads path and is uploaded to the active
+    # backend at the end.
     job_token = secrets.token_hex(8)
-    src_path = _cfg.upload_dir / f"{user.id}_{job_token}{src_ext}"
+    local_upload_path = _cfg.upload_dir / f"{user.id}_{job_token}{src_ext}"
     bytes_in = 0
-    with src_path.open("wb") as out:
+    with local_upload_path.open("wb") as out:
         while True:
             chunk = await file.read(_cfg.upload_chunk_size)
             if not chunk:
@@ -125,7 +150,7 @@ async def submit_conversion(
             # enforce when a real cap is set for this user's tier.
             if max_size is not None and bytes_in > max_size:
                 out.close()
-                src_path.unlink(missing_ok=True)
+                local_upload_path.unlink(missing_ok=True)
                 raise HTTPException(status_code=413, detail=f"File exceeds max size ({max_size} bytes).")
             out.write(chunk)
 
@@ -138,12 +163,26 @@ async def submit_conversion(
     else:
         dst_ext_actual = dst_ext_norm
     dst_filename = f"{safe_stem}{dst_ext_actual}"
-    dst_path = _cfg.output_dir / f"{user.id}_{job_token}{dst_ext_actual}"
 
     has_password = bool(password)
     if has_password:
-        pw_path = src_path.with_suffix(src_path.suffix + ".pw")
+        pw_path = local_upload_path.with_suffix(local_upload_path.suffix + ".pw")
         pw_path.write_bytes(password.encode("utf-8"))
+
+    # Push the staged upload into the active storage backend. For
+    # `LocalBackend` this is effectively a rename within /data; for
+    # `S3Backend` it's an upload + the local copy is deleted server-side.
+    # The returned URI (file:// or s3://) is what goes on the Job row.
+    from ..services.storage import current_backend
+    backend = current_backend(db)
+    src_uri = backend.upload_from_path(local_upload_path, f"uploads/{user.id}_{job_token}{src_ext}")
+    # Reserve a destination *key*. The actual write happens in the
+    # conversion service, which downloads the source to a tempfile,
+    # runs the engine, and uploads the result. We pre-fill dst_path
+    # with the URI the worker will write to so cleanup / files routes
+    # have a stable reference even before the conversion finishes.
+    dst_key = f"outputs/{user.id}_{job_token}{dst_ext_actual}"
+    dst_uri_placeholder = _placeholder_uri_for(backend, dst_key)
 
     job = Job(
         user_id=user.id,
@@ -156,8 +195,8 @@ async def submit_conversion(
         verify_round_trip=verify_round_trip,
         status=JobStatus.queued,
         bytes_in=bytes_in,
-        src_path=str(src_path),
-        dst_path=str(dst_path),
+        src_path=src_uri,
+        dst_path=dst_uri_placeholder,
         has_password=has_password,
     )
     db.add(job)
@@ -218,13 +257,14 @@ def download_zip(req: _ZipRequest, user: User = Depends(get_current_user), db: S
         raise HTTPException(status_code=400, detail="No job ids provided")
     jobs = db.query(Job).filter(Job.id.in_(req.ids)).all()
     can_others = has_capability(user, CAN_DOWNLOAD_OTHERS_FILES)
+    from ..services.storage import backend_for_uri
     available: list[Job] = []
     for j in jobs:
         if j.user_id != user.id and not can_others:
             continue
         if j.status != JobStatus.done:
             continue
-        if not Path(j.dst_path).exists():
+        if not backend_for_uri(j.dst_path).exists(j.dst_path):
             continue
         available.append(j)
     if not available:
@@ -239,7 +279,7 @@ def download_zip(req: _ZipRequest, user: User = Depends(get_current_user), db: S
         for j in available:
             # Disambiguate name collisions so two "out.png" files don't
             # silently overwrite each other in the zip.
-            name = j.dst_filename or Path(j.dst_path).name
+            name = j.dst_filename or Path(j.dst_path).rsplit("/", 1)[-1] if "/" in str(j.dst_path) else (j.dst_filename or "output")
             if name in used:
                 stem, ext = os.path.splitext(name)
                 i = 1
@@ -247,7 +287,16 @@ def download_zip(req: _ZipRequest, user: User = Depends(get_current_user), db: S
                     i += 1
                 name = f"{stem} ({i}){ext}"
             used.add(name)
-            zf.write(j.dst_path, arcname=name)
+            # Stream the file's bytes from whichever backend owns the
+            # URI scheme into the zip entry. Avoids buffering the whole
+            # output into memory for big S3 objects.
+            backend = backend_for_uri(j.dst_path)
+            with zf.open(name, "w") as entry, backend.open_read(j.dst_path) as reader:
+                while True:
+                    chunk = reader.read(64 * 1024)
+                    if not chunk:
+                        break
+                    entry.write(chunk)
     buf.seek(0)
     audit.log(db, user.id, "convert_download_zip", metadata={"count": len(available)})
     return StreamingResponse(
@@ -274,8 +323,9 @@ def download_result(job_id: int, user: User = Depends(get_current_user), db: Ses
         raise HTTPException(status_code=404, detail="Job not found")
     if job.status != JobStatus.done:
         raise HTTPException(status_code=409, detail=f"Job is {job.status.value}")
-    p = Path(job.dst_path)
-    if not p.exists():
+    from ..services.storage import backend_for_uri
+    backend = backend_for_uri(job.dst_path)
+    if not backend.exists(job.dst_path):
         raise HTTPException(status_code=410, detail="Output file no longer available")
 
     # Decide whether to delete on the way out, based on the OWNER's role
@@ -283,10 +333,10 @@ def download_result(job_id: int, user: User = Depends(get_current_user), db: Ses
     # file still trigger that user's delete-on-download policy).
     cleanup_after = _should_delete_on_download(db, job)
 
-    response = FileResponse(p, filename=job.dst_filename)
+    response = backend.stream_response(job.dst_path, job.dst_filename)
     if cleanup_after:
         from starlette.background import BackgroundTask
-        response.background = BackgroundTask(_post_download_delete, str(p), job.id, job.user_id)
+        response.background = BackgroundTask(_post_download_delete, job.dst_path, job.id, job.user_id)
     return response
 
 
@@ -305,16 +355,18 @@ def _should_delete_on_download(db, job) -> bool:
     return bool(cfg.get("delete_on_download", False))
 
 
-def _post_download_delete(path: str, job_id: int, user_id: int) -> None:
-    """Background task — runs after the FileResponse finishes streaming
-    so the bytes always reach the client first. Best-effort: any failure
-    is logged but doesn't surface to the user."""
+def _post_download_delete(uri: str, job_id: int, user_id: int) -> None:
+    """Background task — runs after the response finishes streaming so
+    the bytes always reach the client first. Best-effort: any failure
+    is logged but doesn't surface to the user. Dispatches by URI scheme
+    so an old ``file://`` row still gets cleaned even after the
+    operator has flipped the active backend to S3."""
     import logging
     log = logging.getLogger("vitriol.cleanup")
+    from ..services.storage import backend_for_uri
     try:
-        os.unlink(path)
-        log.info("delete_on_download: removed %s (job=%d user=%d)", path, job_id, user_id)
-    except FileNotFoundError:
-        pass
-    except OSError as e:
-        log.warning("delete_on_download: failed to remove %s: %s", path, e)
+        ok = backend_for_uri(uri).delete(uri)
+        if ok:
+            log.info("delete_on_download: removed %s (job=%d user=%d)", uri, job_id, user_id)
+    except Exception as e:
+        log.warning("delete_on_download: failed to remove %s: %s", uri, e)

@@ -38,3 +38,11 @@ pydantic-settings>=2.2
 cryptography>=42.0
 email-validator>=2.1
 aiosmtplib>=3.0
+
+# Optional S3-compatible storage backend (AWS, MinIO, Backblaze B2,
+# Cloudflare R2, etc.). Only imported when the operator flips
+# storage_backend='s3'; local-only deployments don't load it. Adds
+# roughly 30 MB to the image — kept in the main requirements file so
+# the storage feature works out of the box rather than failing on
+# first activation with "boto3 missing."
+boto3>=1.34

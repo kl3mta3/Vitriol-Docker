@@ -110,6 +110,17 @@ def _run(job_id: int) -> None:
     db: Session = SessionLocal()
     token = CancellationToken()
     _tokens[job_id] = token
+    # The engine only understands local Paths. For S3-backed jobs we
+    # download the source into a tempfile, give the engine a tempfile
+    # destination, then upload the result back to the backend. For
+    # local-backed jobs both URIs already point at files on disk and
+    # the download/upload are no-ops (we still go through the abstraction
+    # so cleanup paths handle both backends uniformly).
+    import tempfile
+    from ..services.storage import LocalBackend, backend_for_uri, current_backend
+    work_dir = Path(tempfile.mkdtemp(prefix="vitriol-job-"))
+    src_local: Optional[Path] = None
+    dst_local: Optional[Path] = None
     try:
         job: Optional[Job] = db.query(Job).get(job_id)
         if job is None:
@@ -120,10 +131,29 @@ def _run(job_id: int) -> None:
         db.commit()
         _publish(job_id, {"type": "started", "progress": 0})
 
+        src_backend = backend_for_uri(job.src_path)
+        # Fast path: if source is local, skip the download — the engine
+        # can read it in place.
+        if isinstance(src_backend, LocalBackend):
+            src_local = src_backend._uri_to_path(job.src_path)
+        else:
+            src_local = work_dir / f"src{job.src_ext}"
+            src_backend.download_to_path(job.src_path, src_local)
+
+        # Same fast path for the destination — local backend writes
+        # straight to the final location; non-local backends use a
+        # tempfile and we upload after.
+        active_backend = current_backend(db)
+        if isinstance(active_backend, LocalBackend) and job.dst_path.startswith("file://"):
+            dst_local = LocalBackend._uri_to_path(job.dst_path)
+            dst_local.parent.mkdir(parents=True, exist_ok=True)
+        else:
+            dst_local = work_dir / f"dst{job.dst_ext}"
+
         warnings: list[str] = []
         password = b""
         if job.has_password:
-            pw_path = Path(job.src_path).with_suffix(Path(job.src_path).suffix + ".pw")
+            pw_path = src_local.with_suffix(src_local.suffix + ".pw")
             try:
                 password = pw_path.read_bytes()
             except OSError:
@@ -141,8 +171,8 @@ def _run(job_id: int) -> None:
 
         try:
             convert_file(
-                src=Path(job.src_path),
-                dst=Path(job.dst_path),
+                src=src_local,
+                dst=dst_local,
                 src_ext=job.src_ext,
                 dst_ext=job.dst_ext,
                 cancel=token,
@@ -153,11 +183,19 @@ def _run(job_id: int) -> None:
                 password=password,
                 preserve_animations=False,
             )
-            # .exe self-compile path: route through masquerade with .exe target.
-            # The engine handles .exe natively via masquerade when stone=True
-            # and dst_ext='.exe'; nothing extra needed here.
+            # If the destination was a tempfile (non-local backend), push
+            # it to the active backend now and update the Job row with
+            # the resulting URI. The placeholder URI written at upload
+            # time gets replaced with the canonical URI from the upload.
+            if not (isinstance(active_backend, LocalBackend) and job.dst_path.startswith("file://")):
+                # Recover the original key from the placeholder URI so
+                # the uploaded object lands at exactly the spot the
+                # placeholder predicted (keeps cleanup/audit consistent).
+                key = _key_from_placeholder(job.dst_path)
+                final_uri = active_backend.upload_from_path(dst_local, key)
+                job.dst_path = final_uri
             try:
-                size = Path(job.dst_path).stat().st_size
+                size = dst_local.stat().st_size
                 job.bytes_out = size
             except OSError:
                 pass
@@ -186,16 +224,50 @@ def _run(job_id: int) -> None:
             _publish(job_id, {"type": "failed", "error": job.error})
     finally:
         _tokens.pop(job_id, None)
-        # Cleanup password file if any.
+        # Cleanup password file if any. For local sources the .pw
+        # sidecar lives next to src_local; for non-local sources it
+        # would have been on the original upload (also local) — best
+        # effort either way.
         try:
-            j = db.query(Job).get(job_id)
-            if j is not None and j.has_password:
-                pw_path = Path(j.src_path).with_suffix(Path(j.src_path).suffix + ".pw")
+            if src_local is not None:
+                pw_path = src_local.with_suffix(src_local.suffix + ".pw")
                 if pw_path.exists():
                     pw_path.unlink()
         except Exception:
             pass
+        # Always nuke the tempdir we made; harmless when src/dst were
+        # local files outside the tempdir.
+        try:
+            import shutil as _sh
+            _sh.rmtree(work_dir, ignore_errors=True)
+        except Exception:
+            pass
         db.close()
+
+
+def _key_from_placeholder(uri: str) -> str:
+    """Recover the backend-relative key from a placeholder URI. The
+    placeholder was built by ``_placeholder_uri_for`` at upload time;
+    we strip the scheme + bucket/prefix to get back the original key
+    ("outputs/<user>_<token>.<ext>").
+    """
+    if uri.startswith("file://"):
+        # file:///data/outputs/12_abc.png  → "outputs/12_abc.png"
+        from urllib.parse import urlparse, unquote
+        p = unquote(urlparse(uri).path)
+        # Drop leading /data/ if present so the key matches the
+        # backend's namespace expectations.
+        cfg_data = str(get_settings().data_dir).rstrip("/")
+        if p.startswith(cfg_data + "/"):
+            return p[len(cfg_data) + 1:]
+        # Fall back to last two path components.
+        parts = p.strip("/").split("/")
+        return "/".join(parts[-2:]) if len(parts) >= 2 else parts[-1]
+    if uri.startswith("s3://"):
+        # s3://bucket/<key>  → "<key>"
+        from urllib.parse import urlparse, unquote
+        return unquote(urlparse(uri).path.lstrip("/"))
+    return uri
 
 
 # ----------------------------------------------------------- formats
