@@ -277,6 +277,23 @@
         <label><span>Default admin — daily limit</span><input name="default_admin_daily_limit" type="number" /></label>
         <label><span>Default admin — rate / min</span><input name="default_admin_rate_limit" type="number" /></label>
       </div>
+      <p class="muted small" style="margin: 12px 0 4px;">
+        Output-side caps. Stone-mode cross-format conversions can balloon
+        a small input into a much larger output — these stop a 5 MB
+        upload from turning into a 110 MB file that bypasses the upload
+        cap. <strong>0 = unlimited</strong> for both. Per-user and per-role
+        overrides live on the Users + Custom Roles dialogs.
+      </p>
+      <div class="grid-2">
+        <label>
+          <span>Max output size per conversion (bytes — 0 = unlimited)</span>
+          <input name="max_output_size_bytes" type="number" min="0" step="1024" />
+        </label>
+        <label>
+          <span>Max total storage per user (bytes — 0 = unlimited)</span>
+          <input name="max_storage_bytes" type="number" min="0" step="1024" />
+        </label>
+      </div>
     </details>
 
     <details name="server-settings" id="retention"><summary>Output retention (per role)</summary>

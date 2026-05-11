@@ -35,6 +35,11 @@ inviteForm.addEventListener('submit', async (e) => {
   const data = Object.fromEntries(new FormData(e.target));
   if (!data.password) delete data.password;
   if (!data.email) delete data.email;
+  // Name fields are optional — drop empties so the row goes in with
+  // NULL rather than an empty string. Both shapes work, but consistent
+  // NULLs make admin-side filtering cleaner.
+  if (!data.first_name) delete data.first_name;
+  if (!data.last_name) delete data.last_name;
   try {
     await api.post('/users', data);
     inviteDialog.close();
@@ -68,7 +73,7 @@ document.querySelectorAll('th[data-sort]').forEach(th => {
 function applySearch(users) {
   if (!state.search) return users;
   return users.filter(u => {
-    const haystack = `${u.username || ''} ${u.email || ''}`.toLowerCase();
+    const haystack = `${u.username || ''} ${u.email || ''} ${u.first_name || ''} ${u.last_name || ''}`.toLowerCase();
     return haystack.includes(state.search);
   });
 }
@@ -117,8 +122,17 @@ function buildRow(u) {
     ? `<span class="role-tag role-${u.role}" title="custom role (base: ${u.role})">${escapeHtml(u.custom_role_name)}</span>`
     : `<span class="role-tag role-${u.role}">${u.role}</span>`;
 
+  // Real-world name shown as a small secondary line under the username.
+  // Hidden entirely when both first + last are blank, so unfilled rows
+  // don't get a stray empty line. Trim coalesces "First " (no last
+  // name) and " Last" (no first) to a single visible token.
+  const fullName = `${u.first_name || ''} ${u.last_name || ''}`.trim();
+  const nameHtml = fullName
+    ? `<div class="muted small">${escapeHtml(fullName)}</div>`
+    : '';
+
   tr.innerHTML = `
-    <td>${escapeHtml(u.username)}</td>
+    <td>${escapeHtml(u.username)}${nameHtml}</td>
     <td>${escapeHtml(u.email || '')}</td>
     <td>${roleHtml}</td>
     <td>${escapeHtml(statusText)}</td>
@@ -226,6 +240,8 @@ function openManage(u) {
   f.user_id.value = u.id;
   f.username.value = u.username || '';
   f.email.value = u.email || '';
+  if (f.first_name) f.first_name.value = u.first_name || '';
+  if (f.last_name) f.last_name.value = u.last_name || '';
   f.role.value = u.role;
   f.new_password.value = '';
   f.stone_enabled.checked = !!u.stone_enabled;
@@ -249,6 +265,16 @@ function openManage(u) {
     // display; the user can type a fresh value to override.
     f.max_file_size_mb.value = u.max_file_size_bytes
       ? Math.round(u.max_file_size_bytes / (1024 * 1024))
+      : '';
+  }
+  if (f.max_output_size_mb) {
+    f.max_output_size_mb.value = u.max_output_size_bytes
+      ? Math.round(u.max_output_size_bytes / (1024 * 1024))
+      : '';
+  }
+  if (f.max_storage_mb) {
+    f.max_storage_mb.value = u.max_storage_bytes
+      ? Math.round(u.max_storage_bytes / (1024 * 1024))
       : '';
   }
 
@@ -416,6 +442,8 @@ manageForm.addEventListener('submit', async (e) => {
   const formValues = {
     username: manageForm.username.value.trim(),
     email: manageForm.email.value.trim(),
+    first_name: manageForm.first_name ? manageForm.first_name.value.trim() : '',
+    last_name: manageForm.last_name ? manageForm.last_name.value.trim() : '',
     role: roleKind === 'builtin' ? roleVal : null,
     custom_role_id: roleKind === 'custom' ? Number(roleVal) : 0,
     new_password: manageForm.new_password.value,
@@ -435,6 +463,18 @@ manageForm.addEventListener('submit', async (e) => {
       const mb = Number(el.value);
       return mb > 0 ? Math.round(mb * 1024 * 1024) : 0;
     })(),
+    max_output_size_bytes: (() => {
+      const el = manageForm.max_output_size_mb;
+      if (!el || el.value === '') return null;
+      const mb = Number(el.value);
+      return mb > 0 ? Math.round(mb * 1024 * 1024) : 0;
+    })(),
+    max_storage_bytes: (() => {
+      const el = manageForm.max_storage_mb;
+      if (!el || el.value === '') return null;
+      const mb = Number(el.value);
+      return mb > 0 ? Math.round(mb * 1024 * 1024) : 0;
+    })(),
   };
 
   const currentCustomId = u.custom_role_id || 0;
@@ -442,6 +482,11 @@ manageForm.addEventListener('submit', async (e) => {
   // Diff: PATCH only fields the server route handles directly.
   const patch = {};
   if (formValues.email !== (u.email || '')) patch.email = formValues.email || null;
+  // Name fields — server treats empty string as "clear", non-empty as
+  // "set". Only ship when actually changed so a save that didn't touch
+  // them doesn't accidentally null them out.
+  if (formValues.first_name !== (u.first_name || '')) patch.first_name = formValues.first_name;
+  if (formValues.last_name !== (u.last_name || '')) patch.last_name = formValues.last_name;
   if (formValues.role && formValues.role !== u.role) patch.role = formValues.role;
   if (formValues.custom_role_id !== currentCustomId) patch.custom_role_id = formValues.custom_role_id;
   if (formValues.stone_enabled !== !!u.stone_enabled) patch.stone_enabled = formValues.stone_enabled;
@@ -457,6 +502,15 @@ manageForm.addEventListener('submit', async (e) => {
   if (_saveCanEditCap
       && formValues.max_file_size_bytes !== (u.max_file_size_bytes ?? null)) {
     patch.max_file_size_bytes = formValues.max_file_size_bytes;
+  }
+  // Same capability gate for max_output_size_bytes + max_storage_bytes.
+  if (_saveCanEditCap
+      && formValues.max_output_size_bytes !== (u.max_output_size_bytes ?? null)) {
+    patch.max_output_size_bytes = formValues.max_output_size_bytes;
+  }
+  if (_saveCanEditCap
+      && formValues.max_storage_bytes !== (u.max_storage_bytes ?? null)) {
+    patch.max_storage_bytes = formValues.max_storage_bytes;
   }
 
   // Same shape for the retention override. The backend treats an empty
@@ -626,10 +680,22 @@ function openRoleForm(cr) {
   }
   f.daily_conversion_limit.value = cr && cr.daily_conversion_limit != null ? cr.daily_conversion_limit : '';
   f.rate_limit_per_minute.value = cr && cr.rate_limit_per_minute != null ? cr.rate_limit_per_minute : '';
-  // Role-level upload cap, stored as bytes server-side, edited as MB.
+  // Role-level upload cap + sibling output/storage caps, stored as
+  // bytes server-side, edited as MB. Same blank-or-zero-=-inherit
+  // semantics as the per-user fields on the manage-user dialog.
   if (f.max_file_size_mb) {
     f.max_file_size_mb.value = (cr && cr.max_file_size_bytes)
       ? Math.round(cr.max_file_size_bytes / (1024 * 1024))
+      : '';
+  }
+  if (f.max_output_size_mb) {
+    f.max_output_size_mb.value = (cr && cr.max_output_size_bytes)
+      ? Math.round(cr.max_output_size_bytes / (1024 * 1024))
+      : '';
+  }
+  if (f.max_storage_mb) {
+    f.max_storage_mb.value = (cr && cr.max_storage_bytes)
+      ? Math.round(cr.max_storage_bytes / (1024 * 1024))
       : '';
   }
   // Role-level retention override. Empty fields = inherit from server
@@ -698,6 +764,18 @@ roleForm.addEventListener('submit', async (e) => {
     can_set_user_retention: roleForm.can_set_user_retention ? roleForm.can_set_user_retention.checked : false,
     max_file_size_bytes: (() => {
       const el = roleForm.max_file_size_mb;
+      if (!el || el.value === '') return null;
+      const mb = Number(el.value);
+      return mb > 0 ? Math.round(mb * 1024 * 1024) : 0;
+    })(),
+    max_output_size_bytes: (() => {
+      const el = roleForm.max_output_size_mb;
+      if (!el || el.value === '') return null;
+      const mb = Number(el.value);
+      return mb > 0 ? Math.round(mb * 1024 * 1024) : 0;
+    })(),
+    max_storage_bytes: (() => {
+      const el = roleForm.max_storage_mb;
       if (!el || el.value === '') return null;
       const mb = Number(el.value);
       return mb > 0 ? Math.round(mb * 1024 * 1024) : 0;

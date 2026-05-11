@@ -183,6 +183,38 @@ def _run(job_id: int) -> None:
                 password=password,
                 preserve_animations=False,
             )
+            # Enforce the per-user max-output-size cap before publishing
+            # the result. Engine ran on a tempfile, so refusing here is
+            # cheap — we just unlink and fail the job. Without this,
+            # a Stone-mode PNG → WAV expansion (~5x) lets a small input
+            # bypass max_file_size_bytes by producing a much larger
+            # output. Three-tier resolution: user → role → server.
+            try:
+                final_out_size = dst_local.stat().st_size
+            except OSError:
+                final_out_size = 0
+            from ..services import quotas as _quotas
+            from ..models import ServerSettings as _SS
+            _s = db.query(_SS).get(1)
+            owner = db.query(Job).get(job_id).user if False else None  # noqa — readability stub
+            from ..models import User as _U
+            owner_row = db.query(_U).get(job.user_id)
+            out_cap = _quotas.max_output_size_for(owner_row, _s) if owner_row else None
+            if out_cap is not None and final_out_size > out_cap:
+                # Delete the over-cap output and fail the job. The user
+                # sees a clear message + the file never reaches their
+                # storage quota or download flow.
+                try:
+                    dst_local.unlink(missing_ok=True)
+                except OSError:
+                    pass
+                raise RuntimeError(
+                    f"Output exceeds max-output-size cap "
+                    f"({final_out_size:,} > {out_cap:,} bytes). "
+                    f"Try a smaller input, a less-expanding target format, "
+                    f"or ask an admin to raise your output-size cap."
+                )
+
             # If the destination was a tempfile (non-local backend), push
             # it to the active backend now and update the Job row with
             # the resulting URI. The placeholder URI written at upload
@@ -194,11 +226,7 @@ def _run(job_id: int) -> None:
                 key = _key_from_placeholder(job.dst_path)
                 final_uri = active_backend.upload_from_path(dst_local, key)
                 job.dst_path = final_uri
-            try:
-                size = dst_local.stat().st_size
-                job.bytes_out = size
-            except OSError:
-                pass
+            job.bytes_out = final_out_size
             job.status = JobStatus.done
             job.progress = 100
             job.warnings_json = json.dumps(warnings) if warnings else None

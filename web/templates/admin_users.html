@@ -15,7 +15,7 @@
   </header>
 
   <div class="users-toolbar">
-    <input id="users-search" type="search" placeholder="Search by username or email…" autocomplete="off" />
+    <input id="users-search" type="search" placeholder="Search by username, email, or name…" autocomplete="off" />
     <span id="users-count" class="muted small"></span>
   </div>
 
@@ -40,6 +40,10 @@
   <form id="invite-form" class="stack">
     <h2 class="display small">Create user</h2>
     <label><span>Username</span><input name="username" required /></label>
+    <div class="grid-2">
+      <label><span>First name <em class="muted small">(optional)</em></span><input name="first_name" type="text" maxlength="128" autocomplete="off" /></label>
+      <label><span>Last name <em class="muted small">(optional)</em></span><input name="last_name" type="text" maxlength="128" autocomplete="off" /></label>
+    </div>
     <label><span>Email</span><input name="email" type="email" /></label>
     <label><span>Temporary password</span><input name="password" type="password" minlength="8" /></label>
     <label><span>Role</span>
@@ -119,13 +123,23 @@
         <label><span>Daily conversion limit (blank = base default)</span><input name="daily_conversion_limit" type="number" min="0" /></label>
         <label><span>Rate limit / minute (blank = base default)</span><input name="rate_limit_per_minute" type="number" min="0" /></label>
       </div>
-      <label class="full" style="margin-top: 8px;">
-        <span>Max upload size for this role (in MB — 0 or blank = inherit from server default)</span>
-        <input name="max_file_size_mb" type="number" min="0" step="1" placeholder="e.g. 500" />
-      </label>
+      <div class="grid-2" style="margin-top: 8px;">
+        <label>
+          <span>Max upload size for this role (MB — 0/blank = inherit)</span>
+          <input name="max_file_size_mb" type="number" min="0" step="1" placeholder="e.g. 500" />
+        </label>
+        <label>
+          <span>Max output size per conversion (MB — 0/blank = inherit)</span>
+          <input name="max_output_size_mb" type="number" min="0" step="1" placeholder="e.g. 500" />
+        </label>
+        <label>
+          <span>Max total storage per user (MB — 0/blank = inherit)</span>
+          <input name="max_storage_mb" type="number" min="0" step="1" placeholder="e.g. 2048" />
+        </label>
+      </div>
       <label class="checkbox-row" style="margin-top: 8px;">
         <input type="checkbox" name="can_set_user_file_size_cap" />
-        <span>Members of this role can change other users' max upload size override <em class="muted small">(admin-tier — requires base_role = admin)</em></span>
+        <span>Members of this role can change other users' size + storage caps <em class="muted small">(admin-tier — requires base_role = admin)</em></span>
       </label>
       <label class="checkbox-row" style="margin-top: 4px;">
         <input type="checkbox" name="can_set_user_retention" />
@@ -246,6 +260,8 @@
       <div class="grid-2">
         <label><span>Username</span><input name="username" minlength="3" maxlength="64" /></label>
         <label><span>Email</span><input name="email" type="email" /></label>
+        <label><span>First name <em class="muted small">(optional)</em></span><input name="first_name" type="text" maxlength="128" autocomplete="off" /></label>
+        <label><span>Last name <em class="muted small">(optional)</em></span><input name="last_name" type="text" maxlength="128" autocomplete="off" /></label>
         <label><span>Role</span>
           <select name="role">
             <option value="viewer">Viewer</option>
@@ -277,11 +293,23 @@
       {# Per-user max upload size override — requires the actor to have
          the set_user_file_size_cap capability. JS hides this row when
          the calling admin lacks it (we leave the field in the DOM so
-         the form keeps consistent structure across reloads). #}
+         the form keeps consistent structure across reloads).
+
+         The same row also hosts the two related output-side overrides
+         (max output per conversion, total storage quota) — they share
+         the same capability gate so they live together. #}
       <div class="grid-2" id="manage-file-size-row" hidden>
         <label class="full">
           <span>Max upload size override (in MB — 0 or blank = inherit from role/server default)</span>
           <input name="max_file_size_mb" type="number" min="0" step="1" placeholder="e.g. 500" />
+        </label>
+        <label>
+          <span>Max output size per conversion (MB — 0/blank = inherit)</span>
+          <input name="max_output_size_mb" type="number" min="0" step="1" placeholder="e.g. 500" />
+        </label>
+        <label>
+          <span>Max total storage (MB — 0/blank = inherit)</span>
+          <input name="max_storage_mb" type="number" min="0" step="1" placeholder="e.g. 2048" />
         </label>
       </div>
       {# Per-user output-retention override — requires `set_user_retention`.

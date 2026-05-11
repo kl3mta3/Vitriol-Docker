@@ -6,6 +6,10 @@
     <h2 class="display small">Account</h2>
     <form id="profile-form" class="stack">
       <label><span>Username</span><input name="username" value="{{ user.username }}" /></label>
+      <div class="grid-2">
+        <label><span>First name <em class="muted small">(optional)</em></span><input name="first_name" type="text" maxlength="128" autocomplete="given-name" value="{{ user.first_name or '' }}" /></label>
+        <label><span>Last name <em class="muted small">(optional)</em></span><input name="last_name" type="text" maxlength="128" autocomplete="family-name" value="{{ user.last_name or '' }}" /></label>
+      </div>
       <label><span>Email</span><input name="email" type="email" value="{{ user.email or '' }}" /></label>
       <button class="btn btn-primary" type="submit">Save</button>
       <p id="profile-msg" class="ok" hidden></p>

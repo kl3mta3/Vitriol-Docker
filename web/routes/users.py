@@ -36,21 +36,39 @@ def _ensure_can_modify(actor: User, target: User, allow_admin_modify_admin: bool
 
 @router.get("", response_model=List[UserOut])
 def list_users(
+    q: Optional[str] = None,
     include_unverified: bool = False,
     actor: User = Depends(require_admin),
     db: Session = Depends(get_db),
 ):
-    q = db.query(User)
+    """List users.
+
+    ``q`` — case-insensitive substring match across username, email,
+    first_name, last_name. Drives the search box in the admin Users
+    tab. Empty / missing means "no filter".
+    """
+    query = db.query(User)
     # Regular admins must not see (or be able to act on) the super admin.
     if not is_super_admin(actor):
-        q = q.filter(User.role != Role.super_admin)
+        query = query.filter(User.role != Role.super_admin)
     # Unverified rows (signup awaiting email verification) are hidden by
     # default — they're a transient state that auto-purges after 24h, and
     # admins don't want them cluttering the user table or inflating the
     # user count. Pass ?include_unverified=1 to see them.
     if not include_unverified:
-        q = q.filter(User.status != Status.unverified)
-    return q.order_by(User.id).all()
+        query = query.filter(User.status != Status.unverified)
+    if q:
+        from sqlalchemy import or_, func as _sa_func
+        needle = f"%{q.strip().lower()}%"
+        query = query.filter(
+            or_(
+                _sa_func.lower(User.username).like(needle),
+                _sa_func.lower(User.email).like(needle),
+                _sa_func.lower(User.first_name).like(needle),
+                _sa_func.lower(User.last_name).like(needle),
+            )
+        )
+    return query.order_by(User.id).all()
 
 
 @router.post("", response_model=UserOut)
@@ -66,6 +84,8 @@ def create_user(req: UserCreateRequest, actor: User = Depends(require_admin), db
         raise HTTPException(status_code=409, detail="Email already registered")
     user = User(
         username=req.username,
+        first_name=(req.first_name or None) and req.first_name.strip() or None,
+        last_name=(req.last_name or None) and req.last_name.strip() or None,
         email=req.email,
         password_hash=hash_password(req.password) if req.password else None,
         role=target_role,
@@ -126,6 +146,12 @@ def update_user(user_id: int, req: UserUpdateRequest, actor: User = Depends(requ
             target.role = cr.base_role
     if req.email is not None:
         target.email = req.email or None
+    if req.first_name is not None:
+        # Empty string explicitly clears the saved name; non-empty
+        # sets it. Same semantics as the email field above.
+        target.first_name = req.first_name.strip() or None
+    if req.last_name is not None:
+        target.last_name = req.last_name.strip() or None
     if req.stone_enabled is not None:
         if not has_capability(actor, CAN_GRANT_STONE):
             raise HTTPException(status_code=403, detail="Cannot grant stone")
@@ -150,6 +176,23 @@ def update_user(user_id: int, req: UserUpdateRequest, actor: User = Depends(requ
             )
         # 0 explicitly clears the override (back to role/server default).
         target.max_file_size_bytes = req.max_file_size_bytes if req.max_file_size_bytes > 0 else None
+    if req.max_output_size_bytes is not None:
+        # Same capability gate as max_file_size_bytes — both knobs are
+        # the "raise the per-user limit" pattern and any admin trusted
+        # with one is trusted with the others.
+        if not has_capability(actor, CAN_SET_USER_FILE_SIZE_CAP):
+            raise HTTPException(
+                status_code=403,
+                detail="Cannot change max_output_size_bytes — missing set_user_file_size_cap capability.",
+            )
+        target.max_output_size_bytes = req.max_output_size_bytes if req.max_output_size_bytes > 0 else None
+    if req.max_storage_bytes is not None:
+        if not has_capability(actor, CAN_SET_USER_FILE_SIZE_CAP):
+            raise HTTPException(
+                status_code=403,
+                detail="Cannot change max_storage_bytes — missing set_user_file_size_cap capability.",
+            )
+        target.max_storage_bytes = req.max_storage_bytes if req.max_storage_bytes > 0 else None
     if req.output_retention is not None:
         # Capability-gated mirror of max_file_size_bytes above. Empty dict
         # explicitly clears the per-user override (falls back to custom

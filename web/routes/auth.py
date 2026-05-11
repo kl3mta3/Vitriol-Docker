@@ -179,6 +179,8 @@ async def signup(req: SignUpRequest, db: Session = Depends(get_db)):
     #                Discord + admin emails go out for pending users.
     user = User(
         username=req.username,
+        first_name=(req.first_name or None) and req.first_name.strip() or None,
+        last_name=(req.last_name or None) and req.last_name.strip() or None,
         email=req.email,
         password_hash=hash_password(req.password),
         role=Role.pending if role == Role.pending else role,

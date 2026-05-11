@@ -79,6 +79,14 @@ class User(Base):
 
     id = Column(Integer, primary_key=True)
     username = Column(String(64), unique=True, nullable=False, index=True)
+    # Real-world name. Optional in every flow (signup, profile edit,
+    # admin create). Stored as two columns rather than one "full_name"
+    # so we can sort by surname, prefill the right field from an SSO
+    # identity (Google + Authentik both give us split given/family),
+    # and let mononymic users leave one blank. UI always displays
+    # "{first} {last}".strip() so a partial value renders naturally.
+    first_name = Column(String(128), nullable=True)
+    last_name = Column(String(128), nullable=True)
     email = Column(String(255), unique=True, nullable=True, index=True)
     email_verified_at = Column(DateTime, nullable=True)
     password_hash = Column(String(255), nullable=True)  # null = SSO-only
@@ -99,6 +107,21 @@ class User(Base):
     # Super admin is always unlimited regardless of the chain.
     # Editing this field requires the `set_user_file_size_cap` capability.
     max_file_size_bytes = Column(Integer, nullable=True)
+    # Per-user max-OUTPUT-size override. Same three-tier resolution.
+    # Distinct from max_file_size_bytes because the engine can produce
+    # outputs much larger than the input — a 5 MB image masqueraded into
+    # a WAV can land at ~25 MB, and ZIP / video expansions are bigger.
+    # Without this cap, a small upload can balloon into a disk-eating
+    # output that bypasses the input limit entirely. NULL = inherit;
+    # 0 = unlimited (super-admin default).
+    max_output_size_bytes = Column(Integer, nullable=True)
+    # Per-user total-storage quota — caps the SUM of bytes_out across
+    # the user's `done` jobs whose files are still on disk. Three-tier
+    # same as above. Enforced *before* an upload starts: if the user's
+    # current usage already meets/exceeds this cap (or the new upload's
+    # size would push over), the upload is refused with a clear message.
+    # NULL = inherit; 0 = unlimited.
+    max_storage_bytes = Column(Integer, nullable=True)
 
     # Per-user output-retention override. JSON object matching the
     # `output_retention[<role>]` shape on ServerSettings:
@@ -290,6 +313,12 @@ class CustomRole(Base):
     # Role-level max upload size. Used when no per-user override is set
     # (User.max_file_size_bytes). Null = inherit from server default.
     max_file_size_bytes = Column(Integer, nullable=True)
+    # Role-level max-output-size + total-storage-quota overrides. Same
+    # three-tier dance as max_file_size_bytes — null means inherit from
+    # the server default. Per-user values on individual rows override
+    # these.
+    max_output_size_bytes = Column(Integer, nullable=True)
+    max_storage_bytes = Column(Integer, nullable=True)
     # Role-level output retention override (same JSON shape as the
     # per-role rows in server_settings.output_retention_json). NULL =
     # inherit from the matching built-in role default. Per-user
@@ -471,6 +500,18 @@ class ServerSettings(Base):
 
     global_rate_limit_per_minute = Column(Integer, nullable=False, default=600)
     max_file_size_bytes = Column(Integer, nullable=False, default=1024 * 1024 * 1024)  # 1 GiB
+    # Server-wide ceiling on a single converted output file. Stone mode
+    # cross-format conversions can expand a small input into a much
+    # larger output (PNG→WAV is ~3-5x, video containers can be 2-10x);
+    # without this, max_file_size_bytes alone doesn't bound disk use.
+    # 0 = unlimited (the default; operator opts in by setting a value).
+    max_output_size_bytes = Column(Integer, nullable=False, default=0, server_default="0")
+    # Server-wide per-user total-storage quota — sum of bytes_out across
+    # a user's `done` jobs whose files still exist. 0 = unlimited.
+    # Enforced at upload time: if the user's current usage already
+    # exceeds the quota, the upload is rejected with a "Delete or
+    # Download some files to convert this" message.
+    max_storage_bytes = Column(Integer, nullable=False, default=0, server_default="0")
 
     default_user_daily_limit = Column(Integer, nullable=False, default=50)
     default_user_rate_limit = Column(Integer, nullable=False, default=30)

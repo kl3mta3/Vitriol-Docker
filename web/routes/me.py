@@ -45,6 +45,10 @@ async def update_me(req: SelfUpdateRequest, user: User = Depends(get_current_use
         if req.theme not in VALID_THEMES:
             raise HTTPException(status_code=400, detail=f"Unknown theme. Choose from {sorted(VALID_THEMES)}")
         user.theme = req.theme
+    if req.first_name is not None:
+        user.first_name = req.first_name.strip() or None
+    if req.last_name is not None:
+        user.last_name = req.last_name.strip() or None
     db.commit()
     db.refresh(user)
     audit.log(db, user.id, "self_update", target_user_id=user.id)

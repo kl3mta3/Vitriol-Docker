@@ -7,6 +7,10 @@
   {% if password_signin_enabled %}
   <form id="signup-form" class="stack">
     <label><span>Username</span><input name="username" type="text" required minlength="3" maxlength="64" /></label>
+    <div class="grid-2">
+      <label><span>First name <em class="muted small">(optional)</em></span><input name="first_name" type="text" maxlength="128" autocomplete="given-name" /></label>
+      <label><span>Last name <em class="muted small">(optional)</em></span><input name="last_name" type="text" maxlength="128" autocomplete="family-name" /></label>
+    </div>
     <label><span>Email</span><input name="email" type="email" required /></label>
     <label><span>Password</span><input name="password" type="password" required minlength="8" /></label>
     <button type="submit" class="btn btn-primary">Sign up</button>

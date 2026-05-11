@@ -71,6 +71,8 @@ def _to_out(cr: CustomRole, user_count: int) -> CustomRoleOut:
         can_set_user_file_size_cap=cr.can_set_user_file_size_cap,
         can_set_user_retention=cr.can_set_user_retention,
         max_file_size_bytes=cr.max_file_size_bytes,
+        max_output_size_bytes=cr.max_output_size_bytes,
+        max_storage_bytes=cr.max_storage_bytes,
         output_retention=cr.output_retention,
         created_at=cr.created_at,
         user_count=user_count,
@@ -149,6 +151,8 @@ def create_role(
         daily_conversion_limit=req.daily_conversion_limit,
         rate_limit_per_minute=req.rate_limit_per_minute,
         max_file_size_bytes=req.max_file_size_bytes if req.max_file_size_bytes and req.max_file_size_bytes > 0 else None,
+        max_output_size_bytes=req.max_output_size_bytes if req.max_output_size_bytes and req.max_output_size_bytes > 0 else None,
+        max_storage_bytes=req.max_storage_bytes if req.max_storage_bytes and req.max_storage_bytes > 0 else None,
         output_retention_json=_encode_retention(req.output_retention),
         can_create_user=req.can_create_user,
         can_suspend_user=req.can_suspend_user,
@@ -214,6 +218,10 @@ def update_role(
     if req.max_file_size_bytes is not None:
         # 0 clears the role-level override; positive sets it.
         cr.max_file_size_bytes = req.max_file_size_bytes if req.max_file_size_bytes > 0 else None
+    if req.max_output_size_bytes is not None:
+        cr.max_output_size_bytes = req.max_output_size_bytes if req.max_output_size_bytes > 0 else None
+    if req.max_storage_bytes is not None:
+        cr.max_storage_bytes = req.max_storage_bytes if req.max_storage_bytes > 0 else None
     if req.output_retention is not None:
         # Empty dict clears the per-role override (back to server default
         # for the base role); a populated dict gets whitelisted + stored.

@@ -118,6 +118,26 @@ async def submit_conversion(
     # override > server-wide default. Super admin → unlimited (None).
     max_size = quotas.max_file_size_for(user, s)
 
+    # Total-storage quota check — refuse upfront if the user's existing
+    # outputs already meet/exceed their quota. The "delete or download"
+    # phrasing matches what the UI surfaces. Caveat: this uses
+    # current_storage as a snapshot — it doesn't predict the output
+    # size of the about-to-be-submitted job. A user near the line can
+    # still produce one over-quota output before the next upload is
+    # refused; the post-conversion max_output_size cap catches the
+    # other half of the problem.
+    storage_quota = quotas.max_storage_for(user, s)
+    if storage_quota is not None and storage_quota > 0:
+        used = quotas.current_storage_used(db, user.id)
+        if used >= storage_quota:
+            raise HTTPException(
+                status_code=413,
+                detail=(
+                    f"Storage quota reached ({used:,}/{storage_quota:,} bytes). "
+                    "Delete or Download some files to convert this."
+                ),
+            )
+
     src_ext = "." + (file.filename.rsplit(".", 1)[-1] if file.filename and "." in file.filename else "bin").lower()
     dst_ext_norm = dst_ext if dst_ext.startswith(".") else "." + dst_ext
 

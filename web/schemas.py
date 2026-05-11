@@ -16,6 +16,11 @@ class SignUpRequest(BaseModel):
     username: str = Field(min_length=3, max_length=64)
     email: EmailStr
     password: str = Field(min_length=8, max_length=200)
+    # Optional real-name fields. Captured if the operator wants them
+    # on the signup form (the template renders them but doesn't
+    # require them, so signup stays low-friction).
+    first_name: Optional[str] = Field(default=None, max_length=128)
+    last_name: Optional[str] = Field(default=None, max_length=128)
 
 
 class TokenResponse(BaseModel):
@@ -44,6 +49,8 @@ class UserOut(BaseModel):
     model_config = ConfigDict(from_attributes=True)
     id: int
     username: str
+    first_name: Optional[str] = None
+    last_name: Optional[str] = None
     email: Optional[str]
     email_verified_at: Optional[datetime]
     role: str
@@ -55,6 +62,8 @@ class UserOut(BaseModel):
     daily_conversion_limit: Optional[int]
     rate_limit_per_minute: Optional[int]
     max_file_size_bytes: Optional[int] = None    # per-user upload cap override
+    max_output_size_bytes: Optional[int] = None  # per-user output-size cap override
+    max_storage_bytes: Optional[int] = None      # per-user total storage quota
     # Per-user retention override. Same shape as the per-role objects
     # under server_settings.output_retention_json:
     #   {"max_files", "max_age", "age_unit", "delete_on_download"}.
@@ -72,6 +81,8 @@ class UserOut(BaseModel):
 
 class UserCreateRequest(BaseModel):
     username: str = Field(min_length=3, max_length=64)
+    first_name: Optional[str] = Field(default=None, max_length=128)
+    last_name: Optional[str] = Field(default=None, max_length=128)
     email: Optional[EmailStr] = None
     password: Optional[str] = Field(default=None, min_length=8, max_length=200)
     role: str = "user"
@@ -79,6 +90,11 @@ class UserCreateRequest(BaseModel):
 
 class UserUpdateRequest(BaseModel):
     email: Optional[EmailStr] = None
+    # Empty string clears the saved value; null (omitted) leaves it
+    # alone. Same semantics as the secret-clearing pattern on
+    # ServerSettingsPatch.
+    first_name: Optional[str] = Field(default=None, max_length=128)
+    last_name: Optional[str] = Field(default=None, max_length=128)
     role: Optional[str] = None
     custom_role_id: Optional[int] = None  # 0 / null = clear, positive = assign
     stone_enabled: Optional[bool] = None
@@ -90,6 +106,12 @@ class UserUpdateRequest(BaseModel):
     # the actor has the `set_user_file_size_cap` capability; otherwise
     # the field is silently dropped from the patch.
     max_file_size_bytes: Optional[int] = None
+    # Per-user max-output-size + total-storage overrides. Same gate as
+    # max_file_size_bytes (reuses the `set_user_file_size_cap`
+    # capability — there's no separate "storage cap" capability since
+    # operators who manage one always manage the others).
+    max_output_size_bytes: Optional[int] = None
+    max_storage_bytes: Optional[int] = None
     # Per-user retention override. Same shape as the per-role entries
     # under server_settings.output_retention_json. {} or null clears
     # the override. Only honored when the actor has the
@@ -104,6 +126,8 @@ class SuspendRequest(BaseModel):
 
 class SelfUpdateRequest(BaseModel):
     username: Optional[str] = Field(default=None, min_length=3, max_length=64)
+    first_name: Optional[str] = Field(default=None, max_length=128)
+    last_name: Optional[str] = Field(default=None, max_length=128)
     email: Optional[EmailStr] = None
     theme: Optional[str] = Field(default=None, max_length=32)
 
@@ -166,6 +190,8 @@ class ServerSettingsOut(BaseModel):
     bind_port: int
     global_rate_limit_per_minute: int
     max_file_size_bytes: int
+    max_output_size_bytes: int = 0
+    max_storage_bytes: int = 0
     default_user_daily_limit: int
     default_user_rate_limit: int
     default_admin_daily_limit: int
@@ -249,6 +275,8 @@ class ServerSettingsPatch(BaseModel):
     bind_port: Optional[int] = None
     global_rate_limit_per_minute: Optional[int] = None
     max_file_size_bytes: Optional[int] = None
+    max_output_size_bytes: Optional[int] = None
+    max_storage_bytes: Optional[int] = None
     default_user_daily_limit: Optional[int] = None
     default_user_rate_limit: Optional[int] = None
     default_admin_daily_limit: Optional[int] = None
@@ -339,6 +367,9 @@ class CustomRoleOut(BaseModel):
     # Role-level upload cap. Null means inherit from server default.
     # Per-user overrides on individual rows further override this.
     max_file_size_bytes: Optional[int] = None
+    # Role-level output-size cap + total-storage quota. Same pattern.
+    max_output_size_bytes: Optional[int] = None
+    max_storage_bytes: Optional[int] = None
     # Role-level retention override. Empty/null means inherit from
     # server default for the base role. Per-user overrides on
     # individual rows further override this.
@@ -371,6 +402,8 @@ class CustomRoleCreateRequest(BaseModel):
     can_set_user_file_size_cap: bool = False
     can_set_user_retention: bool = False
     max_file_size_bytes: Optional[int] = None
+    max_output_size_bytes: Optional[int] = None
+    max_storage_bytes: Optional[int] = None
     output_retention: Optional[dict] = None
 
 
@@ -398,6 +431,8 @@ class CustomRoleUpdateRequest(BaseModel):
     can_set_user_file_size_cap: Optional[bool] = None
     can_set_user_retention: Optional[bool] = None
     max_file_size_bytes: Optional[int] = None
+    max_output_size_bytes: Optional[int] = None
+    max_storage_bytes: Optional[int] = None
     output_retention: Optional[dict] = None
 
 

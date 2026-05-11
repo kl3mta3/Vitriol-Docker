@@ -284,6 +284,32 @@ _ADDITIVE_COLUMNS: list[tuple[str, str, str]] = [
      "ALTER TABLE db_providers ADD COLUMN last_migrate_at TIMESTAMP"),
     ("db_providers", "last_migrate_status",
      "ALTER TABLE db_providers ADD COLUMN last_migrate_status VARCHAR(255)"),
+    # Per-conversion output-size cap. Distinct from max_file_size_bytes
+    # (which caps INPUT) because Stone-mode expansions can balloon a
+    # small input into a much larger output. Three-tier resolution:
+    # user → custom_role → server_settings. 0 = unlimited.
+    ("server_settings", "max_output_size_bytes",
+     "ALTER TABLE server_settings ADD COLUMN max_output_size_bytes INTEGER NOT NULL DEFAULT 0"),
+    ("users", "max_output_size_bytes",
+     "ALTER TABLE users ADD COLUMN max_output_size_bytes INTEGER"),
+    ("custom_roles", "max_output_size_bytes",
+     "ALTER TABLE custom_roles ADD COLUMN max_output_size_bytes INTEGER"),
+    # Per-user total-storage quota — sum of bytes_out across done jobs.
+    # Three-tier same as above. 0 = unlimited. Enforced at upload time;
+    # user is told to delete or download some files to free space.
+    ("server_settings", "max_storage_bytes",
+     "ALTER TABLE server_settings ADD COLUMN max_storage_bytes INTEGER NOT NULL DEFAULT 0"),
+    ("users", "max_storage_bytes",
+     "ALTER TABLE users ADD COLUMN max_storage_bytes INTEGER"),
+    # Optional real-world name fields. SSO callbacks auto-fill these
+    # from the IdP's given_name / family_name claims when present;
+    # otherwise the user types them in profile / admin sets at create.
+    ("users", "first_name",
+     "ALTER TABLE users ADD COLUMN first_name VARCHAR(128)"),
+    ("users", "last_name",
+     "ALTER TABLE users ADD COLUMN last_name VARCHAR(128)"),
+    ("custom_roles", "max_storage_bytes",
+     "ALTER TABLE custom_roles ADD COLUMN max_storage_bytes INTEGER"),
 ]
 
 

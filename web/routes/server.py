@@ -31,6 +31,8 @@ def _to_out(s: ServerSettings) -> ServerSettingsOut:
         bind_host=s.bind_host, bind_port=s.bind_port,
         global_rate_limit_per_minute=s.global_rate_limit_per_minute,
         max_file_size_bytes=s.max_file_size_bytes,
+        max_output_size_bytes=int(getattr(s, "max_output_size_bytes", 0) or 0),
+        max_storage_bytes=int(getattr(s, "max_storage_bytes", 0) or 0),
         default_user_daily_limit=s.default_user_daily_limit,
         default_user_rate_limit=s.default_user_rate_limit,
         default_admin_daily_limit=s.default_admin_daily_limit,
@@ -154,6 +156,7 @@ def patch_server_settings(
         # proxy) — neither path reads from this table. Patching them
         # silently does nothing, which is worse UX than rejecting them.
         "global_rate_limit_per_minute", "max_file_size_bytes",
+        "max_output_size_bytes", "max_storage_bytes",
         "default_user_daily_limit", "default_user_rate_limit",
         "default_admin_daily_limit", "default_admin_rate_limit",
         "allow_signup",
