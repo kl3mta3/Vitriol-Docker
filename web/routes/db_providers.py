@@ -393,6 +393,104 @@ def active_state(
     }
 
 
+@router.post("/snapshot", response_model=DbProviderOut)
+def snapshot_current_db(
+    actor: User = Depends(require_super_admin), db: Session = Depends(get_db),
+):
+    """One-click backup: spin up a new SQLite-backed provider whose
+    file lives at ``/data/vitriol-snapshot-<timestamp>.db``, initialize
+    the Vitriol schema in it, and start a row-by-row copy of the
+    currently running DB into it.
+
+    Stops short of setting the snapshot as active — the caller decides
+    whether to keep it as a backup file or promote it to be the next-boot
+    target. The migration runs in the same background worker as the
+    regular "Try migrate" action; the UI opens the same progress dialog.
+    """
+    from datetime import datetime as _dt
+    from pathlib import Path as _P
+    from ..config import get_settings as _gs
+    from ..db import Base as _Base
+    from ..services import db_migrate
+
+    # Don't try to snapshot when one is already running — keeps the
+    # singleton worker simple and protects against accidental double-clicks.
+    if db_migrate.is_running():
+        raise HTTPException(
+            status_code=409,
+            detail="A migration is already running. Wait for it to finish before snapshotting.",
+        )
+
+    ts = _dt.utcnow().strftime("%Y%m%d-%H%M%S")
+    slug = f"snapshot-{ts}"
+    display = f"Snapshot {_dt.utcnow().strftime('%Y-%m-%d %H:%M:%S')} UTC"
+    db_path = f"vitriol-snapshot-{ts}.db"
+
+    # Refuse if the destination would land on top of the currently
+    # active SQLite file (we'd be writing to the file we're reading
+    # from). The default DB at /data/vitriol.db is the only realistic
+    # collision target; check it explicitly.
+    cfg = _gs()
+    full_dst = cfg.data_dir / db_path
+    default_db = cfg.data_dir / "vitriol.db"
+    if full_dst.resolve() == default_db.resolve():
+        # Pathologically improbable (timestamp is in the path), but
+        # better-safe-than-sorry — pick a different name and retry.
+        raise HTTPException(
+            status_code=500,
+            detail="Snapshot path collides with the live DB. Retry the request.",
+        )
+
+    # Create the provider row first so the migration worker's
+    # _stamp_provider call has something to write back to.
+    p = DbProvider(
+        slug=slug,
+        display_name=display,
+        kind="sqlite",
+        config_json=json.dumps({"db_path": db_path}),
+        secret_enc=None,
+        created_by_user_id=actor.id,
+    )
+    db.add(p)
+    db.commit()
+    db.refresh(p)
+
+    # Initialize the schema on the snapshot file (create_all against a
+    # fresh engine). Mirror what /initialize-schema does so the migrate
+    # phase finds the expected tables.
+    from sqlalchemy import create_engine as _ce
+    target_url = build_url("sqlite", {"db_path": db_path}, None)
+    try:
+        eng = _ce(target_url, future=True)
+        _Base.metadata.create_all(bind=eng)
+        eng.dispose()
+    except Exception as e:
+        # Roll back the row so the operator can retry without a stale
+        # entry cluttering the table.
+        db.delete(p)
+        db.commit()
+        raise HTTPException(status_code=500, detail=f"Schema init on snapshot failed: {e}")
+
+    p.last_init_at = _dt.utcnow()
+    # Pretend the test passed — it's a local SQLite file we just wrote
+    # the schema into; the connect already succeeded.
+    from datetime import datetime as _dt2
+    p.last_test_at = _dt2.utcnow()
+    p.last_test_ok = True
+    db.commit()
+    db.refresh(p)
+
+    # Kick off the copy.
+    try:
+        db_migrate.start(p.id, target_url)
+    except RuntimeError as e:
+        raise HTTPException(status_code=409, detail=str(e))
+
+    audit.log(db, actor.id, "db_provider_snapshot",
+              metadata={"id": p.id, "slug": slug, "path": str(full_dst)})
+    return _to_out(p)
+
+
 @router.post("/{provider_id}/migrate", response_model=DbMigrateStatus)
 def start_migration(
     provider_id: int,

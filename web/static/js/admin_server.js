@@ -2286,6 +2286,29 @@ function paintMigrationProgress(s) {
   }
 }
 
+// Snapshot button — one-click SQLite backup of the running DB. Creates
+// a new SQLite provider, initializes its schema, and starts a copy.
+// Reuses the same progress dialog as Try Migrate.
+const dbSnapshotBtn = document.getElementById('db-snapshot-btn');
+if (dbSnapshotBtn) {
+  dbSnapshotBtn.addEventListener('click', async () => {
+    if (!confirm(
+      'Create a SQLite backup of the running database?\n\n' +
+      'The file will land at /data/vitriol-snapshot-<timestamp>.db. ' +
+      'The running DB stays online (read-only access only). ' +
+      'After it finishes you can keep the file as a backup, or click ' +
+      '"Set as active" on the new row + Restart to promote it.'
+    )) return;
+    try {
+      await api.post('/server/db-providers/snapshot', {});
+      await reloadDbProviders();
+      openMigrateDialog();
+    } catch (ex) {
+      alert(ex.detail || 'Snapshot failed to start.');
+    }
+  });
+}
+
 // Pending-switch banner buttons.
 const dbPendingCancelBtn = document.getElementById('db-pending-cancel-btn');
 if (dbPendingCancelBtn) {
