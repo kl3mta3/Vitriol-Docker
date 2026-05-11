@@ -298,12 +298,26 @@
       </p>
       <div class="grid-2">
         <label>
-          <span>Max output size per conversion (bytes — 0 = unlimited)</span>
-          <input name="max_output_size_bytes" type="number" min="0" step="1024" />
+          <span>Max output size per conversion (0 = unlimited)</span>
+          <div class="size-input">
+            <input id="max-output-size-value" type="number" min="0" step="1" />
+            <select id="max-output-size-unit">
+              <option value="MB">MB</option>
+              <option value="GB">GB</option>
+            </select>
+            <span id="max-output-size-bytes-display" class="muted small"></span>
+          </div>
         </label>
         <label>
-          <span>Max total storage per user (bytes — 0 = unlimited)</span>
-          <input name="max_storage_bytes" type="number" min="0" step="1024" />
+          <span>Max total storage per user (0 = unlimited)</span>
+          <div class="size-input">
+            <input id="max-storage-value" type="number" min="0" step="1" />
+            <select id="max-storage-unit">
+              <option value="MB">MB</option>
+              <option value="GB">GB</option>
+            </select>
+            <span id="max-storage-bytes-display" class="muted small"></span>
+          </div>
         </label>
       </div>
     </details>

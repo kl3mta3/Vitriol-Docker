@@ -36,6 +36,57 @@ if (sizeValueEl && sizeUnitEl) {
   sizeUnitEl.addEventListener('change', updateBytesDisplay);
 }
 
+// Generalized size-input widget — same value+unit+display pattern as
+// the max-file-size trio above, but allows 0 (= "unlimited"). Used by
+// the max_output_size_bytes and max_storage_bytes fields on the Limits
+// section. Returns the element refs so the load + save sites can drive
+// the widget without re-querying the DOM each call.
+function makeSizeWidget(valueId, unitId, displayId) {
+  const valueEl = document.getElementById(valueId);
+  const unitEl  = document.getElementById(unitId);
+  const displayEl = document.getElementById(displayId);
+  if (!valueEl || !unitEl) {
+    return { valueEl: null, unitEl: null, displayEl: null,
+             toBytes: () => 0, fromBytes: () => {}, update: () => {} };
+  }
+  const toBytes = () => {
+    const v = Number(valueEl.value);
+    if (!isFinite(v) || v < 0) return 0;
+    return v * (unitEl.value === 'GB' ? GB : MB);
+  };
+  const update = () => {
+    if (!displayEl) return;
+    const b = toBytes();
+    displayEl.textContent = b === 0 ? '= unlimited' : `= ${b.toLocaleString()} bytes`;
+  };
+  const fromBytes = (bytes) => {
+    // 0 stays 0 (= unlimited). Pick GB when the value lands on an
+    // exact GB boundary, otherwise MB. Round MB to keep odd values
+    // tidy in the input.
+    if (!bytes || bytes <= 0) {
+      valueEl.value = 0;
+      unitEl.value = 'MB';
+    } else if (bytes % GB === 0 && bytes >= GB) {
+      valueEl.value = bytes / GB;
+      unitEl.value = 'GB';
+    } else {
+      valueEl.value = Math.max(0, Math.round(bytes / MB));
+      unitEl.value = 'MB';
+    }
+    update();
+  };
+  valueEl.addEventListener('input', update);
+  unitEl.addEventListener('change', update);
+  return { valueEl, unitEl, displayEl, toBytes, fromBytes, update };
+}
+
+const outputSizeWidget = makeSizeWidget(
+  'max-output-size-value', 'max-output-size-unit', 'max-output-size-bytes-display'
+);
+const storageWidget = makeSizeWidget(
+  'max-storage-value', 'max-storage-unit', 'max-storage-bytes-display'
+);
+
 // Visual placeholder shown when a secret column is populated server-side.
 // We never echo plaintext back, so the field stays empty on save — but an
 // empty field looks identical to "I never saved this", which is confusing.
@@ -109,6 +160,10 @@ async function load() {
     sizeUnitEl.value = r.unit;
     updateBytesDisplay();
   }
+  // Populate the two output-side widgets too. Both accept 0 = unlimited
+  // (unlike max_file_size which has a min of 1).
+  outputSizeWidget.fromBytes(s.max_output_size_bytes || 0);
+  storageWidget.fromBytes(s.max_storage_bytes || 0);
   // 3-tier disabled-formats grid — six JSON arrays, decoded into
   // comma-separated strings shown in the matching tier inputs.
   const tierMap = {
@@ -274,6 +329,15 @@ form.addEventListener('submit', async (e) => {
   // is nothing, since the inputs have no `name`) with the computed bytes.
   const bytes = readableToBytes();
   if (bytes != null) data.max_file_size_bytes = bytes;
+  // Same trick for the two output-side widgets. They allow 0 = unlimited,
+  // so we always set the field (no `if non-null` guard) — letting the
+  // operator save back to 0 to disable the cap is the whole point.
+  if (outputSizeWidget.valueEl) {
+    data.max_output_size_bytes = outputSizeWidget.toBytes();
+  }
+  if (storageWidget.valueEl) {
+    data.max_storage_bytes = storageWidget.toBytes();
+  }
 
   // Output retention — read the per-role grid into the JSON payload
   // the server expects.
