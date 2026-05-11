@@ -430,20 +430,35 @@ async def test_email(
     if "@" not in str(to):
         raise HTTPException(status_code=400, detail="Recipient address looks invalid.")
 
-    # Build the message inline rather than reusing email_svc helpers — this
-    # is a one-shot test, no token issuance, no DB writes.
-    from email.message import EmailMessage
     import aiosmtplib
     from ..auth.crypto import decrypt
+    from ..auth.email import _button_html, _html_email
 
-    msg = EmailMessage()
+    relay = f"{s.smtp_host}:{s.smtp_port or 587}"
+    auth = s.smtp_user or "(no auth)"
+    plain = (
+        "If you can read this, SMTP is wired up correctly.\n\n"
+        f"Sent by Vitriol via {relay} as {auth}.\n"
+    )
+    html = _html_email(
+        title="Vitriol — SMTP test",
+        greeting="SMTP is working!",
+        paragraphs=[
+            "This is a test message sent from your Vitriol server to verify that outgoing email is configured correctly.",
+            f"Relay: {relay}    Auth: {auth}",
+        ],
+        button_html=_button_html("Open Vitriol", str(s.public_base_url or "/")),
+        footer="You can safely ignore this email — it was triggered by the SMTP test button in Server settings.",
+    )
+
+    from email.mime.multipart import MIMEMultipart
+    from email.mime.text import MIMEText
+    msg = MIMEMultipart("alternative")
     msg["From"] = s.smtp_from
     msg["To"] = to
     msg["Subject"] = "Vitriol — SMTP test"
-    msg.set_content(
-        "If you can read this, SMTP is wired up correctly.\n\n"
-        f"Sent by Vitriol via {s.smtp_host}:{s.smtp_port or 587} as {s.smtp_user or '(no auth)'}.\n"
-    )
+    msg.attach(MIMEText(plain, "plain", "utf-8"))
+    msg.attach(MIMEText(html, "html", "utf-8"))
     from datetime import datetime as _dt
     try:
         # Hard 15s budget for the entire SMTP round trip. aiosmtplib's

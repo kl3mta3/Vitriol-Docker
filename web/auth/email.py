@@ -4,12 +4,13 @@ Silently no-ops when SMTP isn't configured (logs a warning) so dev runs
 don't crash on signup.
 """
 from __future__ import annotations
-import asyncio
 import hashlib
 import logging
 import secrets
 from datetime import datetime, timedelta
-from email.message import EmailMessage
+from email.mime.multipart import MIMEMultipart
+from email.mime.text import MIMEText
+from html import escape
 from typing import Optional
 
 from sqlalchemy.orm import Session
@@ -19,12 +20,84 @@ from .crypto import decrypt
 
 logger = logging.getLogger("vitriol.email")
 
+_BRAND_COLOR = "#8b5cf6"
+_BRAND_COLOR_DARK = "#7c3aed"
+
 
 def _settings_row(db: Session) -> Optional[ServerSettings]:
     return db.query(ServerSettings).get(1)
 
 
-async def _send(db: Session, to: str, subject: str, body: str) -> bool:
+def _button_html(label: str, url: str) -> str:
+    """Inline-CSS CTA button block compatible with most email clients."""
+    safe_url = escape(url, quote=True)
+    safe_label = escape(label)
+    return f"""\
+<table role="presentation" cellspacing="0" cellpadding="0" border="0" style="margin:24px 0;">
+  <tr>
+    <td style="border-radius:6px;background:{_BRAND_COLOR};">
+      <a href="{safe_url}" target="_blank"
+         style="display:inline-block;padding:12px 28px;font-family:Arial,sans-serif;
+                font-size:15px;font-weight:600;color:#ffffff;text-decoration:none;
+                border-radius:6px;background:{_BRAND_COLOR};">{safe_label}</a>
+    </td>
+  </tr>
+</table>
+<p style="margin:0 0 4px 0;font-family:Arial,sans-serif;font-size:12px;color:#888888;">
+  Button not working? Copy and paste this link into your browser:
+</p>
+<p style="margin:0 0 24px 0;word-break:break-all;">
+  <a href="{safe_url}" style="font-family:monospace;font-size:12px;color:{_BRAND_COLOR};">{escape(url)}</a>
+</p>"""
+
+
+def _html_email(title: str, greeting: str, paragraphs: list[str], button_html: str, footer: str = "") -> str:
+    """Full HTML email shell with inline CSS."""
+    safe_title = escape(title)
+    para_html = "".join(
+        f'<p style="margin:0 0 16px 0;font-family:Arial,sans-serif;font-size:15px;'
+        f'line-height:1.6;color:#333333;">{escape(p)}</p>'
+        for p in paragraphs
+    )
+    footer_html = (
+        f'<p style="margin:32px 0 0 0;font-family:Arial,sans-serif;font-size:12px;'
+        f'color:#888888;border-top:1px solid #eeeeee;padding-top:16px;">{escape(footer)}</p>'
+        if footer else ""
+    )
+    return f"""\
+<!DOCTYPE html>
+<html lang="en">
+<head><meta charset="UTF-8"><meta name="viewport" content="width=device-width,initial-scale=1.0">
+<title>{safe_title}</title></head>
+<body style="margin:0;padding:0;background:#f5f5f5;">
+<table role="presentation" cellspacing="0" cellpadding="0" border="0"
+       width="100%" style="background:#f5f5f5;">
+  <tr><td style="padding:40px 20px;">
+    <table role="presentation" cellspacing="0" cellpadding="0" border="0"
+           width="600" style="max-width:600px;margin:0 auto;background:#ffffff;
+                              border-radius:8px;overflow:hidden;
+                              box-shadow:0 2px 8px rgba(0,0,0,0.08);">
+      <!-- header bar -->
+      <tr><td style="background:{_BRAND_COLOR};padding:24px 32px;">
+        <span style="font-family:Arial,sans-serif;font-size:22px;font-weight:700;
+                     color:#ffffff;letter-spacing:0.05em;">VITRIOL</span>
+      </td></tr>
+      <!-- body -->
+      <tr><td style="padding:32px 32px 24px 32px;">
+        <p style="margin:0 0 24px 0;font-family:Arial,sans-serif;font-size:17px;
+                  font-weight:600;color:#111111;">{escape(greeting)}</p>
+        {para_html}
+        {button_html}
+        {footer_html}
+      </td></tr>
+    </table>
+  </td></tr>
+</table>
+</body>
+</html>"""
+
+
+async def _send(db: Session, to: str, subject: str, plain: str, html: Optional[str] = None) -> bool:
     s = _settings_row(db)
     if s is None or not s.smtp_host or not s.smtp_from:
         logger.warning(
@@ -41,11 +114,21 @@ async def _send(db: Session, to: str, subject: str, body: str) -> bool:
             to, subject,
         )
         return False
-    msg = EmailMessage()
-    msg["From"] = s.smtp_from
-    msg["To"] = to
-    msg["Subject"] = subject
-    msg.set_content(body)
+
+    if html:
+        msg = MIMEMultipart("alternative")
+        msg["From"] = s.smtp_from
+        msg["To"] = to
+        msg["Subject"] = subject
+        msg.attach(MIMEText(plain, "plain", "utf-8"))
+        msg.attach(MIMEText(html, "html", "utf-8"))
+    else:
+        from email.message import EmailMessage
+        msg = EmailMessage()
+        msg["From"] = s.smtp_from
+        msg["To"] = to
+        msg["Subject"] = subject
+        msg.set_content(plain)
 
     try:
         import aiosmtplib
@@ -139,36 +222,84 @@ async def send_verification_email(db: Session, user: User, raw_token: str) -> bo
     # rather than the bare /api/v1/auth/verify JSON endpoint, so a
     # browser click renders a real success page instead of `{"message":...}`.
     link = public_url(db, f"verify?token={raw_token}")
-    body = (
+    plain = (
         f"Hello {user.username},\n\n"
         f"Verify your Vitriol account by visiting:\n{link}\n\n"
         "This link expires in 24 hours."
     )
-    return await _send(db, user.email, "Verify your Vitriol account", body)
+    html = _html_email(
+        title="Verify your Vitriol account",
+        greeting=f"Hello, {user.username}!",
+        paragraphs=["Click the button below to verify your Vitriol account."],
+        button_html=_button_html("Verify my account", link),
+        footer="This link expires in 24 hours. If you didn't create an account, you can safely ignore this email.",
+    )
+    return await _send(db, user.email, "Verify your Vitriol account", plain, html)
 
 
 async def send_password_reset_email(db: Session, user: User, raw_token: str) -> bool:
     link = public_url(db, f"reset?token={raw_token}")
-    body = (
+    plain = (
         f"Hello {user.username},\n\n"
         f"Reset your Vitriol password by visiting:\n{link}\n\n"
         "This link expires in 2 hours. If you didn't request this, ignore this email."
     )
-    return await _send(db, user.email, "Reset your Vitriol password", body)
+    html = _html_email(
+        title="Reset your Vitriol password",
+        greeting=f"Hello, {user.username}!",
+        paragraphs=["We received a request to reset your Vitriol password. Click the button below to choose a new one."],
+        button_html=_button_html("Reset my password", link),
+        footer="This link expires in 2 hours. If you didn't request a password reset, you can safely ignore this email — your password has not been changed.",
+    )
+    return await _send(db, user.email, "Reset your Vitriol password", plain, html)
 
 
 async def send_pending_approval_notification(db: Session, pending_user: User, recipients: list[str]) -> int:
     sent = 0
-    base = public_url(db, "admin/users")
-    body = (
+    admin_url = public_url(db, "admin/users")
+    name_parts = [pending_user.first_name or "", pending_user.last_name or ""]
+    display_name = " ".join(p for p in name_parts if p).strip() or None
+    name_line = f"Name: {display_name}\n" if display_name else ""
+    plain = (
         f"A new user has signed up and is awaiting approval.\n\n"
         f"Username: {pending_user.username}\n"
+        f"{name_line}"
         f"Email: {pending_user.email}\n\n"
-        f"Approve or deny here: {base}\n"
+        f"Approve or deny here: {admin_url}\n"
+    )
+    detail_rows = (
+        f'<tr><td style="font-family:Arial,sans-serif;font-size:14px;color:#555555;'
+        f'padding:4px 0;width:90px;">Username</td>'
+        f'<td style="font-family:Arial,sans-serif;font-size:14px;color:#111111;padding:4px 0;">'
+        f'{escape(pending_user.username)}</td></tr>'
+    )
+    if display_name:
+        detail_rows += (
+            f'<tr><td style="font-family:Arial,sans-serif;font-size:14px;color:#555555;'
+            f'padding:4px 0;">Name</td>'
+            f'<td style="font-family:Arial,sans-serif;font-size:14px;color:#111111;padding:4px 0;">'
+            f'{escape(display_name)}</td></tr>'
+        )
+    detail_rows += (
+        f'<tr><td style="font-family:Arial,sans-serif;font-size:14px;color:#555555;'
+        f'padding:4px 0;">Email</td>'
+        f'<td style="font-family:Arial,sans-serif;font-size:14px;color:#111111;padding:4px 0;">'
+        f'{escape(pending_user.email)}</td></tr>'
+    )
+    details_table = (
+        f'<table role="presentation" cellspacing="0" cellpadding="0" border="0" '
+        f'style="margin:0 0 24px 0;border-left:3px solid {_BRAND_COLOR};padding-left:12px;">'
+        f'{detail_rows}</table>'
+    )
+    html = _html_email(
+        title="Vitriol — new user awaiting approval",
+        greeting="New user awaiting approval",
+        paragraphs=["A new account has been created and is waiting for your review."],
+        button_html=details_table + _button_html("Review in admin panel", admin_url),
     )
     for to in recipients:
         if not to:
             continue
-        if await _send(db, to, "Vitriol — new user awaiting approval", body):
+        if await _send(db, to, "Vitriol — new user awaiting approval", plain, html):
             sent += 1
     return sent
