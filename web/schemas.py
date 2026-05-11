@@ -223,11 +223,13 @@ class ServerSettingsOut(BaseModel):
     discord_last_test_at: Optional[datetime] = None
     discord_last_test_ok: Optional[bool] = None
     oauth_google_enabled: bool = True
+    oauth_google_show_on_signup: bool = True
     oauth_google_client_id: Optional[str]
     oauth_google_secret_set: bool = False
     oauth_google_last_test_at: Optional[datetime] = None
     oauth_google_last_test_ok: Optional[bool] = None
     oauth_github_enabled: bool = True
+    oauth_github_show_on_signup: bool = True
     oauth_github_client_id: Optional[str]
     oauth_github_secret_set: bool = False
     oauth_github_last_test_at: Optional[datetime] = None
@@ -304,9 +306,11 @@ class ServerSettingsPatch(BaseModel):
     smtp_use_tls: Optional[bool] = None
     discord_webhook_url: Optional[str] = None
     oauth_google_enabled: Optional[bool] = None
+    oauth_google_show_on_signup: Optional[bool] = None
     oauth_google_client_id: Optional[str] = None
     oauth_google_client_secret: Optional[str] = None
     oauth_github_enabled: Optional[bool] = None
+    oauth_github_show_on_signup: Optional[bool] = None
     oauth_github_client_id: Optional[str] = None
     oauth_github_client_secret: Optional[str] = None
     oidc_enabled: Optional[bool] = None

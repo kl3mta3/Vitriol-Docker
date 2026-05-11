@@ -101,9 +101,13 @@
     </details>
 
     <details name="server-settings"><summary>SSO providers <span id="sso-status-pill" class="status-pill"></span></summary>
-      <label class="checkbox-row" style="margin-bottom: 8px;">
+      <label class="checkbox-row" style="margin-bottom: 4px;">
         <input type="checkbox" name="oauth_google_enabled" />
         <span><strong>Google enabled</strong> — uncheck to hide the "Continue with Google" button without clearing credentials.</span>
+      </label>
+      <label class="checkbox-row" style="margin-bottom: 8px;">
+        <input type="checkbox" name="oauth_google_show_on_signup" />
+        <span>Show on signup page <em class="muted small">— uncheck to keep Google on /signin only (no Google-driven self-signup).</em></span>
       </label>
       <div class="grid-2">
         <label><span>Google client ID</span><input name="oauth_google_client_id" /></label>
@@ -114,9 +118,13 @@
         <span id="google-last-test" class="muted small"></span>
         <p id="google-test-msg" class="muted small" hidden></p>
       </div>
-      <label class="checkbox-row" style="margin-top: 16px; margin-bottom: 8px;">
+      <label class="checkbox-row" style="margin-top: 16px; margin-bottom: 4px;">
         <input type="checkbox" name="oauth_github_enabled" />
         <span><strong>GitHub enabled</strong> — uncheck to hide the "Continue with GitHub" button without clearing credentials.</span>
+      </label>
+      <label class="checkbox-row" style="margin-bottom: 8px;">
+        <input type="checkbox" name="oauth_github_show_on_signup" />
+        <span>Show on signup page <em class="muted small">— uncheck to keep GitHub on /signin only (no GitHub-driven self-signup).</em></span>
       </label>
       <div class="grid-2">
         <label><span>GitHub client ID</span><input name="oauth_github_client_id" /></label>
@@ -556,7 +564,8 @@
         <label><span>Slug (URL-safe — auto from display name if blank)</span><input name="slug" placeholder="authentik" pattern="[a-z0-9][a-z0-9-]{1,30}[a-z0-9]" /></label>
         <label class="full"><span>Issuer URL</span><input name="issuer" required placeholder="https://auth.example.com/application/o/vitriol/" /></label>
         <label class="full"><span>Scopes</span><input name="scopes" placeholder="openid email profile" /></label>
-        <label class="checkbox-row"><input type="checkbox" name="enabled" checked /> <span>Enabled</span></label>
+        <label class="checkbox-row"><input type="checkbox" name="enabled" checked /> <span>Enabled <em class="muted small">— shows on /signin when checked.</em></span></label>
+        <label class="checkbox-row"><input type="checkbox" name="show_on_signup" checked /> <span>Show on signup page <em class="muted small">— uncheck for IdPs that don't allow self-enrollment (button stays on /signin).</em></span></label>
       </div>
     </details>
 

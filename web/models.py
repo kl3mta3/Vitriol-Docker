@@ -211,6 +211,12 @@ class OidcProvider(Base):
     client_secret_enc = Column(Text, nullable=False)
     scopes = Column(String(255), nullable=False, default="openid email profile")
     enabled = Column(Boolean, nullable=False, default=True)
+    # Per-OIDC-provider signup-button gate. When False, this provider's
+    # button shows on /signin but is hidden from /signup. Defaults
+    # True so existing rows keep their current behaviour after upgrade.
+    # Most useful for operator-private IdPs (an Authentik that gates
+    # staff access, not public Reddit-visitor signups).
+    show_on_signup = Column(Boolean, nullable=False, default=True, server_default="1")
 
     # Test bookkeeping — stamped when an operator completes a test-mode
     # SSO round-trip from /admin/server. ``last_test_ok = True`` means
@@ -573,6 +579,11 @@ class ServerSettings(Base):
     # from registering the client, even when credentials are saved —
     # operator can pause an integration without wiping creds.
     oauth_google_enabled = Column(Boolean, nullable=False, default=True, server_default="1")
+    # When False, the Google button appears on /signin only — not on
+    # /signup. Useful when the operator wants Google as a sign-in path
+    # for existing users but not as a self-service signup mechanism
+    # (e.g. an internal tool gated by admin-created accounts).
+    oauth_google_show_on_signup = Column(Boolean, nullable=False, default=True, server_default="1")
     oauth_google_client_id = Column(String(255), nullable=True)
     oauth_google_client_secret_enc = Column(Text, nullable=True)
     # Stamped by a successful test-mode SSO round-trip (popup → IdP →
@@ -581,6 +592,9 @@ class ServerSettings(Base):
     oauth_google_last_test_at = Column(DateTime, nullable=True)
     oauth_google_last_test_ok = Column(Boolean, nullable=True)
     oauth_github_enabled = Column(Boolean, nullable=False, default=True, server_default="1")
+    # Same shape as oauth_google_show_on_signup — hides the GitHub
+    # button from /signup while keeping it on /signin.
+    oauth_github_show_on_signup = Column(Boolean, nullable=False, default=True, server_default="1")
     oauth_github_client_id = Column(String(255), nullable=True)
     oauth_github_client_secret_enc = Column(Text, nullable=True)
     oauth_github_last_test_at = Column(DateTime, nullable=True)

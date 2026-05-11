@@ -675,6 +675,12 @@ function openOidcForm(p) {
     oidcForm.client_secret.placeholder = 'required for new providers';
   }
   oidcForm.enabled.checked = p ? !!p.enabled : true;
+  // Default show_on_signup to true for new providers — same default as
+  // the server-side column. Operator can flip it off for IdPs that
+  // don't allow self-enrollment (typical closed Authentik setup).
+  if (oidcForm.show_on_signup) {
+    oidcForm.show_on_signup.checked = p ? (p.show_on_signup !== false) : true;
+  }
   document.getElementById('oidc-form-title').textContent = p ? `Edit — ${p.display_name}` : 'Add OIDC provider';
   document.getElementById('oidc-form-delete').hidden = !p;
   // Test button only makes sense for a saved provider — Authlib needs
@@ -902,6 +908,7 @@ function openOidcFormFromTemplate(tpl) {
   oidcForm.client_secret.value = '';
   oidcForm.client_secret.placeholder = 'required for new providers';
   oidcForm.enabled.checked = true;
+  if (oidcForm.show_on_signup) oidcForm.show_on_signup.checked = true;
   document.getElementById('oidc-form-title').textContent = `Add ${tpl.name}`;
   document.getElementById('oidc-form-delete').hidden = true;
   document.getElementById('oidc-form-msg').hidden = true;
@@ -949,6 +956,7 @@ if (oidcForm) oidcForm.addEventListener('submit', async (e) => {
     client_id: oidcForm.client_id.value.trim(),
     scopes: oidcForm.scopes.value.trim() || 'openid email profile',
     enabled: oidcForm.enabled.checked,
+    show_on_signup: oidcForm.show_on_signup ? oidcForm.show_on_signup.checked : true,
     provision_kind: oidcForm.provision_kind.value || 'none',
     provision_on_approve: oidcForm.provision_on_approve.checked,
   };

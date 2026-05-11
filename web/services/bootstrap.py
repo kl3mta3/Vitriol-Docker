@@ -310,6 +310,16 @@ _ADDITIVE_COLUMNS: list[tuple[str, str, str]] = [
      "ALTER TABLE users ADD COLUMN last_name VARCHAR(128)"),
     ("custom_roles", "max_storage_bytes",
      "ALTER TABLE custom_roles ADD COLUMN max_storage_bytes INTEGER"),
+    # Per-provider "show this button on the /signup page" toggle.
+    # `enabled` already controls visibility on /signin; this is the
+    # second axis. Default ON for backward compat — existing operators
+    # see no behaviour change unless they explicitly turn it off.
+    ("server_settings", "oauth_google_show_on_signup",
+     "ALTER TABLE server_settings ADD COLUMN oauth_google_show_on_signup BOOLEAN NOT NULL DEFAULT 1"),
+    ("server_settings", "oauth_github_show_on_signup",
+     "ALTER TABLE server_settings ADD COLUMN oauth_github_show_on_signup BOOLEAN NOT NULL DEFAULT 1"),
+    ("oidc_providers", "show_on_signup",
+     "ALTER TABLE oidc_providers ADD COLUMN show_on_signup BOOLEAN NOT NULL DEFAULT 1"),
 ]
 
 

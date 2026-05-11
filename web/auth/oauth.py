@@ -27,7 +27,13 @@ def list_providers(db: Session) -> list[dict]:
     """Public — what to render on the sign-in page. Returns one entry per
     configured-and-enabled provider in this order: google, github, then
     each OIDC row sorted by display_name. Each entry is
-    `{id: <slug>, label: <button text>, kind: 'google'|'github'|'oidc'}`.
+    ``{id, label, kind, show_on_signup}`` where ``show_on_signup``
+    tells the signup page whether to include the button.
+
+    Signin page renders everything in this list. The signup page
+    filters by ``show_on_signup`` client-side — keeps the API surface
+    simple and lets the operator flip a button between pages by
+    toggling one column.
     """
     out: list[dict] = []
     s: Optional[ServerSettings] = db.query(ServerSettings).get(1)
@@ -37,13 +43,23 @@ def list_providers(db: Session) -> list[dict]:
             and s.oauth_google_client_id
             and s.oauth_google_client_secret_enc
         ):
-            out.append({"id": "google", "label": "Continue with Google", "kind": "google"})
+            out.append({
+                "id": "google",
+                "label": "Continue with Google",
+                "kind": "google",
+                "show_on_signup": bool(getattr(s, "oauth_google_show_on_signup", True)),
+            })
         if (
             bool(s.oauth_github_enabled)
             and s.oauth_github_client_id
             and s.oauth_github_client_secret_enc
         ):
-            out.append({"id": "github", "label": "Continue with GitHub", "kind": "github"})
+            out.append({
+                "id": "github",
+                "label": "Continue with GitHub",
+                "kind": "github",
+                "show_on_signup": bool(getattr(s, "oauth_github_show_on_signup", True)),
+            })
 
     rows = (
         db.query(OidcProvider)
@@ -54,7 +70,12 @@ def list_providers(db: Session) -> list[dict]:
     for r in rows:
         if not (r.issuer and r.client_id and r.client_secret_enc):
             continue
-        out.append({"id": r.slug, "label": r.display_name or "Continue with SSO", "kind": "oidc"})
+        out.append({
+            "id": r.slug,
+            "label": r.display_name or "Continue with SSO",
+            "kind": "oidc",
+            "show_on_signup": bool(getattr(r, "show_on_signup", True)),
+        })
     return out
 
 

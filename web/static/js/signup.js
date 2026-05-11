@@ -8,6 +8,13 @@
   try { policy = await api.get('/auth/policy'); } catch (e) {}
   const row = document.getElementById('sso-row');
   if (!row || !policy.providers || !policy.providers.length) return;
+  // Filter to only providers the operator has marked as signup-visible.
+  // Providers default to show_on_signup=true server-side; an operator
+  // turns it off per-provider for IdPs that don't allow self-enrollment
+  // (typical closed Authentik setup — the button would just dump the
+  // visitor on a login page they can't get past).
+  const visible = policy.providers.filter(p => p.show_on_signup !== false);
+  if (!visible.length) return;
   row.hidden = false;
   // Reveal the "— or sign up with —" divider when both a password
   // form AND SSO buttons are visible. (When password-signup is off,
@@ -16,7 +23,7 @@
   const divider = document.getElementById('signup-divider');
   const formStillThere = !!document.getElementById('signup-form');
   if (divider && formStillThere) divider.hidden = false;
-  for (const p of policy.providers) {
+  for (const p of visible) {
     const a = document.createElement('a');
     a.className = 'btn btn-secondary';
     a.href = `/api/v1/auth/sso/${p.id}/start`;

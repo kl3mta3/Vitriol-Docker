@@ -38,6 +38,12 @@ class OidcProviderOut(BaseModel):
     client_secret_set: bool
     scopes: str
     enabled: bool
+    # When False, this provider's button is hidden from /signup but
+    # still shows on /signin. Useful for closed-Authentik-style setups
+    # where the operator wants the IdP for staff sign-in but doesn't
+    # want public visitors landing on the IdP's login page (which most
+    # Authentik defaults don't expose a "sign up" link on).
+    show_on_signup: bool = True
     last_test_at: Optional[str] = None
     last_test_ok: Optional[bool] = None
     provision_kind: str = "none"
@@ -53,6 +59,7 @@ class OidcProviderCreate(BaseModel):
     client_secret: str
     scopes: str = "openid email profile"
     enabled: bool = True
+    show_on_signup: bool = True
     provision_kind: Optional[str] = None         # 'none' | 'authentik'
     provision_on_approve: Optional[bool] = None
     provision_api_token: Optional[str] = None    # plaintext; encrypted at rest
@@ -66,6 +73,7 @@ class OidcProviderUpdate(BaseModel):
     client_secret: Optional[str] = None  # blank = unchanged
     scopes: Optional[str] = None
     enabled: Optional[bool] = None
+    show_on_signup: Optional[bool] = None
     provision_kind: Optional[str] = None
     provision_on_approve: Optional[bool] = None
     provision_api_token: Optional[str] = None  # None = unchanged, "" = clear
@@ -76,6 +84,7 @@ def _to_out(r: OidcProvider) -> OidcProviderOut:
         id=r.id, slug=r.slug, display_name=r.display_name, issuer=r.issuer,
         client_id=r.client_id, client_secret_set=bool(r.client_secret_enc),
         scopes=r.scopes or "openid email profile", enabled=r.enabled,
+        show_on_signup=bool(getattr(r, "show_on_signup", True)),
         last_test_at=(r.last_test_at.isoformat() + "Z") if r.last_test_at else None,
         last_test_ok=r.last_test_ok,
         provision_kind=r.provision_kind or "none",
@@ -131,6 +140,7 @@ def create_oidc(
         client_secret_enc=encrypt(req.client_secret),
         scopes=req.scopes or "openid email profile",
         enabled=req.enabled,
+        show_on_signup=bool(req.show_on_signup),
         provision_kind=pkind,
         provision_on_approve=bool(req.provision_on_approve),
         provision_api_token_enc=encrypt(req.provision_api_token) if req.provision_api_token else None,
@@ -169,6 +179,8 @@ def update_oidc(
         row.scopes = req.scopes or "openid email profile"
     if req.enabled is not None:
         row.enabled = req.enabled
+    if req.show_on_signup is not None:
+        row.show_on_signup = bool(req.show_on_signup)
     if req.provision_kind is not None:
         pkind = (req.provision_kind or "none").strip() or "none"
         if pkind not in ("none", "authentik"):
