@@ -491,7 +491,71 @@ document.getElementById('clear-all').addEventListener('click', () => {
   playlist.innerHTML = '';
   dz.classList.remove('has-files');
   idbClear().catch(() => {});
+  syncSelectAllState();
 });
+
+// ---------------------------------------------------------- select all
+//
+// Tri-state master checkbox. Clicking it propagates to every row;
+// changes to individual rows propagate back so the master reflects
+// "all / some / none" without an explicit re-render. Indeterminate is
+// purely visual — the underlying `checked` property is still bool, so
+// the next click toggles to a definite state.
+
+const selectAllCheckbox = document.getElementById('select-all');
+
+function syncSelectAllState() {
+  if (!selectAllCheckbox) return;
+  const rows = playlist.children;
+  if (rows.length === 0) {
+    selectAllCheckbox.checked = false;
+    selectAllCheckbox.indeterminate = false;
+    selectAllCheckbox.disabled = true;
+    return;
+  }
+  selectAllCheckbox.disabled = false;
+  let checked = 0;
+  for (const row of rows) {
+    if (row.querySelector('.row-check').checked) checked++;
+  }
+  if (checked === 0) {
+    selectAllCheckbox.checked = false;
+    selectAllCheckbox.indeterminate = false;
+  } else if (checked === rows.length) {
+    selectAllCheckbox.checked = true;
+    selectAllCheckbox.indeterminate = false;
+  } else {
+    selectAllCheckbox.checked = false;
+    selectAllCheckbox.indeterminate = true;
+  }
+}
+
+if (selectAllCheckbox) {
+  selectAllCheckbox.addEventListener('change', () => {
+    const target = selectAllCheckbox.checked;
+    for (const row of playlist.children) {
+      const cb = row.querySelector('.row-check');
+      if (cb) cb.checked = target;
+    }
+    selectAllCheckbox.indeterminate = false;
+  });
+}
+
+// Per-row checkbox clicks bubble up — refresh the master state. Using
+// a delegated listener so dynamically-added rows are covered without
+// re-binding on every append.
+playlist.addEventListener('change', (e) => {
+  if (e.target && e.target.classList && e.target.classList.contains('row-check')) {
+    syncSelectAllState();
+  }
+});
+
+// Add/remove via DOM mutation (rehydrate from IDB, drop new files,
+// remove-selected) — sync after the microtask so the row count is
+// settled before we read it.
+const _selectAllObserver = new MutationObserver(() => syncSelectAllState());
+_selectAllObserver.observe(playlist, { childList: true });
+syncSelectAllState();
 
 // Restore toggle state from localStorage before we touch the playlist
 // — ensures Stone/Verify reflect prior state by the time rows render

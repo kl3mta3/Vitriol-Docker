@@ -59,6 +59,30 @@ a:hover { color: var(--purple-hot); }
   background: radial-gradient(ellipse at center, transparent 55%, rgba(0,0,0,0.55) 100%);
 }
 
+/* Edge-fade strips. Solid background at the very edge, fading to
+ * transparent over ~36px so scrolling content visibly "exits the
+ * frame" before reaching the alchemy border glyphs. z-index 95 sits
+ * above the vignette + page content but below the border SVG itself.
+ *
+ * Without these strips, scroll content (form inputs, tables) showed
+ * THROUGH the planetary glyphs at the viewport edges — looked like
+ * the page was floating behind a stencil. */
+#frame-fade-top, #frame-fade-bottom {
+  position: fixed;
+  left: 0; right: 0;
+  height: 40px;
+  pointer-events: none;
+  z-index: 95;
+}
+#frame-fade-top {
+  top: 0;
+  background: linear-gradient(to bottom, var(--bg) 0%, var(--bg) 60%, transparent 100%);
+}
+#frame-fade-bottom {
+  bottom: 0;
+  background: linear-gradient(to top, var(--bg) 0%, var(--bg) 60%, transparent 100%);
+}
+
 /* ---------- Display fonts ---------- */
 .display { font-family: var(--font-display); font-weight: 600; letter-spacing: 1.5px; margin: 0; }
 h1.display { font-size: 32px; }
@@ -352,6 +376,26 @@ input:focus, select:focus, textarea:focus { outline: none; border-color: var(--p
    Selected and Clear Playlist sit on the right while the conversion +
    download buttons stay left-aligned. */
 .bulk-actions .bulk-spacer { flex: 1 1 auto; }
+/* Master "Select all" chip — styled like a ghost button so it visually
+   sits with the rest of the bulk-actions row instead of looking like
+   a stray form field. Disabled state (empty playlist) dims it. */
+.bulk-select-all {
+  display: inline-flex; align-items: center; gap: 8px;
+  padding: 6px 10px;
+  border: 1px solid var(--border-2);
+  border-radius: var(--radius);
+  background: var(--surface-2);
+  font-size: 12px;
+  color: var(--ink-muted);
+  cursor: pointer;
+  user-select: none;
+}
+.bulk-select-all:hover { border-color: var(--purple); color: var(--ink); }
+.bulk-select-all input { cursor: pointer; margin: 0; }
+.bulk-select-all:has(input:disabled) {
+  opacity: 0.5; cursor: not-allowed;
+}
+.bulk-select-all:has(input:disabled) input { cursor: not-allowed; }
 .status-bar {
   display: flex; justify-content: space-between; align-items: center;
   padding: 12px 16px; background: var(--surface-2);

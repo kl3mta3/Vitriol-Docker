@@ -30,6 +30,13 @@
   <ul id="playlist" class="playlist"></ul>
 
   <div class="bulk-actions">
+    {# Select-all master checkbox. Tri-state: unchecked = none selected;
+       indeterminate = some selected; checked = all selected. Click to
+       toggle the .row-check on every row at once. #}
+    <label class="bulk-select-all" title="Select / deselect every row in the playlist">
+      <input id="select-all" type="checkbox" />
+      <span>Select all</span>
+    </label>
     <button id="convert-all" class="btn btn-primary">Transmute All</button>
     <button id="convert-selected" class="btn btn-secondary">Transmute Selected</button>
     <button id="download-selected" class="btn btn-secondary">Download Selected</button>

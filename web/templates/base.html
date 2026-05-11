@@ -20,6 +20,12 @@
 <body>
   <svg id="alchemy-border" aria-hidden="true"></svg>
   <div id="vignette" aria-hidden="true"></div>
+  {# Edge-fade masks. Solid-bg strips at the top and bottom that fade
+     into transparent, sitting under the alchemy border but above the
+     scrolling content. Stops content from peeking through the glyph
+     row at the edges of the viewport. #}
+  <div id="frame-fade-top" aria-hidden="true"></div>
+  <div id="frame-fade-bottom" aria-hidden="true"></div>
 
   {% if user %}
   <nav class="nav">
