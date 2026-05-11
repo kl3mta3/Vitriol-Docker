@@ -33,6 +33,30 @@ function formatError(ex) {
   return ex.message || 'Sign in failed';
 }
 
+// Super admin escape hatch — when password sign-in is master-disabled,
+// the signin template renders the form with [hidden] and surfaces a
+// small "Use password (super admin)" link. Clicking it reveals the
+// form so the operator can sign in with their password (the backend
+// at /auth/signin allows this for super admin even when the master
+// toggle is off — see auth.py for the carve-out).
+const revealBtn = document.getElementById('reveal-password-form');
+if (revealBtn) {
+  revealBtn.addEventListener('click', (e) => {
+    e.preventDefault();
+    const form = document.getElementById('signin-form');
+    if (form) form.hidden = false;
+    // The link is single-use — hide it once the form is showing so it
+    // doesn't compete visually with the form's Sign in button.
+    revealBtn.closest('p').hidden = true;
+    // Also hide the "Password sign-in is disabled" paragraph above it.
+    const disabledNotice = revealBtn.closest('p').previousElementSibling;
+    if (disabledNotice && disabledNotice.tagName === 'P') disabledNotice.hidden = true;
+    // Move focus into the form so the user can start typing immediately.
+    const ident = form && form.querySelector('input[name="identifier"]');
+    if (ident) ident.focus();
+  });
+}
+
 document.getElementById('signin-form').addEventListener('submit', async (e) => {
   e.preventDefault();
   const data = Object.fromEntries(new FormData(e.target));

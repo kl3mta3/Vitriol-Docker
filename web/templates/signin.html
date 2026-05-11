@@ -5,8 +5,13 @@
   <h1 class="display">Vitriol</h1>
   <p class="muted">Sign in to continue.</p>
 
-  {% if password_signin_enabled %}
-  <form id="signin-form" class="stack" autocomplete="on">
+  {# Render the form regardless of password_signin_enabled — the super
+     admin can always sign in with a password as a recovery escape
+     hatch (the backend at /auth/signin enforces this exemption). When
+     the master toggle is off we hide the form by default and surface
+     a small "use password" link instead; clicking reveals it. Non
+     super-admins who get through anyway will hit the 403 server-side. #}
+  <form id="signin-form" class="stack" autocomplete="on" {% if not password_signin_enabled %}hidden{% endif %}>
     <label>
       <span>Username or email</span>
       <input name="identifier" type="text" required autofocus />
@@ -18,9 +23,15 @@
     <button type="submit" class="btn btn-primary">Sign in</button>
     <p id="signin-error" class="error" hidden></p>
   </form>
-  {% else %}
+
+  {% if not password_signin_enabled %}
   <p class="muted small" style="text-align: center; margin: 16px 0;">
     Password sign-in is disabled. Use one of the providers below.
+  </p>
+  <p class="muted small" style="text-align: center; margin: 8px 0 16px;">
+    <a href="#" id="reveal-password-form" style="text-decoration: underline dotted;">
+      Use password (super admin)
+    </a>
   </p>
   {% endif %}
 
