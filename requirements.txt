@@ -1,9 +1,20 @@
 # Conversion engine
-PySide6>=6.6
+# PySide6 lives in the desktop repo's requirements only — it's not
+# needed by the web container. The conversion_queue.py module that
+# does `from PySide6.QtCore import ...` at the top isn't imported
+# anywhere in `web/` (web/services/conversion.py uses its own
+# ThreadPoolExecutor instead). SVG rendering used to go through
+# QtSvg via image_handler._open_svg_via_qt; the web container now
+# uses cairosvg for that path. Removing PySide6 saves ~200 MB
+# off the image; adding cairosvg adds ~30 MB. Net: ~170 MB off.
 Pillow>=10.0
 striprtf>=0.0.26
 psutil>=5.9
 pdfminer.six>=20221105
+# Pure-Python SVG → PNG renderer. Replaces the QtSvg path used in the
+# desktop build. Requires libcairo2 at the OS level (installed by the
+# Dockerfile's apt-get line).
+cairosvg>=2.7
 
 # Format-expansion deps (mirrors desktop repo)
 pillow-avif-plugin>=1.4

@@ -121,11 +121,43 @@ def _open_image(src: Path, src_ext: str):
 
 
 def _open_svg_via_qt(src: Path):
-    """Render SVG to a QImage, then convert to a Pillow Image."""
-    from PySide6.QtCore import QSize
-    from PySide6.QtGui import QImage, QPainter, QColor
-    from PySide6.QtSvg import QSvgRenderer
+    """Render an SVG to a Pillow Image.
+
+    Tries renderers in priority order:
+      1. cairosvg — pure-Python wrapper around libcairo. The web/Docker
+         path. Full SVG 1.1 support; ~30 MB OS-level dep (libcairo2).
+      2. PySide6's QtSvg — the original desktop path. Limited to SVG
+         Tiny 1.2 but it's already present in the desktop build's
+         Qt runtime, so we use it there for free.
+
+    Function name is kept (`_open_svg_via_qt`) so callers don't need
+    updating, even though "via_qt" is now a misnomer when cairosvg
+    handles it. Treat it as the SVG opener regardless of backend.
+    """
     from PIL import Image
+
+    # Preferred: cairosvg. Pure-Python API; renders to PNG bytes that
+    # Pillow opens trivially. Lazy import so the desktop build doesn't
+    # need cairosvg installed if QtSvg is available.
+    try:
+        import cairosvg
+        import io as _io
+        png_bytes = cairosvg.svg2png(url=str(src), output_width=None, output_height=None)
+        return Image.open(_io.BytesIO(png_bytes)).convert("RGBA")
+    except ImportError:
+        pass  # fall through to Qt path
+
+    # Fallback: PySide6 QtSvg (desktop build).
+    try:
+        from PySide6.QtCore import QSize
+        from PySide6.QtGui import QImage, QPainter, QColor
+        from PySide6.QtSvg import QSvgRenderer
+    except ImportError as e:
+        raise RuntimeError(
+            "SVG input requires either `cairosvg` (web build) or `PySide6` "
+            "(desktop build) to be installed. Neither is available in this "
+            "environment."
+        ) from e
 
     renderer = QSvgRenderer(str(src))
     if not renderer.isValid():

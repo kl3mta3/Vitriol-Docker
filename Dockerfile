@@ -7,20 +7,24 @@ ENV PYTHONUNBUFFERED=1 \
     UC_USER_DATA_DIR=/data \
     UC_DOCS_DIR=/data/outputs
 
-# System deps. ffmpeg + assimp give the engine its native binaries; the
-# Qt offscreen platform plugin needs a couple of X libs even when no
-# display is used (PySide6 still imports them).
+# System deps. ffmpeg + assimp give the engine its native binaries.
+# libcairo2 is the runtime backend for cairosvg, used to render SVG
+# inputs into PNG bytes that Pillow then consumes (the desktop build
+# uses QtSvg for this; the web build drops PySide6 to save ~200 MB
+# and uses cairosvg instead — net savings ~170 MB).
+#
+# The libxkbcommon / libdbus / libegl / libgl / libfreetype / libfontconfig
+# block was left over from when PySide6 was installed and Qt's offscreen
+# platform plugin needed them at import time. With PySide6 gone from
+# requirements.txt they're no longer required by anything in the image.
 RUN apt-get update && apt-get install -y --no-install-recommends \
         ffmpeg \
         assimp-utils \
         libassimp5 \
+        libcairo2 \
         pandoc \
         jq \
         gosu \
-        libxkbcommon0 \
-        libdbus-1-3 \
-        libegl1 \
-        libgl1 \
         libfreetype6 \
         libfontconfig1 \
         ca-certificates \
