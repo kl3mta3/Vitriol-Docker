@@ -325,6 +325,10 @@ _ADDITIVE_COLUMNS: list[tuple[str, str, str]] = [
     # validation in the route handler. Default OFF for backward compat.
     ("server_settings", "require_name_at_signup",
      "ALTER TABLE server_settings ADD COLUMN require_name_at_signup BOOLEAN NOT NULL DEFAULT 0"),
+    # Gates whether profile-page password resets use an email-link
+    # verification step. Default OFF; requires SMTP configured + tested.
+    ("server_settings", "password_reset_via_email",
+     "ALTER TABLE server_settings ADD COLUMN password_reset_via_email BOOLEAN NOT NULL DEFAULT 0"),
 ]
 
 

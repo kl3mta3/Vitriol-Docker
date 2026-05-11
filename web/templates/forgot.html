@@ -1,0 +1,27 @@
+{% extends "base.html" %}
+{% block title %}Forgot password — Vitriol{% endblock %}
+{% block content %}
+<section class="auth-card">
+  <h1 class="display">Forgot password</h1>
+  <p class="muted">
+    Enter your username or email. If a matching account exists, we'll
+    send a password-reset link that expires in 2 hours.
+  </p>
+
+  <form id="forgot-form" class="stack">
+    <label>
+      <span>Username or email</span>
+      <input name="identifier" type="text" required autofocus autocomplete="username" />
+    </label>
+    <button type="submit" class="btn btn-primary">Send reset link</button>
+    <p id="forgot-msg" class="muted small" hidden></p>
+  </form>
+
+  <div class="auth-foot">
+    <a href="/signin">Back to sign in</a>
+  </div>
+</section>
+{% endblock %}
+{% block scripts %}
+<script src="/static/js/forgot.js?v={{ v }}"></script>
+{% endblock %}

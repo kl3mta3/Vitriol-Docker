@@ -44,6 +44,10 @@ def _common_ctx(request: Request, user: Optional[User], db: Session) -> dict:
         "allow_signup": bool(s.allow_signup) if s else False,
         "password_signin_enabled": bool(s.password_signin_enabled) if s else True,
         "require_name_at_signup": bool(getattr(s, "require_name_at_signup", False)) if s else False,
+        # Profile-page "Reset password" routes through an email-link
+        # verification step when this is on. Only meaningful when SMTP
+        # is healthy; the admin UI greys the toggle out otherwise.
+        "password_reset_via_email": bool(getattr(s, "password_reset_via_email", False)) if s else False,
         "show_users_tab": user is not None and has_capability(user, CAN_VIEW_USERS_TAB),
         "show_server_tab": user is not None and has_capability(user, CAN_VIEW_SERVER_TAB),
         "show_files_tab": user is not None and has_capability(user, CAN_VIEW_OWN_FILES),
@@ -80,6 +84,28 @@ def signup_page(request: Request, user: Optional[User] = Depends(get_current_use
     if s is None or not s.allow_signup:
         return RedirectResponse(url="/signin")
     return templates.TemplateResponse(request, "signup.html", _common_ctx(request, None, db))
+
+
+@router.get("/forgot", response_class=HTMLResponse)
+def forgot_page(request: Request, db: Session = Depends(get_db)):
+    """Anonymous-accessible — enter username/email, server emails a
+    token-bearing reset link. Both halves of the round trip (this
+    page + the /reset target the email links to) lived in unused
+    backend endpoints until now; this page closes the loop the dead
+    signin "Forgot password?" link was pointing at."""
+    return templates.TemplateResponse(request, "forgot.html", _common_ctx(request, None, db))
+
+
+@router.get("/reset", response_class=HTMLResponse)
+def reset_page(request: Request, db: Session = Depends(get_db)):
+    """Anonymous-accessible — landing target for the password-reset
+    email link. Reads the ?token=... query param, posts new password
+    to /auth/password-reset/confirm. Same page services both:
+      - the traditional forgot-password flow (signed-out user)
+      - the profile-page "reset via email" flow when the operator has
+        turned that toggle on
+    """
+    return templates.TemplateResponse(request, "reset.html", _common_ctx(request, None, db))
 
 
 @router.get("/profile", response_class=HTMLResponse)

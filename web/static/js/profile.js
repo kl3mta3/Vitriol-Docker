@@ -1,25 +1,22 @@
 // Adapt the password card based on whether the current user has a
 // password set. SSO-only users (signed up via Google/GitHub/OIDC with
 // no password ever assigned) see "Set password" with no "Current"
-// field. Users with a password see the standard "Change password"
+// field. Users with a password see the standard "Reset password"
 // flow that requires the current password as a re-auth step.
+let _profileMe = null;
 (async function configurePasswordCard() {
-  let me = null;
-  try { me = await api.get('/me'); } catch (_) { return; }
-  if (!me) return;
+  try { _profileMe = await api.get('/me'); } catch (_) { return; }
+  if (!_profileMe) return;
   const heading = document.getElementById('password-heading');
-  const submit = document.getElementById('password-submit');
-  const currentLabel = document.getElementById('password-current-label');
+  const button  = document.getElementById('password-reset-btn');
   const ssoHint = document.getElementById('password-sso-hint');
-  if (me.has_password) {
+  if (_profileMe.has_password) {
     if (heading) heading.textContent = 'Password';
-    if (submit) submit.textContent = 'Change password';
-    if (currentLabel) currentLabel.hidden = false;
+    if (button) button.textContent = 'Reset password';
     if (ssoHint) ssoHint.hidden = true;
   } else {
     if (heading) heading.textContent = 'Set password';
-    if (submit) submit.textContent = 'Set password';
-    if (currentLabel) currentLabel.hidden = true;
+    if (button) button.textContent = 'Set password';
     if (ssoHint) ssoHint.hidden = false;
   }
 })();
@@ -39,16 +36,96 @@ document.getElementById('profile-form').addEventListener('submit', async (e) => 
   }
 });
 
-document.getElementById('password-form').addEventListener('submit', async (e) => {
+// ----------------------------------------------- password modal flow
+//
+// Two paths, gated by the server's `password_reset_via_email` setting:
+//
+//   OFF (default): clicking "Reset password" opens an in-page modal.
+//                  Submit POSTs /me/password with current+new password.
+//                  Same security model as the old inline form.
+//
+//   ON:            clicking the button instead POSTs /auth/password-reset
+//                  with the current user's identifier. Server emails a
+//                  token-bearing link to /reset?token=…. User clicks the
+//                  link, lands on the standalone /reset page, enters
+//                  new password there. Modal never opens here.
+//                  Adds an out-of-band check against session hijack.
+
+const _passwordResetViaEmail = !!window.VITRIOL_PASSWORD_RESET_VIA_EMAIL;
+const passwordModal = document.getElementById('password-modal');
+const passwordForm  = document.getElementById('password-form');
+const passwordTopMsg = document.getElementById('password-msg');
+
+document.getElementById('password-reset-btn').addEventListener('click', async () => {
+  if (passwordTopMsg) { passwordTopMsg.hidden = true; passwordTopMsg.className = 'ok'; }
+  if (_passwordResetViaEmail) {
+    // Email-link path. Use the existing public endpoint — works the
+    // same as the forgot-password flow but kicked off from the
+    // logged-in profile page. Identifier is the user's username
+    // (the endpoint also accepts email).
+    if (!_profileMe || !_profileMe.username) return;
+    try {
+      await api.post('/auth/password-reset', { identifier: _profileMe.username });
+      if (passwordTopMsg) {
+        passwordTopMsg.textContent = 'Check your email — we sent a password reset link. The link expires in 2 hours.';
+        passwordTopMsg.className = 'ok small';
+        passwordTopMsg.hidden = false;
+      }
+    } catch (ex) {
+      if (passwordTopMsg) {
+        passwordTopMsg.textContent = ex.detail || 'Could not send reset email.';
+        passwordTopMsg.className = 'error small';
+        passwordTopMsg.hidden = false;
+      }
+    }
+    return;
+  }
+  // Direct-modal path. Show/hide the "current password" field based
+  // on whether the user actually has a password (SSO-only users get
+  // the simpler one-field form).
+  const currentLabel = document.getElementById('password-current-label');
+  const ssoHint = document.getElementById('password-modal-sso-hint');
+  if (_profileMe && _profileMe.has_password) {
+    if (currentLabel) currentLabel.hidden = false;
+    if (ssoHint) ssoHint.hidden = true;
+  } else {
+    if (currentLabel) currentLabel.hidden = true;
+    if (ssoHint) ssoHint.hidden = false;
+  }
+  // Clear any prior values so reopening doesn't show stale typing.
+  passwordForm.reset();
+  document.getElementById('password-modal-msg').hidden = true;
+  passwordModal.showModal();
+});
+
+passwordForm.addEventListener('submit', async (e) => {
   e.preventDefault();
-  const data = Object.fromEntries(new FormData(e.target));
-  const msg = document.getElementById('password-msg');
+  const msg = document.getElementById('password-modal-msg');
   msg.hidden = true;
-  try {
-    const r = await api.post('/me/password', data);
-    msg.textContent = r.message;
+  msg.className = 'error small';
+  const newPw = passwordForm.new_password.value;
+  const confirm = passwordForm.confirm_password.value;
+  if (newPw !== confirm) {
+    msg.textContent = "Passwords don't match.";
     msg.hidden = false;
-    e.target.reset();
+    return;
+  }
+  const body = { new_password: newPw };
+  // Only ship current_password when the user actually has one (the
+  // field is hidden for SSO-only users and an empty string would fail
+  // the server's "current password incorrect" check).
+  if (_profileMe && _profileMe.has_password) {
+    body.current_password = passwordForm.current_password.value;
+  }
+  try {
+    const r = await api.post('/me/password', body);
+    passwordModal.close();
+    if (passwordTopMsg) {
+      passwordTopMsg.textContent = r.message || 'Password updated.';
+      passwordTopMsg.className = 'ok small';
+      passwordTopMsg.hidden = false;
+    }
+    passwordForm.reset();
   } catch (ex) {
     msg.textContent = ex.detail || 'Failed';
     msg.hidden = false;

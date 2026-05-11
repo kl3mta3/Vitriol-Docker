@@ -260,6 +260,27 @@ async function load() {
   paintServicePill('smtp-status-pill', smtpConfigured, s.smtp_last_test_ok);
   const discordConfigured = !!s.discord_webhook_url;
   paintServicePill('discord-status-pill', discordConfigured, s.discord_last_test_ok);
+
+  // The password-reset-via-email toggle requires SMTP to be configured
+  // AND last-tested ok — otherwise toggling it on would just queue
+  // emails that never deliver. Grey out + show the hint until both
+  // conditions are met.
+  const _prToggle = document.getElementById('password-reset-email-toggle');
+  const _prHint   = document.getElementById('password-reset-email-hint');
+  if (_prToggle) {
+    const smtpReadyForReset = smtpConfigured && s.smtp_last_test_ok === true;
+    _prToggle.disabled = !smtpReadyForReset;
+    // If SMTP isn't ready but the column is somehow on (e.g. operator
+    // toggled it then broke SMTP later), force the visual state off
+    // without writing back to the server — they'll see the disabled
+    // state + hint and re-enable once SMTP is healthy. The server-side
+    // value stays whatever was saved; effectively a runtime gate, not
+    // a destructive reset.
+    if (!smtpReadyForReset) _prToggle.checked = false;
+    if (_prHint) _prHint.hidden = smtpReadyForReset;
+    const row = document.getElementById('password-reset-email-row');
+    if (row) row.style.opacity = smtpReadyForReset ? '' : '0.55';
+  }
   const banner = document.getElementById('smtp-warning');
   if (banner) {
     // Hide the banner when either:

@@ -1,0 +1,41 @@
+{% extends "base.html" %}
+{% block title %}Reset password — Vitriol{% endblock %}
+{% block content %}
+<section class="auth-card">
+  <h1 class="display">Reset password</h1>
+  <p class="muted" id="reset-intro">
+    Enter your new password. The reset link is single-use — once you
+    save, you'll be signed out of any old sessions and can sign in
+    with the new password.
+  </p>
+
+  <form id="reset-form" class="stack">
+    <label>
+      <span>New password</span>
+      <input name="new_password" type="password" minlength="8" autocomplete="new-password" required autofocus />
+    </label>
+    <label>
+      <span>Confirm new password</span>
+      <input name="confirm_password" type="password" minlength="8" autocomplete="new-password" required />
+    </label>
+    <button type="submit" class="btn btn-primary">Save new password</button>
+    <p id="reset-msg" class="error small" hidden></p>
+  </form>
+
+  {# Inert state — shown when the token is missing or invalid. The JS
+     swaps it in by hiding the form. Gives the user a clear "your link
+     expired, here's how to get a new one" message instead of a silent
+     failure. #}
+  <div id="reset-bad-token" class="muted small" hidden style="margin-top: 12px;">
+    <p>This link is missing a reset token, has been used already, or has expired.</p>
+    <p><a href="/forgot">Request a new reset link</a></p>
+  </div>
+
+  <div class="auth-foot">
+    <a href="/signin">Back to sign in</a>
+  </div>
+</section>
+{% endblock %}
+{% block scripts %}
+<script src="/static/js/reset.js?v={{ v }}"></script>
+{% endblock %}

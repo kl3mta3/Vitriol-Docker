@@ -36,13 +36,33 @@
       You signed in via SSO and don't have a password yet. Set one here
       if you want to also sign in with a username and password.
     </p>
-    <form id="password-form" class="stack">
-      <label id="password-current-label"><span>Current</span><input name="current_password" type="password" autocomplete="current-password" /></label>
-      <label><span>New password</span><input name="new_password" type="password" minlength="8" autocomplete="new-password" required /></label>
-      <button class="btn btn-primary" type="submit" id="password-submit">Change password</button>
-      <p id="password-msg" class="ok" hidden></p>
-    </form>
+    <button type="button" id="password-reset-btn" class="btn btn-secondary">Reset password</button>
+    <p id="password-msg" class="ok" hidden></p>
   </div>
+
+  {# Password modal — opens when the operator clicks Reset password and
+     the server's `password_reset_via_email` toggle is OFF. When the
+     toggle is ON, the button instead triggers POST /auth/password-reset
+     and shows a "check your email" toast; the email link lands on
+     /reset?token=… where the same form (in a dedicated page) accepts
+     the new password. #}
+  <dialog id="password-modal" class="manage-dialog">
+    <form id="password-form" class="stack">
+      <h2 class="display small" id="password-modal-title">Reset password</h2>
+      <p id="password-modal-sso-hint" class="muted small" hidden>
+        You signed in via SSO and don't have a password yet — leave the
+        "current password" field blank.
+      </p>
+      <label id="password-current-label"><span>Current password</span><input name="current_password" type="password" autocomplete="current-password" /></label>
+      <label><span>New password</span><input name="new_password" type="password" minlength="8" autocomplete="new-password" required /></label>
+      <label><span>Confirm new password</span><input name="confirm_password" type="password" minlength="8" autocomplete="new-password" required /></label>
+      <p id="password-modal-msg" class="error small" hidden></p>
+      <footer class="dialog-actions">
+        <button type="button" class="btn btn-ghost" data-close>Cancel</button>
+        <button type="submit" class="btn btn-primary">Save</button>
+      </footer>
+    </form>
+  </dialog>
 
   <div class="card">
     <h2 class="display small">API keys</h2>
@@ -66,5 +86,10 @@
 </section>
 {% endblock %}
 {% block scripts %}
+<script>
+  // Tell profile.js which flow to use for "Reset password" — direct
+  // modal (false) or send-email-then-land-on-/reset (true).
+  window.VITRIOL_PASSWORD_RESET_VIA_EMAIL = {{ 'true' if password_reset_via_email else 'false' }};
+</script>
 <script src="/static/js/profile.js?v={{ v }}"></script>
 {% endblock %}

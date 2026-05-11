@@ -211,6 +211,7 @@ class ServerSettingsOut(BaseModel):
     signup_default_custom_role_id: Optional[int] = None
     require_email_verification: bool = True
     require_name_at_signup: bool = False
+    password_reset_via_email: bool = False
     password_signin_enabled: bool = True
     smtp_enabled: bool = True
     smtp_host: Optional[str]
@@ -299,6 +300,7 @@ class ServerSettingsPatch(BaseModel):
     signup_default_custom_role_id: Optional[int] = None
     require_email_verification: Optional[bool] = None
     require_name_at_signup: Optional[bool] = None
+    password_reset_via_email: Optional[bool] = None
     password_signin_enabled: Optional[bool] = None
     smtp_enabled: Optional[bool] = None
     smtp_host: Optional[str] = None

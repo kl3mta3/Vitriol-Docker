@@ -556,6 +556,13 @@ class ServerSettings(Base):
     # so an Authentik/GitHub user missing the `given_name` claim still
     # gets through with *something* on file rather than a 400.
     require_name_at_signup = Column(Boolean, nullable=False, default=False, server_default="0")
+    # When ON, the profile-page "Reset password" button sends an email
+    # with a token-bearing link instead of opening the in-page modal
+    # directly. Adds an out-of-band verification step (attacker with
+    # session access can't change password without also having the
+    # email inbox). Requires SMTP configured + last-tested-ok; the
+    # admin UI greys the toggle out otherwise.
+    password_reset_via_email = Column(Boolean, nullable=False, default=False, server_default="0")
     # Master toggle for username/password sign-in. When False, /signin's
     # form is hidden and POST /auth/signin returns 403. Useful for
     # deployments that want to enforce SSO-only access. UI side enforces
