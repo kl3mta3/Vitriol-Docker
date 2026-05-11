@@ -51,9 +51,52 @@ inviteForm.addEventListener('submit', async (e) => {
 });
 
 // ---------------- Search + sort ----------------------------------------
+//
+// Two-mode search:
+//   * Small lists (default) — client-side filter over the already-fetched
+//     state.users array. Instant per-keystroke, no network round-trip.
+//   * Big lists (> SERVER_SEARCH_THRESHOLD rows) — debounced server-side
+//     `?q=` query. Keeps the UI snappy when fetching the whole user list
+//     would itself be slow. The /users endpoint already supports `?q=`
+//     server-side, so this is purely a wire-up.
+//
+// 5,000 is the threshold because that's roughly where serializing every
+// UserOut starts to push past a megabyte and the in-memory filter loop
+// stops feeling instant on lower-end clients. Operators with very big
+// user bases automatically get the better behavior without configuring
+// anything.
+
+const SERVER_SEARCH_THRESHOLD = 5000;
+let _serverSearchDebounce = null;
+
+function _shouldUseServerSearch() {
+  return Array.isArray(state.users) && state.users.length > SERVER_SEARCH_THRESHOLD;
+}
+
+async function _runServerSearch(query) {
+  // Hit /users?q= and replace state.users with the filtered set. We
+  // keep state.search empty so the client-side filter (applySearch)
+  // becomes a no-op — the rows we got back are already the result.
+  try {
+    const params = query ? `?q=${encodeURIComponent(query)}` : '';
+    const data = await api.get(`/users${params}`);
+    if (!Array.isArray(data)) return;
+    state.users = data;
+    state.search = '';   // disable client-side re-filter for this view
+    render();
+  } catch (ex) {
+    console.error('server search failed', ex);
+  }
+}
 
 searchInput.addEventListener('input', () => {
-  state.search = searchInput.value.trim().toLowerCase();
+  const raw = searchInput.value.trim();
+  if (_shouldUseServerSearch()) {
+    if (_serverSearchDebounce) clearTimeout(_serverSearchDebounce);
+    _serverSearchDebounce = setTimeout(() => _runServerSearch(raw), 250);
+    return;
+  }
+  state.search = raw.toLowerCase();
   render();
 });
 

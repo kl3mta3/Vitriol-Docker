@@ -16,11 +16,14 @@ class SignUpRequest(BaseModel):
     username: str = Field(min_length=3, max_length=64)
     email: EmailStr
     password: str = Field(min_length=8, max_length=200)
-    # Optional real-name fields. Captured if the operator wants them
-    # on the signup form (the template renders them but doesn't
-    # require them, so signup stays low-friction).
-    first_name: Optional[str] = Field(default=None, max_length=128)
-    last_name: Optional[str] = Field(default=None, max_length=128)
+    # Required at signup. The values themselves aren't ID-checked —
+    # anyone can lie — but requiring *something* raises the friction
+    # for fake-account farming and gives the operator a name to refer
+    # to when reviewing audit-log incidents. Mononymic users are
+    # asked to put their single name in both fields (signup template
+    # explains).
+    first_name: str = Field(min_length=1, max_length=128)
+    last_name: str = Field(min_length=1, max_length=128)
 
 
 class TokenResponse(BaseModel):

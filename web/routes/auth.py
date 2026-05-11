@@ -494,12 +494,20 @@ async def _sso_callback_inner(
     sub: Optional[str] = None
     email: Optional[str] = None
     name: Optional[str] = None
+    first_name: Optional[str] = None
+    last_name: Optional[str] = None
     try:
         if kind == "google":
             info = token.get("userinfo") or await client.userinfo(token=token)
             sub = info.get("sub")
             email = info.get("email")
             name = info.get("name") or info.get("given_name")
+            # Google always gives us split given_name + family_name in
+            # the OIDC userinfo claims when the `profile` scope is on,
+            # which it is by default. Capture them directly so we don't
+            # have to split a single "name" string heuristically.
+            first_name = info.get("given_name")
+            last_name = info.get("family_name")
         elif kind == "github":
             # GitHub doesn't issue an OIDC id_token — fetch the profile
             # via the REST API. The Authlib ``client.get`` call uses the
@@ -512,6 +520,15 @@ async def _sso_callback_inner(
             info = resp.json() if resp.text else {}
             sub = str(info.get("id") or "")
             name = info.get("login")
+            # GitHub returns "name" as a single optional field (lots of
+            # users never set it). Split on first whitespace — anything
+            # before is first, anything after is last. Single-word names
+            # land in both via the fallback below.
+            gh_name = (info.get("name") or "").strip()
+            if gh_name:
+                parts = gh_name.split(None, 1)
+                first_name = parts[0]
+                last_name = parts[1] if len(parts) > 1 else None
             if not info.get("email"):
                 er = await client.get("user/emails", token=token)
                 if er.status_code >= 400:
@@ -550,6 +567,18 @@ async def _sso_callback_inner(
                 or info.get("name")
                 or info.get("given_name")
             )
+            # Standard OIDC claim set has split given_name + family_name
+            # (Authentik, Keycloak, Auth0, Okta, Entra all set them when
+            # the user profile has them filled). Fall back to splitting
+            # the single `name` claim if the IdP only returns that.
+            first_name = info.get("given_name")
+            last_name = info.get("family_name")
+            if not (first_name or last_name):
+                combined = (info.get("name") or "").strip()
+                if combined:
+                    parts = combined.split(None, 1)
+                    first_name = parts[0]
+                    last_name = parts[1] if len(parts) > 1 else None
     except HTTPException:
         raise
     except Exception as e:
@@ -717,8 +746,23 @@ async def _sso_callback_inner(
                 while db.query(User).filter(User.username == username).count():
                     username = f"{(name or provider)[:60]}_{i}"
                     i += 1
+                # Name fields are required at password-signup but the
+                # SSO path can't reject a sign-in if the IdP didn't
+                # return the claim. Resolution order:
+                #   1. The split given_name/family_name we extracted above
+                #   2. The "name" we used for the username (sensible
+                #      fallback — at least something on file)
+                #   3. The email-local-part as a last resort
+                #   4. The provider+sub stub as a final fallback
+                # If only one of first/last got set, copy it to the
+                # other (mononymic-or-IdP-incomplete case).
+                _email_local = (email.split("@", 1)[0] if email and "@" in email else None)
+                _placeholder = name or _email_local or f"{provider}_{sub}"
+                final_first = (first_name or _placeholder)[:128]
+                final_last = (last_name or first_name or _placeholder)[:128]
                 user = User(
                     username=username, email=email,
+                    first_name=final_first, last_name=final_last,
                     password_hash=None,
                     role=default_role,
                     status=Status.active,
