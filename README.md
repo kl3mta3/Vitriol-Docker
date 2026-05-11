@@ -22,22 +22,26 @@
   <em>Self-hostable web port of <a href="https://github.com/kl3mta3/Vitriol">Vitriol</a> — file converter with Philosopher's Stone steganographic mode, plus user accounts, role-based access, and an HTTP API.</em>
 </p>
 
+<div align="center">
+  
 ![License](https://img.shields.io/badge/license-ELv2-orange?style=flat-square)
 ![Repo size](https://img.shields.io/github/repo-size/kl3mta3/Vitriol-Docker?style=flat-square)
 ![Last commit](https://img.shields.io/github/last-commit/kl3mta3/Vitriol-Docker?style=flat-square)
 ![Stars](https://img.shields.io/github/stars/kl3mta3/Vitriol-Docker?style=flat-square)
 
-<br>
-
-![Python](https://img.shields.io/badge/Python-3.12+-3776AB?style=flat-square&logo=python&logoColor=white)
-![FastAPI](https://img.shields.io/badge/FastAPI-0.110+-009688?style=flat-square&logo=fastapi&logoColor=white)
-
-<br>
+<p></P>
 
 ![Docker](https://img.shields.io/badge/Docker-ready-2496ED?style=flat-square&logo=docker&logoColor=white)
 ![Docker Hub pulls](https://img.shields.io/docker/pulls/kl3mta3/vitriol-docker?style=flat-square&v=2)
 ![Docker image size](https://img.shields.io/docker/image-size/kl3mta3/vitriol-docker/latest?style=flat-square)
 ![Docker version](https://img.shields.io/docker/v/kl3mta3/vitriol-docker?style=flat-square&label=docker%20version)
+
+<p></P>
+
+![Python](https://img.shields.io/badge/Python-3.12+-3776AB?style=flat-square&logo=python&logoColor=white)
+![FastAPI](https://img.shields.io/badge/FastAPI-0.110+-009688?style=flat-square&logo=fastapi&logoColor=white)
+
+</div>
 
 ---
 
