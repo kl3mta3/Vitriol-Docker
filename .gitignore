@@ -21,6 +21,10 @@ resources/fonts/*.otf
 logs/
 docs/
 
+
+.git/
+.github/
+.github/workflows/
 .pytest_cache/
 .mypy_cache/
 .ruff_cache/

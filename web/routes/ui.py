@@ -8,6 +8,7 @@ from fastapi.responses import HTMLResponse, RedirectResponse
 from fastapi.templating import Jinja2Templates
 from sqlalchemy.orm import Session
 
+from .. import __version__
 from ..auth import permissions as _perms
 from ..auth import email as email_svc
 from ..auth.permissions import has_capability, CAN_VIEW_USERS_TAB, CAN_VIEW_SERVER_TAB, CAN_VIEW_OWN_FILES
@@ -45,6 +46,12 @@ def _common_ctx(request: Request, user: Optional[User], db: Session) -> dict:
         "show_users_tab": user is not None and has_capability(user, CAN_VIEW_USERS_TAB),
         "show_server_tab": user is not None and has_capability(user, CAN_VIEW_SERVER_TAB),
         "show_files_tab": user is not None and has_capability(user, CAN_VIEW_OWN_FILES),
+        # Single source of truth for the app version — comes from
+        # web/__init__.py:__version__. Templates use this for:
+        #   1. Static asset cache-busting URLs (?v={{ v }}) via base.html
+        #   2. The status-bar "v1.x.y" badge in app.html
+        # Bumping __version__ invalidates browser caches automatically.
+        "version": __version__,
     }
 
 

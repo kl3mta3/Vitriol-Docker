@@ -10,8 +10,10 @@
   <link href="https://fonts.googleapis.com/css2?family=Cinzel:wght@400;500;600;700&family=Inter:wght@400;500;600;700&display=swap" rel="stylesheet" />
   {# Append the app version to every static asset URL so a code update
      forces clients to fetch fresh CSS/JS instead of running stale code
-     against fresh templates. #}
-  {% set v = '1.1.1' %}
+     against fresh templates. Source of truth: web/__init__.py:__version__,
+     passed in via _common_ctx as `version`. Bumping __version__ on a
+     release invalidates browser caches automatically. #}
+  {% set v = version %}
   <link rel="stylesheet" href="/static/css/theme.css?v={{ v }}" />
   {% block head_extra %}{% endblock %}
 </head>
