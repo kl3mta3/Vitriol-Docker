@@ -695,6 +695,18 @@ class DbProvider(Base):
     # UI a "ready to switch to" badge without re-running the DDL.
     last_init_at = Column(DateTime, nullable=True)
 
+    # True when this provider's URL is what /data/active_db.url currently
+    # contains. At most one row should have this flipped on (enforced
+    # in the route layer, not the DB, because the DB has to stay
+    # writable from any provider). The flag survives restart and is the
+    # source of truth for which row the "active" badge shows next to.
+    is_active = Column(Boolean, nullable=False, default=False, server_default="0")
+
+    # Last migration result: snapshot of rows_copied / total_rows /
+    # tables / error so the UI badge survives a page reload.
+    last_migrate_at = Column(DateTime, nullable=True)
+    last_migrate_status = Column(String(255), nullable=True)
+
     created_at = Column(DateTime, nullable=False, default=datetime.utcnow)
     updated_at = Column(DateTime, nullable=False, default=datetime.utcnow, onupdate=datetime.utcnow)
     created_by_user_id = Column(Integer, ForeignKey("users.id"), nullable=True)

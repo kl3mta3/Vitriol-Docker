@@ -273,6 +273,17 @@ _ADDITIVE_COLUMNS: list[tuple[str, str, str]] = [
      "ALTER TABLE server_settings ADD COLUMN max_concurrent_conversions INTEGER NOT NULL DEFAULT 3"),
     ("server_settings", "streaming_safety_divisor",
      "ALTER TABLE server_settings ADD COLUMN streaming_safety_divisor INTEGER NOT NULL DEFAULT 4"),
+    # DbProvider — `is_active` marks the row whose URL is currently in
+    # /data/active_db.url (at most one); `last_migrate_*` snapshots the
+    # most recent row-copy result for the badge in the UI. Safe to
+    # re-run if create_all already produced the table with these
+    # columns — the additive check skips when the column exists.
+    ("db_providers", "is_active",
+     "ALTER TABLE db_providers ADD COLUMN is_active BOOLEAN NOT NULL DEFAULT 0"),
+    ("db_providers", "last_migrate_at",
+     "ALTER TABLE db_providers ADD COLUMN last_migrate_at TIMESTAMP"),
+    ("db_providers", "last_migrate_status",
+     "ALTER TABLE db_providers ADD COLUMN last_migrate_status VARCHAR(255)"),
 ]
 
 

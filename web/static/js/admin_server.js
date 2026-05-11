@@ -1925,6 +1925,31 @@ async function reloadDbProviders() {
   }
   renderDbProvidersTable();
   paintDbProvidersPill();
+  await refreshDbPendingBanner();
+}
+
+let _dbActiveState = { pending: false, target_redacted: null, active_provider_id: null, active_provider_name: null };
+
+async function refreshDbPendingBanner() {
+  const banner = document.getElementById('db-pending-banner');
+  if (!banner) return;
+  try {
+    _dbActiveState = await api.get('/server/db-providers/active/state');
+  } catch (_) {
+    _dbActiveState = { pending: false };
+  }
+  if (!_dbActiveState.pending) {
+    banner.hidden = true;
+    return;
+  }
+  banner.hidden = false;
+  const tgt = document.getElementById('db-pending-target');
+  if (tgt) {
+    const name = _dbActiveState.active_provider_name
+      ? `${_dbActiveState.active_provider_name} — `
+      : '';
+    tgt.textContent = `${name}${_dbActiveState.target_redacted || '(unknown)'} — restart to apply`;
+  }
 }
 
 function renderDbProvidersTable() {
@@ -1932,7 +1957,7 @@ function renderDbProvidersTable() {
   dbProvidersTbody.innerHTML = '';
   if (!_dbProviders.length) {
     const tr = document.createElement('tr');
-    tr.innerHTML = `<td colspan="5" class="muted small empty-state">No database providers yet — click "+ Add provider" to define one.</td>`;
+    tr.innerHTML = `<td colspan="6" class="muted small empty-state">No database providers yet — click "+ Add provider" to define one.</td>`;
     dbProvidersTbody.appendChild(tr);
     return;
   }
@@ -1942,11 +1967,16 @@ function renderDbProvidersTable() {
       ? `${new Date(p.last_test_at).toLocaleString()} — ${p.last_test_ok ? 'ok' : 'failed'}`
       : 'never';
     const initd = p.last_init_at ? new Date(p.last_init_at).toLocaleDateString() : '—';
+    const migrated = p.last_migrate_at
+      ? `${new Date(p.last_migrate_at).toLocaleDateString()} — ${escapeHtml(p.last_migrate_status || '?')}`
+      : '—';
+    const activeBadge = p.is_active ? ' <span class="role-tag role-admin">active</span>' : '';
     tr.innerHTML = `
-      <td>${escapeHtml(p.display_name)} <em class="muted small">(${escapeHtml(p.slug)})</em></td>
+      <td>${escapeHtml(p.display_name)}${activeBadge} <em class="muted small">(${escapeHtml(p.slug)})</em></td>
       <td>${escapeHtml(p.kind)}</td>
       <td class="small">${escapeHtml(lastTest)}</td>
       <td class="small">${escapeHtml(initd)}</td>
+      <td class="small">${migrated}</td>
       <td><button type="button" class="btn btn-secondary btn-manage" data-edit-id="${p.id}">Edit</button></td>
     `;
     dbProvidersTbody.appendChild(tr);
@@ -2001,6 +2031,28 @@ function openDbProviderDialog(p) {
   document.getElementById('db-provider-test-btn').hidden = !p;
   document.getElementById('db-provider-create-btn').hidden = !p;
   document.getElementById('db-provider-init-btn').hidden = !p;
+  // Migrate + Set Active appear on saved rows. Both are gated:
+  // migration needs schema initialized; set-active needs both schema
+  // initialized AND last_test_ok=true. The backend re-checks too.
+  const migrateBtn = document.getElementById('db-provider-migrate-btn');
+  const setActiveBtn = document.getElementById('db-provider-setactive-btn');
+  if (migrateBtn) {
+    migrateBtn.hidden = !p;
+    migrateBtn.disabled = !(p && p.last_test_ok && p.last_init_at);
+    migrateBtn.title = migrateBtn.disabled
+      ? 'Test the connection and initialize schema first'
+      : 'Copy every row from the running DB into this target. Source stays online.';
+  }
+  if (setActiveBtn) {
+    setActiveBtn.hidden = !p;
+    setActiveBtn.disabled = !(p && p.last_test_ok && p.last_init_at) || (p && p.is_active);
+    setActiveBtn.textContent = (p && p.is_active) ? 'Already active' : 'Set as active';
+    setActiveBtn.title = setActiveBtn.disabled
+      ? (p && p.is_active
+          ? 'This provider is already the pending / active target'
+          : 'Test the connection and initialize schema first')
+      : 'Use this DB on next boot (does not switch until you Restart).';
+  }
   applyDbProviderKindVisibility();
   document.getElementById('db-provider-msg').hidden = true;
   dbProviderDialog.showModal();
@@ -2102,6 +2154,166 @@ if (dbProviderForm) {
   document.getElementById('db-provider-test-btn').addEventListener('click', () => _runAction('test', 'Test'));
   document.getElementById('db-provider-create-btn').addEventListener('click', () => _runAction('create-db', 'Create DB'));
   document.getElementById('db-provider-init-btn').addEventListener('click', () => _runAction('initialize-schema', 'Initialize schema'));
+
+  // Set Active — requires a typed-phrase confirmation since it's the
+  // commit-point for the DB switch. Same UX as the storage activation.
+  document.getElementById('db-provider-setactive-btn').addEventListener('click', async () => {
+    const id = dbProviderForm.id.value;
+    if (!id) return;
+    const p = _dbProviders.find(x => x.id === Number(id));
+    const name = p ? p.display_name : 'this provider';
+    const ans = prompt(
+      `Set "${name}" as the next-boot database?\n\n` +
+      `This writes /data/active_db.url. The live DB keeps running until ` +
+      `you click "Restart server" on the section banner. If the new DB ` +
+      `is unreachable at boot, the app falls back to the current one ` +
+      `(so you stay reachable).\n\n` +
+      `Type "set active" to confirm:`
+    );
+    if (ans == null) return;
+    if (ans.trim().toLowerCase() !== 'set active') {
+      const m = document.getElementById('db-provider-msg');
+      m.textContent = 'Confirmation phrase did not match — switch cancelled.';
+      m.className = 'error small';
+      m.hidden = false;
+      return;
+    }
+    await _runAction('set-active', 'Set as active');
+    await refreshDbPendingBanner();
+  });
+
+  // Try migrate — opens the progress dialog and kicks off the worker.
+  // The route returns immediately; we poll for status until done.
+  document.getElementById('db-provider-migrate-btn').addEventListener('click', async () => {
+    const id = dbProviderForm.id.value;
+    if (!id) return;
+    if (!confirm(
+      'Copy every row from the running database into this target?\n\n' +
+      'The source stays online and read-only access is the only thing ' +
+      'happening on it. This can take several minutes on a large DB. ' +
+      'Target must be empty.'
+    )) return;
+    const m = document.getElementById('db-provider-msg');
+    m.textContent = 'Starting migration…';
+    m.className = 'muted small';
+    m.hidden = false;
+    try {
+      await api.post(`/server/db-providers/${id}/migrate`, {});
+      openMigrateDialog();
+    } catch (ex) {
+      m.textContent = ex.detail || 'Migration could not start';
+      m.className = 'error small';
+    }
+  });
+}
+
+// ============================================================
+//   Migration progress poller + dialog.
+// ============================================================
+
+const dbMigrateDialog = document.getElementById('db-migrate-dialog');
+let _migratePollHandle = null;
+
+function openMigrateDialog() {
+  if (!dbMigrateDialog) return;
+  dbMigrateDialog.showModal();
+  // Begin polling. Cleanup happens when state leaves 'running'.
+  if (_migratePollHandle) clearInterval(_migratePollHandle);
+  paintMigrationProgress({ state: 'running', percent: 0 });
+  _migratePollHandle = setInterval(pollMigrationStatus, 2000);
+  pollMigrationStatus();   // immediate kick
+}
+
+async function pollMigrationStatus() {
+  try {
+    const s = await api.get('/server/db-providers/migrate/status');
+    paintMigrationProgress(s);
+    if (s.state === 'done' || s.state === 'failed' || s.state === 'idle') {
+      if (_migratePollHandle) {
+        clearInterval(_migratePollHandle);
+        _migratePollHandle = null;
+      }
+      // Refresh row badges so the "Last migration" cell + status pill
+      // reflect the new state without a full page reload.
+      await reloadDbProviders();
+    }
+  } catch (_) { /* network hiccup — keep polling */ }
+}
+
+function paintMigrationProgress(s) {
+  const bar = document.getElementById('db-migrate-bar');
+  const pct = document.getElementById('db-migrate-pct');
+  const counts = document.getElementById('db-migrate-counts');
+  const tables = document.getElementById('db-migrate-tables');
+  const current = document.getElementById('db-migrate-current');
+  const title = document.getElementById('db-migrate-title');
+  const msg = document.getElementById('db-migrate-msg');
+  const percent = Number(s.percent || 0);
+  if (bar) bar.style.width = `${percent}%`;
+  if (pct) pct.textContent = `${percent.toFixed(1)}%`;
+  if (counts) counts.textContent = `${s.rows_copied || 0} / ${s.rows_total || 0} rows`;
+  if (tables) tables.textContent = `${s.tables_done || 0} / ${s.tables_total || 0} tables`;
+  if (current) current.textContent = s.current_table || '—';
+  if (title) {
+    if (s.state === 'done') title.textContent = 'Migration complete';
+    else if (s.state === 'failed') title.textContent = 'Migration failed';
+    else if (s.state === 'idle') title.textContent = 'No migration running';
+    else title.textContent = 'Migrating data…';
+  }
+  if (msg) {
+    if (s.state === 'failed' && s.error) {
+      msg.textContent = s.error;
+      msg.className = 'error small';
+      msg.hidden = false;
+    } else if (s.state === 'done') {
+      msg.textContent = 'All rows copied successfully. You can now Set the target as active and Restart.';
+      msg.className = 'ok small';
+      msg.hidden = false;
+    } else {
+      msg.hidden = true;
+    }
+  }
+  // Per-table breakdown.
+  const tbody = document.querySelector('#db-migrate-pertable tbody');
+  if (tbody) {
+    tbody.innerHTML = '';
+    const pt = s.per_table || {};
+    for (const [name, info] of Object.entries(pt)) {
+      const tr = document.createElement('tr');
+      tr.innerHTML = `<td>${escapeHtml(name)}</td><td>${info.copied || 0}</td><td>${info.total || 0}</td>`;
+      tbody.appendChild(tr);
+    }
+  }
+}
+
+// Pending-switch banner buttons.
+const dbPendingCancelBtn = document.getElementById('db-pending-cancel-btn');
+if (dbPendingCancelBtn) {
+  dbPendingCancelBtn.addEventListener('click', async () => {
+    if (!confirm('Cancel the pending DB switch? Next boot will use the current database.')) return;
+    try {
+      await api.post('/server/db-providers/active/clear', {});
+      await reloadDbProviders();
+    } catch (ex) {
+      alert(ex.detail || 'Could not clear pending switch.');
+    }
+  });
+}
+const dbPendingRestartBtn = document.getElementById('db-pending-restart-btn');
+if (dbPendingRestartBtn) {
+  dbPendingRestartBtn.addEventListener('click', async () => {
+    if (!confirm(
+      'Restart the server now to apply the pending DB switch?\n\n' +
+      'If the new DB is unreachable, the app will fall back to the ' +
+      'current one and log the failure (you stay reachable).'
+    )) return;
+    try {
+      await api.post('/server/restart', {});
+      alert('Restart requested. Give it a few seconds, then reload the page.');
+    } catch (ex) {
+      alert(ex.detail || 'Restart failed.');
+    }
+  });
 }
 
 // Kick everything off. load() populates the bulk of the form;

@@ -429,7 +429,27 @@ class DbProviderOut(BaseModel):
     last_test_at: Optional[datetime] = None
     last_test_ok: Optional[bool] = None
     last_init_at: Optional[datetime] = None
+    is_active: bool = False              # this row's URL is in /data/active_db.url
+    last_migrate_at: Optional[datetime] = None
+    last_migrate_status: Optional[str] = None
     created_at: datetime
+
+
+class DbMigrateStatus(BaseModel):
+    """Polled by the UI while a migration is in flight. Single
+    in-process state — only one migration may be running at a time."""
+    state: str                            # 'idle' | 'running' | 'done' | 'failed'
+    provider_id: Optional[int] = None
+    started_at: Optional[datetime] = None
+    finished_at: Optional[datetime] = None
+    current_table: Optional[str] = None
+    tables_done: int = 0
+    tables_total: int = 0
+    rows_copied: int = 0
+    rows_total: int = 0
+    percent: float = 0.0
+    per_table: dict = {}                  # table_name -> {copied, total}
+    error: Optional[str] = None
 
 
 class DbProviderCreateRequest(BaseModel):

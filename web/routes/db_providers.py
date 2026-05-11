@@ -37,7 +37,8 @@ from ..db import Base
 from ..deps import get_db, require_super_admin
 from ..models import DbProvider, User
 from ..schemas import (
-    DbProviderCreateRequest, DbProviderOut, DbProviderUpdateRequest, MessageResponse,
+    DbMigrateStatus, DbProviderCreateRequest, DbProviderOut,
+    DbProviderUpdateRequest, MessageResponse,
 )
 from ..services import audit
 from ..services.db_url import build_url, known_kinds, server_url_for_create_db
@@ -71,6 +72,9 @@ def _to_out(p: DbProvider) -> DbProviderOut:
         last_test_at=p.last_test_at,
         last_test_ok=p.last_test_ok,
         last_init_at=p.last_init_at,
+        is_active=bool(getattr(p, "is_active", False)),
+        last_migrate_at=p.last_migrate_at,
+        last_migrate_status=p.last_migrate_status,
         created_at=p.created_at,
     )
 
@@ -285,6 +289,153 @@ def create_target_db(
     audit.log(db, actor.id, "db_provider_create_db",
               metadata={"id": provider_id, "kind": kind, "db": db_name, "note": note})
     return _to_out(p)
+
+
+def _active_db_file():
+    """Where the UI-written 'next-boot DB URL' lives. Read by web.db
+    at startup. Kept inside data_dir so it shares the persistent volume."""
+    from ..config import get_settings as _gs
+    return _gs().data_dir / "active_db.url"
+
+
+@router.post("/{provider_id}/set-active", response_model=DbProviderOut)
+def set_active(
+    provider_id: int,
+    actor: User = Depends(require_super_admin), db: Session = Depends(get_db),
+):
+    """Mark this provider as the next boot's database. Writes the
+    resolved URL (including secret) to ``/data/active_db.url`` and
+    flips the row's ``is_active`` flag. **No effect until the operator
+    restarts the server.** The boot-time loader in web/db.py reads the
+    file and falls back to the env var / SQLite default if the target
+    is unreachable, so this is reversible: delete the file (or click
+    Cancel Pending in the UI) and restart to go back."""
+    p: Optional[DbProvider] = db.query(DbProvider).get(provider_id)
+    if p is None:
+        raise HTTPException(status_code=404, detail="Provider not found")
+    if not p.last_test_ok:
+        raise HTTPException(status_code=400, detail="Test the connection first.")
+    if p.last_init_at is None:
+        raise HTTPException(status_code=400, detail="Initialize the schema on the target first.")
+    cfg = _parse_config(p.config_json)
+    secret = _resolved_secret(p)
+    try:
+        url = build_url(p.kind, cfg, secret)
+    except ValueError as e:
+        raise HTTPException(status_code=400, detail=str(e))
+
+    # Flip the active flag — atomic: clear everyone else, set this row.
+    db.query(DbProvider).update({DbProvider.is_active: False}, synchronize_session=False)
+    p.is_active = True
+    db.commit()
+    # Write the file *after* the DB flip so a crash between the two
+    # leaves us in a consistent state (the file is the source of
+    # truth at boot — the flag is just for UI badging).
+    f = _active_db_file()
+    f.parent.mkdir(parents=True, exist_ok=True)
+    f.write_text(url, encoding="utf-8")
+    audit.log(db, actor.id, "db_provider_set_active",
+              metadata={"id": provider_id, "slug": p.slug, "kind": p.kind})
+    db.refresh(p)
+    return _to_out(p)
+
+
+@router.post("/active/clear", response_model=MessageResponse)
+def clear_active(
+    actor: User = Depends(require_super_admin), db: Session = Depends(get_db),
+):
+    """Remove the pending switch — next boot goes back to DATABASE_URL
+    or the SQLite default. Always allowed (no provider_id needed)
+    because the file may have been written before the row got deleted."""
+    f = _active_db_file()
+    if f.exists():
+        try:
+            f.unlink()
+        except OSError as e:
+            raise HTTPException(status_code=500, detail=f"Could not delete file: {e}")
+    db.query(DbProvider).update({DbProvider.is_active: False}, synchronize_session=False)
+    db.commit()
+    audit.log(db, actor.id, "db_provider_clear_active")
+    return MessageResponse(message="Pending switch cleared.")
+
+
+@router.get("/active/state")
+def active_state(
+    actor: User = Depends(require_super_admin), db: Session = Depends(get_db),
+):
+    """Return whether a pending switch exists + which provider it is +
+    the redacted target URL. The UI uses this to render the
+    'Pending switch — restart to apply' banner."""
+    f = _active_db_file()
+    pending = f.exists()
+    target: Optional[str] = None
+    if pending:
+        try:
+            target = f.read_text(encoding="utf-8").strip()
+        except OSError:
+            target = None
+    # Redact password for display.
+    redacted = target
+    if target:
+        try:
+            from urllib.parse import urlparse, urlunparse
+            u = urlparse(target)
+            if u.password:
+                redacted = urlunparse(u._replace(netloc=u.netloc.replace(":" + u.password + "@", ":***@")))
+        except Exception:
+            pass
+    active_row = db.query(DbProvider).filter(DbProvider.is_active.is_(True)).first()
+    return {
+        "pending": pending,
+        "target_redacted": redacted,
+        "active_provider_id": active_row.id if active_row else None,
+        "active_provider_name": active_row.display_name if active_row else None,
+    }
+
+
+@router.post("/{provider_id}/migrate", response_model=DbMigrateStatus)
+def start_migration(
+    provider_id: int,
+    actor: User = Depends(require_super_admin), db: Session = Depends(get_db),
+):
+    """Kick off a row-by-row copy of the *currently running* DB into
+    this provider's target. Returns immediately with the initial
+    status; the UI polls ``/migrate/status`` for progress.
+
+    Source is untouched — the live app keeps serving. Target must be
+    empty (refused otherwise). Can take a while on large databases."""
+    p: Optional[DbProvider] = db.query(DbProvider).get(provider_id)
+    if p is None:
+        raise HTTPException(status_code=404, detail="Provider not found")
+    if not p.last_test_ok:
+        raise HTTPException(status_code=400, detail="Test the connection first.")
+    if p.last_init_at is None:
+        raise HTTPException(status_code=400, detail="Initialize the schema on the target first.")
+    cfg = _parse_config(p.config_json)
+    secret = _resolved_secret(p)
+    try:
+        url = build_url(p.kind, cfg, secret)
+    except ValueError as e:
+        raise HTTPException(status_code=400, detail=str(e))
+    from ..services import db_migrate
+    try:
+        db_migrate.start(provider_id, url)
+    except RuntimeError as e:
+        raise HTTPException(status_code=409, detail=str(e))
+    audit.log(db, actor.id, "db_provider_migrate_start",
+              metadata={"id": provider_id, "slug": p.slug})
+    return DbMigrateStatus(**db_migrate.current_status())
+
+
+@router.get("/migrate/status", response_model=DbMigrateStatus)
+def migration_status(
+    actor: User = Depends(require_super_admin),
+):
+    """Polled by the UI every ~2s while a migration is in flight.
+    Returns the same singleton state across all callers — there's
+    only one migration at a time per process."""
+    from ..services import db_migrate
+    return DbMigrateStatus(**db_migrate.current_status())
 
 
 @router.post("/{provider_id}/initialize-schema", response_model=DbProviderOut)

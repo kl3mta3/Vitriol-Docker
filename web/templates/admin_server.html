@@ -405,25 +405,69 @@
       <p class="muted small">
         Define alternative database targets (PostgreSQL, MySQL, MariaDB,
         SQL Server, or another SQLite file). Saving a row lets you test
-        the connection, optionally create a blank database on the
-        target, and initialize the Vitriol schema there — all without
-        switching the live database. To actually move Vitriol onto a
-        saved target you still need to update <code>DATABASE_URL</code> and
-        restart. Row-level data migration ("copy everything over") will
-        come as a follow-up.
+        the connection, create a blank database on the target,
+        initialize the Vitriol schema there, optionally copy your live
+        data over, and then set it as the next-boot target — all from
+        here. The live DB stays running until you click Restart.
       </p>
+      <div id="db-pending-banner" class="banner banner-warning" hidden style="margin-bottom: 12px; padding: 10px 12px; border-radius: 6px; background: rgba(255,196,0,0.08); border: 1px solid rgba(255,196,0,0.3);">
+        <strong>Pending switch:</strong>
+        <span id="db-pending-target" class="muted small"></span>
+        <span style="flex:1;"></span>
+        <button type="button" id="db-pending-cancel-btn" class="btn btn-ghost">Cancel pending</button>
+        <button type="button" id="db-pending-restart-btn" class="btn btn-primary">Restart server</button>
+      </div>
       <table class="retention-table" id="db-providers-table">
         <thead>
-          <tr><th>Name</th><th>Kind</th><th>Last tested</th><th>Schema initialized</th><th></th></tr>
+          <tr><th>Name</th><th>Kind</th><th>Last tested</th><th>Schema initialized</th><th>Last migration</th><th></th></tr>
         </thead>
         <tbody id="db-providers-tbody">
-          <tr><td colspan="5" class="muted small empty-state">No database providers yet — click "+ Add provider" to define one.</td></tr>
+          <tr><td colspan="6" class="muted small empty-state">No database providers yet — click "+ Add provider" to define one.</td></tr>
         </tbody>
       </table>
       <div class="form-actions" style="margin-top: 8px;">
         <button type="button" id="db-provider-add-btn" class="btn btn-secondary">+ Add provider</button>
       </div>
     </details>
+
+    <!-- Migration progress dialog. Opens automatically when a migration
+         starts; polls /migrate/status every 2s until state != 'running'.
+         Read-only — closes when done; user can dismiss while running
+         but the worker keeps going in the background. -->
+    <dialog id="db-migrate-dialog" class="manage-dialog">
+      <form id="db-migrate-form">
+        <header class="manage-head">
+          <h2 class="display small" id="db-migrate-title">Migrating data…</h2>
+        </header>
+        <p class="muted small">
+          Source DB stays online — only reads are happening on it. This
+          can take several minutes on a large database. Do not click
+          "Restart server" until this finishes.
+        </p>
+        <div style="margin: 12px 0;">
+          <div style="background: rgba(255,255,255,0.06); border-radius: 4px; overflow: hidden; height: 12px;">
+            <div id="db-migrate-bar" style="height: 100%; width: 0%; background: var(--accent, #4a90e2); transition: width 0.4s;"></div>
+          </div>
+          <p class="small" style="margin-top: 6px;">
+            <strong id="db-migrate-pct">0%</strong>
+            <span class="muted">— <span id="db-migrate-counts">0 / 0 rows</span></span>
+            <span class="muted">(<span id="db-migrate-tables">0 / 0 tables</span>)</span>
+            <span class="muted"> — current: <span id="db-migrate-current">—</span></span>
+          </p>
+        </div>
+        <details>
+          <summary class="small">Per-table progress</summary>
+          <table class="retention-table" id="db-migrate-pertable">
+            <thead><tr><th>Table</th><th>Copied</th><th>Total</th></tr></thead>
+            <tbody></tbody>
+          </table>
+        </details>
+        <p id="db-migrate-msg" class="muted small" hidden></p>
+        <footer class="dialog-actions">
+          <button type="button" class="btn btn-ghost" data-close>Close <em class="muted small">(migration keeps running)</em></button>
+        </footer>
+      </form>
+    </dialog>
 
     <details name="server-settings"><summary>Self-compile defaults</summary>
       <label class="checkbox-row"><input type="checkbox" name="super_admin_can_self_compile" /> <span>Super admin can self-compile</span></label>
@@ -778,6 +822,8 @@
       <button type="button" id="db-provider-test-btn" class="btn btn-secondary" hidden>Test connection</button>
       <button type="button" id="db-provider-create-btn" class="btn btn-secondary" hidden>Create blank DB</button>
       <button type="button" id="db-provider-init-btn" class="btn btn-secondary" hidden>Initialize schema</button>
+      <button type="button" id="db-provider-migrate-btn" class="btn btn-secondary" hidden disabled>Try migrate</button>
+      <button type="button" id="db-provider-setactive-btn" class="btn btn-primary" hidden disabled>Set as active</button>
       <button type="button" class="btn btn-ghost" data-close>Close</button>
       <button type="submit" class="btn btn-primary">Save</button>
     </footer>
