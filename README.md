@@ -29,7 +29,8 @@
 ![Repo size](https://img.shields.io/github/repo-size/kl3mta3/Vitriol-Docker?style=flat-square)
 ![Last commit](https://img.shields.io/github/last-commit/kl3mta3/Vitriol-Docker?style=flat-square)
 ![Stars](https://img.shields.io/github/stars/kl3mta3/Vitriol-Docker?style=flat-square)
-![Image size](https://img.shields.io/badge/dynamic/json?url=https%3A%2F%2Fghcr-badge.egpl.dev%2Fkl3mta3%2Fvitriol-docker%2Fsize&label=image%20size&style=flat-square&color=2496ED)
+![Docker Hub pulls](https://img.shields.io/docker/pulls/kl3mta3/vitriol-docker?style=flat-square)
+![Docker image size](https://img.shields.io/docker/image-size/kl3mta3/vitriol-docker/latest?style=flat-square)
 
 ---
 
