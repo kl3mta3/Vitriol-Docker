@@ -19,7 +19,7 @@
 ---
 
 <p align="center">
-  <em>Self-hostable web port of <a href="https://github.com/kl3mta3/Vitriol">Vitriol</a> — file converter with Philosopher's Stone steganographic mode, plus user accounts, role-based access, and an HTTP API.</em>
+  <em>Self-hostable web port of <a href="https://github.com/kl3mta3/Vitriol">Vitriol</a> - file converter with Philosopher's Stone steganographic mode, plus user accounts, role-based access, and an HTTP API.</em>
 </p>
 
 <div align="center">
