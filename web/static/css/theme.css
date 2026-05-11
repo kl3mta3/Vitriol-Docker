@@ -259,6 +259,13 @@ input:focus, select:focus, textarea:focus { outline: none; border-color: var(--p
 .toggles { display: flex; gap: 16px; align-items: center; }
 .toggle { display: flex; align-items: center; gap: 6px; font-size: 12px; color: var(--ink-muted); }
 .toggle.stone:has(input:checked) span { color: var(--red-hot); text-shadow: 0 0 8px var(--red); }
+/* Disabled toggle (e.g. Verify Round-Trip when Stone is off) — dim the
+   whole row, ungrey the input itself, and switch the help-? icon to
+   muted so it reads as inactive rather than clickable. */
+.toggle.disabled { opacity: 0.45; cursor: not-allowed; }
+.toggle.disabled input,
+.toggle.disabled .help { cursor: not-allowed; }
+.toggle input:disabled { cursor: not-allowed; }
 .help {
   display: inline-block; width: 16px; height: 16px; border-radius: 50%;
   background: var(--surface-2); border: 1px solid var(--border-2);

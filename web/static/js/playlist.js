@@ -393,9 +393,26 @@ fileInput.addEventListener('change', () => {
 const TOGGLE_KEY_STONE = 'vitriol_stone_on';
 const TOGGLE_KEY_VERIFY = 'vitriol_verify_on';
 
+// Verify Round-Trip only does anything in Stone mode — the engine ignores
+// the flag for regular conversions. Mirror that in the UI: disable the
+// checkbox when Stone is off, and uncheck it so a stale "on" state can't
+// linger after Stone flips off and back on.
+function syncVerifyToggle() {
+  const stoneOn = stoneToggle.checked && !stoneToggle.disabled;
+  verifyToggle.disabled = !stoneOn;
+  if (!stoneOn && verifyToggle.checked) {
+    verifyToggle.checked = false;
+    localStorage.setItem(TOGGLE_KEY_VERIFY, '0');
+  }
+  // CSS hook: parent label can dim itself + the help-? glyph when disabled.
+  const verifyLabel = verifyToggle.closest('label');
+  if (verifyLabel) verifyLabel.classList.toggle('disabled', !stoneOn);
+}
+
 stoneToggle.addEventListener('change', () => {
   localStorage.setItem(TOGGLE_KEY_STONE, stoneToggle.checked ? '1' : '0');
   applyStoneClass();
+  syncVerifyToggle();
 });
 verifyToggle.addEventListener('change', () => {
   localStorage.setItem(TOGGLE_KEY_VERIFY, verifyToggle.checked ? '1' : '0');
@@ -482,6 +499,10 @@ document.getElementById('clear-all').addEventListener('click', () => {
 if (localStorage.getItem(TOGGLE_KEY_STONE) === '1') stoneToggle.checked = true;
 if (localStorage.getItem(TOGGLE_KEY_VERIFY) === '1') verifyToggle.checked = true;
 applyStoneClass();
+// Resolve verify-toggle visibility against Stone state on every boot —
+// covers the case where Stone was unchecked last session but Verify
+// was still "on" in localStorage (the gating clears the stale flag).
+syncVerifyToggle();
 
 // Rehydrate any persisted rows from IndexedDB. Order:
 //   1. Wait for /formats so the dst-ext dropdowns can populate.
