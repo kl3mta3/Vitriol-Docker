@@ -347,10 +347,30 @@ def ensure_super_admin(db: Session) -> Optional[User]:
     The friendly path is the first-run /setup wizard — see web/routes/setup.py.
     Env-based bootstrap stays as an escape hatch for fully-automated
     deployments (CI, infra-as-code, etc.).
+
+    Also backfills the row's name fields to "Super Admin" when missing.
+    The super-admin row is a system identity, not a person — it should
+    never block any flow that wants non-NULL names (e.g. the admin
+    Users tab's secondary-line render, or any future hard-required
+    schema). Backfill is idempotent on existing rows so this is safe
+    to run on every boot.
     """
     cfg = get_settings()
     existing = db.query(User).filter(User.role == Role.super_admin).one_or_none()
     if existing is not None:
+        # Idempotent backfill — only fills in what's missing, never
+        # overwrites a name the operator has chosen to set themselves
+        # (e.g. their actual name via the profile page).
+        changed = False
+        if not existing.first_name:
+            existing.first_name = "Super"
+            changed = True
+        if not existing.last_name:
+            existing.last_name = "Admin"
+            changed = True
+        if changed:
+            db.commit()
+            _log.info("ensure_super_admin: backfilled name fields on super admin row")
         return existing
     if not cfg.superadmin_password:
         _log.info("No super admin yet — open the app in a browser and the "
@@ -358,6 +378,8 @@ def ensure_super_admin(db: Session) -> Optional[User]:
         return None
     user = User(
         username=cfg.superadmin_username or "superadmin",
+        first_name="Super",
+        last_name="Admin",
         email=cfg.superadmin_email or None,
         password_hash=hash_password(cfg.superadmin_password),
         role=Role.super_admin,
