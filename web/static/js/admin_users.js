@@ -33,6 +33,18 @@ document.getElementById('invite-btn').addEventListener('click', () => inviteDial
 inviteForm.addEventListener('submit', async (e) => {
   e.preventDefault();
   const data = Object.fromEntries(new FormData(e.target));
+  // The HTML inputs are named new_first_name / new_last_name to dodge
+  // browser autofill (which would silently inject the admin's own name
+  // into a "first_name" field on every Create dialog open). Map them
+  // back to the API's canonical first_name/last_name here.
+  if (data.new_first_name && data.new_first_name.trim()) {
+    data.first_name = data.new_first_name.trim();
+  }
+  if (data.new_last_name && data.new_last_name.trim()) {
+    data.last_name = data.new_last_name.trim();
+  }
+  delete data.new_first_name;
+  delete data.new_last_name;
   if (!data.password) delete data.password;
   if (!data.email) delete data.email;
   // Name fields are optional — drop empties so the row goes in with
@@ -283,8 +295,10 @@ function openManage(u) {
   f.user_id.value = u.id;
   f.username.value = u.username || '';
   f.email.value = u.email || '';
-  if (f.first_name) f.first_name.value = u.first_name || '';
-  if (f.last_name) f.last_name.value = u.last_name || '';
+  // The HTML inputs are named manage_first_name / manage_last_name to
+  // dodge browser autofill — see comment in admin_users.html.
+  if (f.manage_first_name) f.manage_first_name.value = u.first_name || '';
+  if (f.manage_last_name) f.manage_last_name.value = u.last_name || '';
   f.role.value = u.role;
   f.new_password.value = '';
   f.stone_enabled.checked = !!u.stone_enabled;
@@ -485,8 +499,10 @@ manageForm.addEventListener('submit', async (e) => {
   const formValues = {
     username: manageForm.username.value.trim(),
     email: manageForm.email.value.trim(),
-    first_name: manageForm.first_name ? manageForm.first_name.value.trim() : '',
-    last_name: manageForm.last_name ? manageForm.last_name.value.trim() : '',
+    // Read from the autofill-resistant input names. Payload key stays
+    // first_name/last_name because that's what the server expects.
+    first_name: manageForm.manage_first_name ? manageForm.manage_first_name.value.trim() : '',
+    last_name: manageForm.manage_last_name ? manageForm.manage_last_name.value.trim() : '',
     role: roleKind === 'builtin' ? roleVal : null,
     custom_role_id: roleKind === 'custom' ? Number(roleVal) : 0,
     new_password: manageForm.new_password.value,

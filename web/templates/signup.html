@@ -7,13 +7,19 @@
   {% if password_signin_enabled %}
   <form id="signup-form" class="stack">
     <label><span>Username</span><input name="username" type="text" required minlength="3" maxlength="64" /></label>
+    {# Whether first/last are required is operator-controlled via the
+       "Require name at signup" toggle in server settings. When OFF
+       they're optional. When ON, both are required and the hint
+       below explains the single-name workaround. #}
     <div class="grid-2">
-      <label><span>First name</span><input name="first_name" type="text" required minlength="1" maxlength="128" autocomplete="given-name" /></label>
-      <label><span>Last name</span><input name="last_name" type="text" required minlength="1" maxlength="128" autocomplete="family-name" /></label>
+      <label><span>First name{% if not require_name_at_signup %} <em class="muted small">(optional)</em>{% endif %}</span><input name="first_name" type="text" {% if require_name_at_signup %}required minlength="1"{% endif %} maxlength="128" autocomplete="given-name" /></label>
+      <label><span>Last name{% if not require_name_at_signup %} <em class="muted small">(optional)</em>{% endif %}</span><input name="last_name" type="text" {% if require_name_at_signup %}required minlength="1"{% endif %} maxlength="128" autocomplete="family-name" /></label>
     </div>
+    {% if require_name_at_signup %}
     <p class="muted small" style="margin-top: -8px;">
       Go by a single name? Put it in both fields — we just need something on file.
     </p>
+    {% endif %}
     <label><span>Email</span><input name="email" type="email" required /></label>
     <label><span>Password</span><input name="password" type="password" required minlength="8" /></label>
     <button type="submit" class="btn btn-primary">Sign up</button>

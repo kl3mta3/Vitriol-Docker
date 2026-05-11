@@ -43,6 +43,7 @@ def _common_ctx(request: Request, user: Optional[User], db: Session) -> dict:
         "caps": caps,
         "allow_signup": bool(s.allow_signup) if s else False,
         "password_signin_enabled": bool(s.password_signin_enabled) if s else True,
+        "require_name_at_signup": bool(getattr(s, "require_name_at_signup", False)) if s else False,
         "show_users_tab": user is not None and has_capability(user, CAN_VIEW_USERS_TAB),
         "show_server_tab": user is not None and has_capability(user, CAN_VIEW_SERVER_TAB),
         "show_files_tab": user is not None and has_capability(user, CAN_VIEW_OWN_FILES),

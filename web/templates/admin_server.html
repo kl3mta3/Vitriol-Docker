@@ -52,6 +52,10 @@
           <span>Require email verification on sign-up <em class="muted small">(turn off for SMTP-less or closed-network deployments — accounts are accepted immediately)</em></span>
         </label>
         <label class="checkbox-row full">
+          <input type="checkbox" name="require_name_at_signup" />
+          <span>Require first + last name on sign-up <em class="muted small">(raises friction against fake-account farming; SSO sign-ups fall back to derived names when the IdP returns none, so the toggle never blocks a legitimate SSO user)</em></span>
+        </label>
+        <label class="checkbox-row full">
           <input type="checkbox" name="password_signin_enabled" id="password-signin-toggle" />
           <span>Username/password sign-in enabled <em class="muted small">(turn off to force everyone through SSO — the super admin can always sign in with a password as a recovery escape hatch)</em></span>
         </label>

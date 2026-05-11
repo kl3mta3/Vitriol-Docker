@@ -162,6 +162,16 @@ async def signup(req: SignUpRequest, db: Session = Depends(get_db)):
         raise HTTPException(status_code=409, detail="Username taken")
     if db.query(User).filter(User.email == req.email).count():
         raise HTTPException(status_code=409, detail="Email already registered")
+    # Optional toggle — enforce non-empty name fields when the operator
+    # has turned it on. Schema-level they're optional so SSO callbacks
+    # can still create rows without names; only this password-signup
+    # path is gated. Two separate errors so the user knows which field
+    # is missing.
+    if getattr(s, "require_name_at_signup", False):
+        if not (req.first_name and req.first_name.strip()):
+            raise HTTPException(status_code=400, detail="First name is required.")
+        if not (req.last_name and req.last_name.strip()):
+            raise HTTPException(status_code=400, detail="Last name is required.")
     role = s.signup_default_role or Role.viewer
     require_verify = bool(s.require_email_verification)
 
@@ -741,10 +751,21 @@ async def _sso_callback_inner(
                     settings_for_signup.signup_default_role
                     if settings_for_signup else Role.viewer
                 ) or Role.viewer
-                username = (name or f"{provider}_{sub}")[:64]
+                # Username derivation order:
+                #   1. IdP-provided display name (name/preferred_username/login)
+                #   2. email local-part (everything before the @) — cleaner
+                #      than provider_subjectid for users who'd recognize
+                #      themselves by their email handle
+                #   3. provider_sub stub as a final fallback
+                # Then a uniqueness loop appends _1, _2, … against any
+                # existing collision. SSO never returns "Username taken"
+                # to the user — we always find a free name.
+                _email_local_for_uname = (email.split("@", 1)[0] if email and "@" in email else None)
+                _base_username = name or _email_local_for_uname or f"{provider}_{sub}"
+                username = _base_username[:64]
                 i = 1
                 while db.query(User).filter(User.username == username).count():
-                    username = f"{(name or provider)[:60]}_{i}"
+                    username = f"{_base_username[:60]}_{i}"
                     i += 1
                 # Name fields are required at password-signup but the
                 # SSO path can't reject a sign-in if the IdP didn't

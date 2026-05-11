@@ -145,7 +145,17 @@ def update_user(user_id: int, req: UserUpdateRequest, actor: User = Depends(requ
             # role-based queries stay accurate.
             target.role = cr.base_role
     if req.email is not None:
-        target.email = req.email or None
+        # Collision check — refuse if another row already owns this
+        # email. Empty-string `req.email` clears the column and is
+        # never a collision. The .id != target.id guard lets an admin
+        # "Save" a user without ever changing the email — the row's
+        # own existing email obviously matches itself but isn't a clash.
+        new_email = req.email or None
+        if new_email and db.query(User).filter(
+            User.email == new_email, User.id != target.id
+        ).count():
+            raise HTTPException(status_code=409, detail="Email already registered to another user.")
+        target.email = new_email
     if req.first_name is not None:
         # Empty string explicitly clears the saved name; non-empty
         # sets it. Same semantics as the email field above.
@@ -421,7 +431,14 @@ def reset_credentials(
             raise HTTPException(status_code=409, detail="Username taken")
         target.username = req.new_username
     if req.new_email is not None:
-        target.email = req.new_email or None
+        # Same collision check as the PATCH route. Empty/null clears
+        # the column and is never a clash.
+        new_email = req.new_email or None
+        if new_email and db.query(User).filter(
+            User.email == new_email, User.id != target.id
+        ).count():
+            raise HTTPException(status_code=409, detail="Email already registered to another user.")
+        target.email = new_email
     if req.new_password:
         target.password_hash = hash_password(req.new_password)
     db.commit()

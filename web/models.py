@@ -547,6 +547,15 @@ class ServerSettings(Base):
     # marked email_verified_at=now() on creation. Useful for SMTP-less
     # demos and for closed networks where email isn't reachable.
     require_email_verification = Column(Boolean, nullable=False, default=True, server_default="1")
+    # Enforces non-empty first_name + last_name at signup. Default OFF
+    # to keep the public signup flow low-friction unless the operator
+    # explicitly opts in. The DB column stays nullable either way so
+    # legacy rows + SSO-provisioned rows without name claims can still
+    # exist. When ON: password signup rejects empty names; SSO signup
+    # falls back to derived names (email-local-part, single-name copy)
+    # so an Authentik/GitHub user missing the `given_name` claim still
+    # gets through with *something* on file rather than a 400.
+    require_name_at_signup = Column(Boolean, nullable=False, default=False, server_default="0")
     # Master toggle for username/password sign-in. When False, /signin's
     # form is hidden and POST /auth/signin returns 403. Useful for
     # deployments that want to enforce SSO-only access. UI side enforces

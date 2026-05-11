@@ -16,14 +16,15 @@ class SignUpRequest(BaseModel):
     username: str = Field(min_length=3, max_length=64)
     email: EmailStr
     password: str = Field(min_length=8, max_length=200)
-    # Required at signup. The values themselves aren't ID-checked —
-    # anyone can lie — but requiring *something* raises the friction
-    # for fake-account farming and gives the operator a name to refer
-    # to when reviewing audit-log incidents. Mononymic users are
-    # asked to put their single name in both fields (signup template
-    # explains).
-    first_name: str = Field(min_length=1, max_length=128)
-    last_name: str = Field(min_length=1, max_length=128)
+    # Optional at the schema level; whether they're required at runtime
+    # is gated by ``ServerSettings.require_name_at_signup`` (off by
+    # default). The signup route handler reads the toggle and rejects
+    # empty values when it's on. Schema-side optional means SSO
+    # callbacks (which never hit this schema) can still create rows
+    # without names if the IdP returned none — those get derived from
+    # email-local-part instead. See auth.py for the runtime gate.
+    first_name: Optional[str] = Field(default=None, max_length=128)
+    last_name: Optional[str] = Field(default=None, max_length=128)
 
 
 class TokenResponse(BaseModel):
@@ -209,6 +210,7 @@ class ServerSettingsOut(BaseModel):
     signup_default_role: str
     signup_default_custom_role_id: Optional[int] = None
     require_email_verification: bool = True
+    require_name_at_signup: bool = False
     password_signin_enabled: bool = True
     smtp_enabled: bool = True
     smtp_host: Optional[str]
@@ -296,6 +298,7 @@ class ServerSettingsPatch(BaseModel):
     signup_default_role: Optional[str] = None
     signup_default_custom_role_id: Optional[int] = None
     require_email_verification: Optional[bool] = None
+    require_name_at_signup: Optional[bool] = None
     password_signin_enabled: Optional[bool] = None
     smtp_enabled: Optional[bool] = None
     smtp_host: Optional[str] = None

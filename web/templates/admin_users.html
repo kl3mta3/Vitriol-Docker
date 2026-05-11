@@ -39,10 +39,15 @@
 <dialog id="invite-dialog">
   <form id="invite-form" class="stack">
     <h2 class="display small">Create user</h2>
-    <label><span>Username</span><input name="username" required /></label>
+    <label><span>Username</span><input name="username" required autocomplete="off" /></label>
+    {# Renamed away from `first_name`/`last_name` because Chrome + Safari
+       ignore autocomplete="off" and autofill those exact field names
+       with the *current logged-in admin's* given-name/family-name. That
+       was polluting created users with the admin's own name. The API
+       payload still uses first_name/last_name — JS maps below. #}
     <div class="grid-2">
-      <label><span>First name <em class="muted small">(optional)</em></span><input name="first_name" type="text" maxlength="128" autocomplete="off" /></label>
-      <label><span>Last name <em class="muted small">(optional)</em></span><input name="last_name" type="text" maxlength="128" autocomplete="off" /></label>
+      <label><span>First name <em class="muted small">(optional)</em></span><input name="new_first_name" type="text" maxlength="128" autocomplete="new-password" /></label>
+      <label><span>Last name <em class="muted small">(optional)</em></span><input name="new_last_name" type="text" maxlength="128" autocomplete="new-password" /></label>
     </div>
     <label><span>Email</span><input name="email" type="email" /></label>
     <label><span>Temporary password</span><input name="password" type="password" minlength="8" /></label>
@@ -258,10 +263,17 @@
     <details open>
       <summary>Account</summary>
       <div class="grid-2">
-        <label><span>Username</span><input name="username" minlength="3" maxlength="64" /></label>
-        <label><span>Email</span><input name="email" type="email" /></label>
-        <label><span>First name <em class="muted small">(optional)</em></span><input name="first_name" type="text" maxlength="128" autocomplete="off" /></label>
-        <label><span>Last name <em class="muted small">(optional)</em></span><input name="last_name" type="text" maxlength="128" autocomplete="off" /></label>
+        <label><span>Username</span><input name="username" minlength="3" maxlength="64" autocomplete="off" /></label>
+        <label><span>Email</span><input name="email" type="email" autocomplete="off" /></label>
+        {# Renamed away from `first_name`/`last_name` to dodge Chrome +
+           Safari autofilling the admin's *own* profile name into these
+           fields. Names: `manage_first_name`/`manage_last_name` aren't
+           recognized as autofill categories, so they stay clean.
+           autocomplete="new-password" is the well-known belt-and-
+           suspenders trick for the same problem. JS maps these back to
+           first_name/last_name in the API payload. #}
+        <label><span>First name <em class="muted small">(optional)</em></span><input name="manage_first_name" type="text" maxlength="128" autocomplete="new-password" /></label>
+        <label><span>Last name <em class="muted small">(optional)</em></span><input name="manage_last_name" type="text" maxlength="128" autocomplete="new-password" /></label>
         <label><span>Role</span>
           <select name="role">
             <option value="viewer">Viewer</option>

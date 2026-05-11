@@ -320,6 +320,11 @@ _ADDITIVE_COLUMNS: list[tuple[str, str, str]] = [
      "ALTER TABLE server_settings ADD COLUMN oauth_github_show_on_signup BOOLEAN NOT NULL DEFAULT 1"),
     ("oidc_providers", "show_on_signup",
      "ALTER TABLE oidc_providers ADD COLUMN show_on_signup BOOLEAN NOT NULL DEFAULT 1"),
+    # Toggle for "name fields are required at password signup". DB
+    # column stays nullable; this just gates the SignUpRequest
+    # validation in the route handler. Default OFF for backward compat.
+    ("server_settings", "require_name_at_signup",
+     "ALTER TABLE server_settings ADD COLUMN require_name_at_signup BOOLEAN NOT NULL DEFAULT 0"),
 ]
 
 
@@ -358,29 +363,35 @@ def ensure_super_admin(db: Session) -> Optional[User]:
     Env-based bootstrap stays as an escape hatch for fully-automated
     deployments (CI, infra-as-code, etc.).
 
-    Also backfills the row's name fields to "Super Admin" when missing.
-    The super-admin row is a system identity, not a person — it should
-    never block any flow that wants non-NULL names (e.g. the admin
-    Users tab's secondary-line render, or any future hard-required
-    schema). Backfill is idempotent on existing rows so this is safe
-    to run on every boot.
+    Also enforces the super-admin row's name as "Super" + "Admin" on
+    every boot. This is a *system identity*, not a personal one — it
+    represents the bootstrap-root role, not the human operating it.
+    If the operator wants their personal name on a row, they should
+    create themselves a regular admin account via the Users tab and
+    keep the super-admin row separate (best-practice anyway: don't
+    do day-to-day work as the bootstrap-root account).
+
+    The lock is unconditional — any name set via PATCH /me or /users
+    on the super-admin row gets reset on the next restart.
     """
     cfg = get_settings()
     existing = db.query(User).filter(User.role == Role.super_admin).one_or_none()
     if existing is not None:
-        # Idempotent backfill — only fills in what's missing, never
-        # overwrites a name the operator has chosen to set themselves
-        # (e.g. their actual name via the profile page).
+        # Hard-lock — always overwrite, regardless of current value.
+        # Idempotent: if the row is already "Super"/"Admin", nothing
+        # changes; commit() is harmless on a no-op session.
         changed = False
-        if not existing.first_name:
+        if existing.first_name != "Super":
             existing.first_name = "Super"
             changed = True
-        if not existing.last_name:
+        if existing.last_name != "Admin":
             existing.last_name = "Admin"
             changed = True
         if changed:
             db.commit()
-            _log.info("ensure_super_admin: backfilled name fields on super admin row")
+            _log.info("ensure_super_admin: reset super admin row name to 'Super Admin' "
+                      "(system identity — operator personal name should live on a "
+                      "separate regular-admin account)")
         return existing
     if not cfg.superadmin_password:
         _log.info("No super admin yet — open the app in a browser and the "
