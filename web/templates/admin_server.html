@@ -125,6 +125,13 @@
         <button type="button" id="smtp-test-btn" class="btn btn-secondary">Send test email</button>
         <p id="smtp-test-msg" class="ok" hidden></p>
       </div>
+      <div class="smtp-test" style="margin-top:8px;">
+        <span class="muted small" style="align-self:center;">Preview each template:</span>
+        <button type="button" class="btn btn-ghost smtp-preview-btn" data-kind="verification">Verification</button>
+        <button type="button" class="btn btn-ghost smtp-preview-btn" data-kind="reset">Password reset</button>
+        <button type="button" class="btn btn-ghost smtp-preview-btn" data-kind="approval">Approval notify</button>
+        <p id="smtp-preview-msg" class="ok" hidden></p>
+      </div>
     </details>
 
     <details name="server-settings"><summary>Notification webhooks <span id="notif-status-pill" class="status-pill"></span></summary>

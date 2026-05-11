@@ -495,6 +495,98 @@ async def test_email(
     return MessageResponse(message=f"Test email sent to {to}.")
 
 
+@router.post("/test-email-preview", response_model=MessageResponse)
+async def test_email_preview(
+    payload: dict,
+    actor: User = Depends(require_super_admin),
+    db: Session = Depends(get_db),
+):
+    """Send one of the real email templates as a preview so the super admin
+    can see exactly how it will look in their inbox.
+
+    ``kind`` must be one of ``verification``, ``reset``, or ``approval``.
+    ``to`` is optional — falls back to the actor's own email address.
+    """
+    from ..auth.email import _button_html, _html_email, _send, public_url
+    from html import escape as _esc
+
+    s = db.query(ServerSettings).get(1)
+    if s is None or not s.smtp_host or not s.smtp_from:
+        raise HTTPException(status_code=400, detail="SMTP is not configured.")
+    kind = str((payload or {}).get("kind", "")).strip()
+    to = str((payload or {}).get("to", "")).strip() or actor.email
+    if "@" not in to:
+        raise HTTPException(status_code=400, detail="Recipient address looks invalid.")
+    if kind not in ("verification", "reset", "approval"):
+        raise HTTPException(status_code=400, detail="kind must be verification, reset, or approval.")
+
+    preview_link = public_url(db, {
+        "verification": "verify?token=PREVIEW_NOT_VALID",
+        "reset": "reset?token=PREVIEW_NOT_VALID",
+        "approval": "admin/users",
+    }[kind])
+
+    if kind == "verification":
+        subject = "[Preview] Verify your Vitriol account"
+        plain = (
+            f"Hello {actor.username},\n\n"
+            f"Verify your Vitriol account by visiting:\n{preview_link}\n\n"
+            "This link expires in 24 hours."
+        )
+        html = _html_email(
+            title=subject,
+            greeting=f"Hello, {actor.username}!",
+            paragraphs=["Click the button below to verify your Vitriol account."],
+            button_html=_button_html("Verify my account", preview_link),
+            footer="This link expires in 24 hours. If you didn't create an account, you can safely ignore this email.",
+        )
+    elif kind == "reset":
+        subject = "[Preview] Reset your Vitriol password"
+        plain = (
+            f"Hello {actor.username},\n\n"
+            f"Reset your Vitriol password by visiting:\n{preview_link}\n\n"
+            "This link expires in 2 hours. If you didn't request this, ignore this email."
+        )
+        html = _html_email(
+            title=subject,
+            greeting=f"Hello, {actor.username}!",
+            paragraphs=["We received a request to reset your Vitriol password. Click the button below to choose a new one."],
+            button_html=_button_html("Reset my password", preview_link),
+            footer="This link expires in 2 hours. If you didn't request a password reset, you can safely ignore this email — your password has not been changed.",
+        )
+    else:  # approval
+        subject = "[Preview] Vitriol — new user awaiting approval"
+        plain = (
+            f"A new user has signed up and is awaiting approval.\n\n"
+            f"Username: {actor.username}\n"
+            f"Email: {actor.email}\n\n"
+            f"Approve or deny here: {preview_link}\n"
+        )
+        detail_rows = (
+            f'<tr><td style="font-family:Arial,sans-serif;font-size:14px;color:#555555;padding:4px 0;width:90px;">Username</td>'
+            f'<td style="font-family:Arial,sans-serif;font-size:14px;color:#111111;padding:4px 0;">{_esc(actor.username)}</td></tr>'
+            f'<tr><td style="font-family:Arial,sans-serif;font-size:14px;color:#555555;padding:4px 0;">Email</td>'
+            f'<td style="font-family:Arial,sans-serif;font-size:14px;color:#111111;padding:4px 0;">{_esc(actor.email)}</td></tr>'
+        )
+        details_table = (
+            f'<table role="presentation" cellspacing="0" cellpadding="0" border="0" '
+            f'style="margin:0 0 24px 0;border-left:3px solid #8b5cf6;padding-left:12px;">'
+            f'{detail_rows}</table>'
+        )
+        html = _html_email(
+            title=subject,
+            greeting="New user awaiting approval",
+            paragraphs=["A new account has been created and is waiting for your review."],
+            button_html=details_table + _button_html("Review in admin panel", preview_link),
+        )
+
+    ok = await _send(db, to, subject, plain, html)
+    if not ok:
+        raise HTTPException(status_code=502, detail="SMTP delivery failed — check SMTP settings.")
+    audit.log(db, actor.id, "smtp_preview_test", metadata={"kind": kind, "to": to})
+    return MessageResponse(message=f"Preview '{kind}' email sent to {to}.")
+
+
 @router.post("/test-discord", response_model=MessageResponse)
 async def test_discord(
     actor: User = Depends(require_super_admin),

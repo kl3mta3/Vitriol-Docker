@@ -1825,6 +1825,34 @@ if (testBtn) testBtn.addEventListener('click', async () => {
   }
 });
 
+// Preview individual email templates (verification / reset / approval).
+// Uses the same `to` input as the main test button; falls back to the
+// actor's own email when the field is empty.
+document.querySelectorAll('.smtp-preview-btn').forEach(btn => {
+  btn.addEventListener('click', async () => {
+    const msg = document.getElementById('smtp-preview-msg');
+    const to = document.getElementById('smtp-test-to').value.trim();
+    const kind = btn.dataset.kind;
+    msg.hidden = true;
+    msg.className = 'ok';
+    btn.disabled = true;
+    const orig = btn.textContent;
+    btn.textContent = 'Sending…';
+    try {
+      const r = await api.post('/server/test-email-preview', { kind, to });
+      msg.textContent = r.message;
+      msg.className = 'ok';
+    } catch (ex) {
+      msg.textContent = ex.detail || 'Failed';
+      msg.className = 'error';
+    } finally {
+      msg.hidden = false;
+      btn.disabled = false;
+      btn.textContent = orig;
+    }
+  });
+});
+
 // ============================================================
 // SSO test buttons — opens /auth/sso/<provider>/start in a new tab.
 // The flow itself proves the redirect URI + client credentials are
