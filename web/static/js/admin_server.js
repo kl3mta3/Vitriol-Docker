@@ -184,6 +184,12 @@ async function load() {
     }
   }
 
+  // Google / GitHub last-test pills next to their Test buttons. Same
+  // shape as the OIDC table's "Last test" cell so the visual is
+  // consistent across the SSO section.
+  paintProviderLastTest('google-last-test', s.oauth_google_last_test_at, s.oauth_google_last_test_ok);
+  paintProviderLastTest('github-last-test', s.oauth_github_last_test_at, s.oauth_github_last_test_ok);
+
   // SMTP / Discord status pills — reflect last-test state so a green
   // "configured" sticks across reloads (vs. the old "configured the
   // moment fields are non-empty" which was misleading after a failed
@@ -994,12 +1000,15 @@ if (oidcTbody) loadOidcProviders();
 });
 
 // Listen for "test completed" pings from the SSO test popup so the
-// OIDC table refreshes (showing the new last_test_at stamp) without
-// a full page reload. The popup posts this message right before
-// window.close().
+// OIDC table + Google/GitHub last-test pills refresh without a full
+// page reload. The popup posts this message right before window.close().
 window.addEventListener('message', (e) => {
   if (e.origin !== location.origin) return;   // only trust our own origin
   if (e.data && e.data.type === 'vitriol-sso-test-complete') {
+    // load() repaints Google + GitHub last-test pills from /server/settings;
+    // loadOidcProviders() refreshes the OIDC table rows + SSO summary
+    // pill count. Both are cheap GETs so we just fire them in parallel.
+    load().catch(() => {});
     loadOidcProviders().catch(() => {});
   }
 });
@@ -1361,6 +1370,22 @@ if (notifTbody) loadNotificationChannels();
 //   untested  — host/from set, never tested        → amber "untested"
 //   missing   — required fields empty              → amber "not configured"
 //   failed    — last test failed                   → red   "test failed"
+
+// Render a "last test" indicator next to a Test button — same look as
+// the OIDC table's per-row Last test cell. Pass an ISO-ish datetime
+// string (or null/undefined) plus the ok boolean.
+function paintProviderLastTest(spanId, at, ok) {
+  const el = document.getElementById(spanId);
+  if (!el) return;
+  if (!at) {
+    el.innerHTML = '<span class="muted small">untested</span>';
+    return;
+  }
+  const when = new Date(at).toLocaleString();
+  el.innerHTML = ok
+    ? `<span class="status-pill ok">ok</span> <span class="muted small">${when}</span>`
+    : `<span class="status-pill failed">failed</span> <span class="muted small">${when}</span>`;
+}
 
 function paintServicePill(pillId, configured, lastTestOk, untestedLabel = 'untested') {
   const pill = document.getElementById(pillId);

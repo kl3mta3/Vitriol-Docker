@@ -132,6 +132,16 @@ _ADDITIVE_COLUMNS: list[tuple[str, str, str]] = [
      "ALTER TABLE server_settings ADD COLUMN oauth_google_enabled BOOLEAN NOT NULL DEFAULT 1"),
     ("server_settings", "oauth_github_enabled",
      "ALTER TABLE server_settings ADD COLUMN oauth_github_enabled BOOLEAN NOT NULL DEFAULT 1"),
+    # Last-test bookkeeping for singleton OAuth providers — same shape
+    # as the per-row data on oidc_providers.
+    ("server_settings", "oauth_google_last_test_at",
+     "ALTER TABLE server_settings ADD COLUMN oauth_google_last_test_at TIMESTAMP"),
+    ("server_settings", "oauth_google_last_test_ok",
+     "ALTER TABLE server_settings ADD COLUMN oauth_google_last_test_ok BOOLEAN"),
+    ("server_settings", "oauth_github_last_test_at",
+     "ALTER TABLE server_settings ADD COLUMN oauth_github_last_test_at TIMESTAMP"),
+    ("server_settings", "oauth_github_last_test_ok",
+     "ALTER TABLE server_settings ADD COLUMN oauth_github_last_test_ok BOOLEAN"),
     ("server_settings", "oidc_enabled",
      "ALTER TABLE server_settings ADD COLUMN oidc_enabled BOOLEAN NOT NULL DEFAULT 0"),
     ("server_settings", "oidc_display_name",

@@ -22,7 +22,10 @@
   {% if user %}
   <nav class="nav">
     <div class="nav-inner">
-      <a href="/" class="nav-brand">
+      {# Brand link points at the marketing site, not the app home. The
+         "App" entry in nav-links covers in-app navigation back to / —
+         the brand mark is for "take me back to vitriol.rocks". #}
+      <a href="https://vitriol.rocks" class="nav-brand" rel="noopener">
         <img class="nav-logo" src="/static/img/logo.svg" alt="" width="28" height="28" />
         <span>VITRIOL</span>
       </a>

@@ -181,9 +181,13 @@ class ServerSettingsOut(BaseModel):
     oauth_google_enabled: bool = True
     oauth_google_client_id: Optional[str]
     oauth_google_secret_set: bool = False
+    oauth_google_last_test_at: Optional[datetime] = None
+    oauth_google_last_test_ok: Optional[bool] = None
     oauth_github_enabled: bool = True
     oauth_github_client_id: Optional[str]
     oauth_github_secret_set: bool = False
+    oauth_github_last_test_at: Optional[datetime] = None
+    oauth_github_last_test_ok: Optional[bool] = None
     oidc_enabled: bool = False
     oidc_display_name: Optional[str] = None
     oidc_issuer: Optional[str] = None

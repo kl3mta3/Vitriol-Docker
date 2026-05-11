@@ -568,11 +568,11 @@ async def _sso_callback_inner(
     # the round-trip worked end-to-end, without polluting the user list
     # with a pending account.
     if request.session.pop("sso_test", None) == provider:
-        # Stamp last_test_* on the matching OIDC row so the admin UI
+        # Stamp last_test_* on the matching row/column so the admin UI
         # can show "✓ tested 2 min ago" without forcing the operator
         # to re-run the popup just to refresh the indicator.
+        from .. import models as _m
         if kind == "oidc":
-            from .. import models as _m
             row = (
                 db.query(_m.OidcProvider)
                 .filter(_m.OidcProvider.slug == provider)
@@ -581,6 +581,17 @@ async def _sso_callback_inner(
             if row is not None:
                 row.last_test_at = datetime.utcnow()
                 row.last_test_ok = True
+                db.commit()
+        elif kind in ("google", "github"):
+            s_ = db.query(_m.ServerSettings).get(1)
+            if s_ is not None:
+                now = datetime.utcnow()
+                if kind == "google":
+                    s_.oauth_google_last_test_at = now
+                    s_.oauth_google_last_test_ok = True
+                else:
+                    s_.oauth_github_last_test_at = now
+                    s_.oauth_github_last_test_ok = True
                 db.commit()
         from fastapi.templating import Jinja2Templates
         _templates = Jinja2Templates(directory="web/templates")

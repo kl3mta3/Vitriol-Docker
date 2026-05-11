@@ -76,33 +76,46 @@
     <ul>
       <li><a href="#network">Network</a></li>
       <li><a href="#limits">Limits</a></li>
-      <li><a href="#signup">Sign-up &amp; format toggles</a></li>
+      <li><a href="#signup">Sign-up</a></li>
+      <li><a href="#disabled-formats">Disabled formats</a></li>
       <li><a href="#smtp">SMTP</a></li>
-      <li><a href="#discord">Discord webhook</a></li>
-      <li><a href="#sso">SSO providers</a></li>
-      <li><a href="#oidc">OpenID Connect</a></li>
-      <li><a href="#ssl">SSL cert pull webhook</a></li>
+      <li><a href="#notifications">Notification webhooks</a></li>
+      <li><a href="#sso">SSO providers (Google + GitHub)</a></li>
+      <li><a href="#oidc">OpenID Connect providers</a></li>
+      <li><a href="#secret-key">Server secret key</a></li>
+      <li><a href="#ssl">SSL cert pull</a></li>
+      <li><a href="#retention">Output retention</a></li>
       <li><a href="#self-compile">Self-compile defaults</a></li>
+      <li><a href="#export-import">Export / import settings</a></li>
+      <li><a href="#roles">Roles &amp; permissions</a></li>
     </ul>
   </div>
+
+  <p class="callout">
+    <strong>Conventions used throughout the UI</strong>:
+    <ul style="margin-top: 6px;">
+      <li>A green <code>✓ saved</code> badge next to a secret field means the column has a value stored at rest. Leave the field blank on Save to keep the existing value; only fill it in when you want to replace it.</li>
+      <li>Section headers with a green <code>configured</code> / <code>active</code> pill mean the integration is currently usable. Amber <code>untested</code> means credentials are saved but no test has run. Red <code>last test failed</code> means the most recent probe got an error — open the section to see why.</li>
+      <li>Every section is accordion-style: only one is open at a time. Save settings persists every change made across all sections, not just the open one.</li>
+    </ul>
+  </p>
 
   <!-- ============================================== Network -->
   <details id="network" open>
     <summary>Network</summary>
     <p>What the app does and doesn't control.</p>
 
-    <p class="muted">
+    <p>
       The container <strong>always</strong> listens on <code>0.0.0.0:3825</code> internally
       — that's set by the Dockerfile and isn't editable from the UI. The public address
       is decided by the orchestrator (Coolify domain config, the <code>ports:</code>
-      line in <code>docker-compose.yml</code>, or your reverse proxy). Only two fields
-      below take effect at runtime:
+      line in <code>docker-compose.yml</code>, or your reverse proxy). Only one field
+      below takes effect at runtime:
     </p>
 
     <table>
       <tr><th>Field</th><th>What it does</th><th>Example</th></tr>
-      <tr><td class="field-name">Public base URL</td><td>The URL users hit in their browser. Used in verification emails, OIDC redirect URIs, and Discord notifications. <strong>Set this before turning on email or SSO.</strong></td><td><code>https://app.vitriol.rocks</code></td></tr>
-      <tr><td class="field-name">Allowed origin</td><td>Optional <code>Host</code>-header lock. If set, requests with any other Host return <code>403</code>. Defense-in-depth behind a misconfigured proxy. Leave blank in dev.</td><td><code>app.vitriol.rocks</code></td></tr>
+      <tr><td class="field-name">Public base URL</td><td>The URL users hit in their browser. Used in verification emails, SSO redirect URIs, and notification messages. <strong>Set this before turning on email or SSO.</strong></td><td><code>https://app.vitriol.rocks</code></td></tr>
     </table>
 
     <div class="callout warn">
@@ -114,14 +127,14 @@
   </details>
 
   <!-- ============================================== Limits -->
-  <details id="limits" open>
+  <details id="limits">
     <summary>Limits</summary>
-    <p>Per-user and per-role caps. Per-user values (set in the Users tab) override these.</p>
+    <p>Per-user and per-role caps. Per-user values set in the Users tab override these defaults.</p>
 
     <table>
       <tr><th>Field</th><th>What it does</th><th>Example</th></tr>
       <tr><td class="field-name">Global rate limit / min</td><td>HTTP requests per minute across all users. Catch-all backstop.</td><td><code>600</code></td></tr>
-      <tr><td class="field-name">Max file size</td><td>In bytes. Anything bigger gets <code>413</code> on upload.</td><td>100 MB = <code>104857600</code><br>1 GB = <code>1073741824</code></td></tr>
+      <tr><td class="field-name">Max file size</td><td>Maximum upload size. Picker accepts MB or GB; the byte count is shown next to the input for confirmation. Anything bigger gets <code>413</code> on upload.</td><td><code>100 MB</code> or <code>1 GB</code></td></tr>
       <tr><td class="field-name">Default user — daily limit</td><td>Conversions per day for users with no per-user override. <code>0</code> blocks all conversions; leave at default for "moderate".</td><td><code>50</code></td></tr>
       <tr><td class="field-name">Default user — rate / min</td><td>Per-user request rate cap.</td><td><code>30</code></td></tr>
       <tr><td class="field-name">Default admin — daily limit</td><td>Conversions per day for admins.</td><td><code>500</code></td></tr>
@@ -131,38 +144,80 @@
   </details>
 
   <!-- ============================================== Signup -->
-  <details id="signup" open>
-    <summary>Sign-up &amp; format toggles</summary>
+  <details id="signup">
+    <summary>Sign-up</summary>
 
     <h4>Allow self sign-up</h4>
-    <p>When on, the sign-in page shows a "Create an account" link. New accounts are created with the role you pick below.</p>
+    <p>When on, the sign-in page shows a "Create an account" link. New accounts come in with the role you pick below. The same toggle also gates new SSO sign-ups — without it, only operators-added accounts can sign in via SSO.</p>
 
     <h4>Default role on sign-up</h4>
     <ul>
       <li><strong>Viewer</strong> — read-only. They see the UI but can't run conversions. They can request access from their profile.</li>
-      <li><strong>Pending</strong> — locked-out screen until an admin approves. Sends notifications to admins via email + Discord.</li>
+      <li><strong>Pending</strong> — locked-out screen until an admin approves. Sends notifications to admins via email + any enabled notification webhooks.</li>
       <li><strong>User</strong> — full conversion access immediately (no approval).</li>
+      <li><strong>Any custom role</strong> you've created from the Users tab also appears in this dropdown.</li>
     </ul>
     <div class="callout">
-      Recommended: <strong>Pending</strong> if you have working SMTP + Discord, otherwise <strong>Viewer</strong> so users at least land somewhere usable.
+      Recommended: <strong>Pending</strong> if you have working SMTP + a notification webhook, otherwise <strong>Viewer</strong> so users at least land somewhere usable.
     </div>
 
-    <h4>Disabled input / output formats</h4>
-    <p>Comma-separated extension list (with leading dot). Disabled formats won't appear in the UI dropdown and will be rejected at the API.</p>
-    <pre>.exe,.iso,.dmg</pre>
+    <h4>Require email verification on sign-up</h4>
+    <p>
+      When on (default), new users are created with <code>status=unverified</code> and don't show up
+      in the admin user list until they click the link in the verification email. Unverified rows
+      auto-purge after 24 hours. When off, accounts are accepted immediately — useful for
+      SMTP-less or closed-network deployments.
+    </p>
+
+    <h4>Username/password sign-in enabled</h4>
+    <p>
+      Master toggle. When off, the password form on <code>/signin</code> + <code>/signup</code>
+      is hidden and the API returns <code>403</code> for password sign-ins — users can only get
+      in via SSO. <strong>Safety net</strong>: the super admin can always sign in with a password
+      regardless of this setting (so a broken IdP can't lock the operator out), and the UI
+      refuses to let you turn it off unless at least one SSO provider is enabled and configured.
+    </p>
+  </details>
+
+  <!-- ============================================== Disabled formats -->
+  <details id="disabled-formats">
+    <summary>Disabled formats</summary>
+    <p>Block specific input or output formats by file extension. Three tiers cascade — global is hardest, user is softest.</p>
+
+    <table>
+      <tr><th>Tier</th><th>Effect</th></tr>
+      <tr><td class="field-name">Globally</td><td>Nobody can use these — <em>including super admin</em>. Hardest block.</td></tr>
+      <tr><td class="field-name">Admin + below</td><td>Super admin can still use; anyone with admin role or lower is blocked.</td></tr>
+      <tr><td class="field-name">User + below</td><td>Users / viewers / pending are blocked; admin and super admin can still use.</td></tr>
+    </table>
+
+    <p>Each cell takes a comma-separated extension list with leading dots. Disabled formats are hidden from the conversion dropdown and rejected at the API.</p>
+    <pre>Disabled inputs   Globally:        .exe,.dmg
+                  Admin + below:   .bat
+                  User + below:    (empty)
+Disabled outputs  Globally:        .exe
+                  Admin + below:   .py
+                  User + below:    .exe,.py</pre>
+    <p class="muted small">A format only needs to be disabled at the strictest level you want it to apply — admins automatically inherit user-level blocks unless they're super admin.</p>
   </details>
 
   <!-- ============================================== SMTP -->
   <details id="smtp">
     <summary>SMTP (verification + admin notifications)</summary>
-    <p>Required for email verification, password resets, and pending-approval notifications. Without SMTP, sign-ups still work but users won't receive verification mail and the email_verified_at flag will never be set.</p>
+    <p>Required for email verification, password resets, and pending-approval notifications. Without SMTP, sign-ups still work but users won't receive verification mail.</p>
+
+    <h4>SMTP enabled</h4>
+    <p>Master toggle. Uncheck to pause outbound email without clearing credentials — useful for maintenance windows or when migrating providers. The <code>✓ saved</code> badge next to the password field tells you whether the column has a value stored at rest, regardless of whether the toggle is on.</p>
+
+    <h4>Testing</h4>
+    <p>The <strong>Send test email</strong> button sends a one-off to whatever address you type in the field next to it (or the From address if you leave it blank). Errors include the exception class — <code>SMTPAuthenticationError (535)</code> for wrong credentials, <code>SMTPConnectTimeoutError</code> for network/firewall, <code>SMTPResponseException (421)</code> for rate-limited or blocked IPs. The section header pill flips to green <code>configured</code> after a successful test.</p>
 
     <h4>Common providers</h4>
 
     <h4>Purelymail</h4>
     <ol>
       <li>Sign in to <a href="https://purelymail.com/" target="_blank" rel="noopener">purelymail.com</a> and make sure the address you want to send from is configured under your domain.</li>
-      <li>Open <strong>Account Settings → SMTP / IMAP</strong> and copy the SMTP password (this is separate from your account password — generate one here).</li>
+      <li>Open <strong>Account Settings → SMTP / IMAP</strong> and copy the SMTP password (separate from your account password — generate one here).</li>
       <li>Use these settings:</li>
     </ol>
     <pre>Host:     smtp.purelymail.com
@@ -216,34 +271,95 @@ STARTTLS: ✓</pre>
     </div>
   </details>
 
-  <!-- ============================================== Discord -->
-  <details id="discord">
-    <summary>Discord webhook</summary>
-    <p>Sends a notification when someone signs up as Pending or a Viewer requests access.</p>
+  <!-- ============================================== Notifications -->
+  <details id="notifications">
+    <summary>Notification webhooks</summary>
+    <p>Multi-channel fan-out for admin alerts (new pending user, viewer access requests, etc.). Click <strong>+ Add channel</strong> to pick a kind from the catalog. Eight kinds shipped; every enabled channel receives a copy of every notification.</p>
+
+    <p>Each row in the table has an inline enable toggle, a "last test" pill, and an Edit button that opens the per-kind form. Inside the edit form, a <strong>Test</strong> button sends a one-off "Vitriol — test notification." to the configured destination so you can verify the round-trip before relying on it for real alerts.</p>
+
+    <h3>Discord</h3>
     <ol>
       <li>In your Discord server: <strong>Server Settings → Integrations → Webhooks → New Webhook</strong>.</li>
-      <li>Pick the channel notifications should land in.</li>
-      <li>Click <strong>Copy Webhook URL</strong> — it looks like:
-        <pre>https://discord.com/api/webhooks/<span class="placeholder">123456789012345678</span>/<span class="placeholder">long-token</span></pre>
-      </li>
-      <li>Paste it into the <strong>Discord webhook URL</strong> field. Save.</li>
+      <li>Pick the channel notifications should land in, copy the webhook URL.</li>
+      <li>Vitriol → <strong>+ Add channel → Discord</strong>, paste the URL.</li>
     </ol>
-    <p>Test it: have someone sign up with self-signup set to "Pending". The channel should get a message within a second or two.</p>
+
+    <h3>Slack</h3>
+    <ol>
+      <li>Slack → <strong>Apps → Incoming Webhooks → Add to Slack</strong>, pick the channel, copy the webhook URL.</li>
+      <li>Vitriol → <strong>+ Add channel → Slack</strong>, paste the URL.</li>
+    </ol>
+
+    <h3>ntfy</h3>
+    <p>Public <code>ntfy.sh</code> or self-hosted server. Fields:</p>
+    <ul>
+      <li><strong>Server URL</strong> — e.g. <code>https://ntfy.sh</code> or your self-host URL.</li>
+      <li><strong>Topic</strong> — e.g. <code>vitriol-alerts</code>. Anything subscribed to that topic will see the message.</li>
+      <li><strong>Auth</strong> — pick <em>None</em> (public topic), <em>Bearer token</em>, or <em>Basic auth</em>. For Basic, use the format <code>user:pass</code> in the token field.</li>
+    </ul>
+
+    <h3>Gotify</h3>
+    <p>Self-hosted push server. From the Gotify UI, <strong>Apps → Create App</strong>, copy the per-app token. Paste server URL + token into the Vitriol form.</p>
+
+    <h3>Telegram</h3>
+    <ol>
+      <li>Talk to <a href="https://t.me/BotFather" target="_blank" rel="noopener">@BotFather</a> on Telegram, run <code>/newbot</code>, follow the prompts. Save the bot token.</li>
+      <li>Start a chat with your new bot (so it can message you). To find your chat ID, visit <code>https://api.telegram.org/bot&lt;token&gt;/getUpdates</code> after sending the bot a message — your numeric chat ID is in the JSON.</li>
+      <li>Vitriol → <strong>+ Add channel → Telegram</strong>, paste the bot token and chat ID.</li>
+    </ol>
+
+    <h3>Generic webhook</h3>
+    <p>Any HTTP endpoint that accepts a request. Useful for self-built notification routers, internal tooling, or anything not on this list.</p>
+    <ul>
+      <li><strong>URL</strong>, <strong>Method</strong> (POST/PUT/PATCH), <strong>Headers</strong> (JSON object), <strong>Body template</strong> with <code>{message}</code> placeholder.</li>
+      <li><strong>Bearer token</strong> (optional) — added as <code>Authorization: Bearer ...</code> header automatically.</li>
+    </ul>
+
+    <h3>Script</h3>
+    <p>Runs <code>bash -c "&lt;your script&gt;"</code> inside the container. The notification text is in <code>$VITRIOL_MESSAGE</code>. 15-second hard timeout. Useful for sending via <code>curl</code> with custom flow control, or for triggering local-only tooling.</p>
+    <pre>#!/usr/bin/env bash
+curl -fsSL \
+  --data-urlencode "text=$VITRIOL_MESSAGE" \
+  https://<span class="placeholder">your.api</span>/notify</pre>
+
+    <h3>Bluesky</h3>
+    <p>Posts to the AT Protocol via app password — generate one at <a href="https://bsky.app/settings/app-passwords" target="_blank" rel="noopener">bsky.app/settings/app-passwords</a> (don't use your real account password). 280-character cap; longer messages are truncated.</p>
+    <p class="muted small">Server URL defaults to <code>https://bsky.social</code> but you can point at a self-hosted PDS.</p>
+
+    <div class="callout">
+      Signal and Twitter/X aren't shipped — Signal needs a signal-cli sidecar service, and X's API requires a paid tier plus OAuth 2.0 user-context auth. Both are doable additions; ask if you need them.
+    </div>
   </details>
 
   <!-- ============================================== SSO -->
   <details id="sso">
     <summary>SSO providers — Google &amp; GitHub</summary>
 
+    <p>
+      Each provider has an <strong>enabled</strong> toggle (pause without clearing credentials), a
+      <strong>client ID</strong> + <strong>client secret</strong> field, a <strong>Test</strong>
+      button, and a last-test stamp next to the button. The Test button opens the full
+      OAuth round-trip in a popup; on success it lands on a "Test passed" page showing
+      the IdP's reported <code>sub</code>, <code>email</code>, and <code>name</code>
+      <em>without</em> creating a user account or signing you in.
+    </p>
+
+    <p>
+      The section header pill shows the count of currently-active SSO methods across
+      Google + GitHub + every enabled OIDC row.
+    </p>
+
     <h3>Google</h3>
     <ol>
       <li>Open <a href="https://console.cloud.google.com/" target="_blank" rel="noopener">console.cloud.google.com</a>, create or pick a project.</li>
       <li><strong>APIs &amp; Services → OAuth consent screen</strong>. Pick <em>External</em>, fill in app name, support email, developer email. Add the <code>email</code> and <code>profile</code> scopes.</li>
       <li><strong>Credentials → Create credentials → OAuth client ID → Web application</strong>.</li>
+      <li><strong>Authorized JavaScript origins</strong>: <code><span class="placeholder">YOUR_PUBLIC_BASE_URL</span></code></li>
       <li><strong>Authorized redirect URI</strong>:
         <pre><span class="placeholder">YOUR_PUBLIC_BASE_URL</span>/api/v1/auth/sso/google/callback</pre>
       </li>
-      <li>Save. Copy the <strong>Client ID</strong> and <strong>Client secret</strong> into the matching fields. Save settings.</li>
+      <li>Save. Copy the <strong>Client ID</strong> and <strong>Client secret</strong> into the matching fields in Vitriol. Save settings.</li>
     </ol>
 
     <h3>GitHub</h3>
@@ -252,87 +368,169 @@ STARTTLS: ✓</pre>
       <li>Fill in:
         <pre>Application name:    <span class="placeholder">Vitriol</span>
 Homepage URL:        <span class="placeholder">YOUR_PUBLIC_BASE_URL</span>
-Authorization URL:   <span class="placeholder">YOUR_PUBLIC_BASE_URL</span>/api/v1/auth/sso/github/callback</pre>
+Authorization callback URL: <span class="placeholder">YOUR_PUBLIC_BASE_URL</span>/api/v1/auth/sso/github/callback</pre>
       </li>
+      <li>Leave <strong>Enable Device Flow</strong> unchecked — Vitriol uses the standard web flow.</li>
       <li>Click <strong>Register application</strong>, then <strong>Generate a new client secret</strong>.</li>
       <li>Copy the <strong>Client ID</strong> and the just-generated <strong>secret</strong> into the form. Save.</li>
     </ol>
 
+    <p class="muted small">
+      GitHub's OAuth Apps differ from GitHub Apps — make sure you're under the right tab.
+      For OAuth Apps, the <code>user:email</code> scope is requested by Vitriol at sign-in time
+      (no separate app-side toggle); if your OAuth App restricts available scopes, ensure
+      <code>user:email</code> is allowed or Vitriol will fall back to creating accounts without email.
+    </p>
+
     <div class="callout">
-      The buttons on the sign-in page are rendered <em>only</em> for providers that have
-      both a client ID and a secret saved. Until both are set, that provider stays
-      hidden — no need to disable anything.
+      Buttons on the sign-in page are rendered <em>only</em> for providers that are
+      enabled AND have both client ID + secret saved. Disabling a provider hides its
+      button without clearing credentials.
     </div>
   </details>
 
   <!-- ============================================== OIDC -->
   <details id="oidc">
-    <summary>OpenID Connect — Authentik / Keycloak / Auth0 / Okta / Zitadel</summary>
-    <p>One generic OIDC slot. As long as your IdP serves a valid <code>.well-known/openid-configuration</code> document, it works. The server form shows the absolute redirect URI on page load — register that with your IdP first.</p>
+    <summary>OpenID Connect providers</summary>
+    <p>
+      Add as many OIDC providers as you need — Authentik for staff, Auth0 for customers,
+      Okta for partners. Each gets its own row in the table and its own button on the
+      sign-in page. Click <strong>+ Add OIDC provider</strong> to open the catalog
+      with 11 prefilled templates plus a Custom OIDC option for anything not on the list.
+    </p>
 
-    <p>Common redirect URI to register:</p>
-    <pre><span class="placeholder">YOUR_PUBLIC_BASE_URL</span>/api/v1/auth/sso/oidc/callback</pre>
+    <h4>Templates shipped</h4>
+    <p>Authentik · Keycloak · Auth0 · Okta · Microsoft Entra ID (Azure AD) · Google Identity Platform · GitLab · Amazon Cognito · Sign in with Apple · ZITADEL · Salesforce · Custom OIDC</p>
+
+    <p>
+      Each template pre-fills the issuer URL pattern with placeholders, sets sensible
+      default scopes, and (for Authentik) enables the auto-provisioning section so you
+      can wire that up at the same time. You replace placeholders with your real values,
+      paste in your <strong>client_id</strong> and <strong>client_secret</strong>, and save.
+    </p>
+
+    <h4>Each row's slug becomes a URL fragment</h4>
+    <p>Vitriol's callback URL for an OIDC row with slug <code>authentik</code> is:</p>
+    <pre><span class="placeholder">YOUR_PUBLIC_BASE_URL</span>/api/v1/auth/sso/authentik/callback</pre>
+    <p>Register that exact URL in your IdP's allowed redirect URIs. The edit form previews the absolute URL based on your Public base URL setting.</p>
+
+    <h4>Inline row controls</h4>
+    <ul>
+      <li><strong>Enable toggle</strong> — flips the button on/off in real time without opening the edit form.</li>
+      <li><strong>Test button</strong> — opens the SSO popup with <code>?test=1</code>. On success, the row's last-test pill updates to <code>ok &lt;timestamp&gt;</code>.</li>
+      <li><strong>Edit</strong> — full configuration including the optional User Provisioning section.</li>
+    </ul>
 
     <h3>Authentik</h3>
     <ol>
-      <li>Admin interface → <strong>Applications → Providers → Create</strong>.</li>
-      <li>Pick <strong>OAuth2/OpenID Provider</strong>. Name it <code>vitriol</code>.</li>
-      <li>Authorization flow: <code>default-provider-authorization-implicit-consent</code> (or explicit).</li>
-      <li>Client type: <strong>Confidential</strong>. Authentik will generate the client ID + secret — note them.</li>
-      <li><strong>Redirect URIs</strong>: paste the URI above.</li>
-      <li>Signing key: pick the default RS256 key.</li>
-      <li>Save the provider.</li>
-      <li><strong>Applications → Create</strong>. Slug <code>vitriol</code>, link to the provider.</li>
-      <li>Back in Vitriol, fill in:
-        <pre>Display name:  Authentik
-Issuer URL:    https://<span class="placeholder">authentik.example.com</span>/application/o/vitriol/
-Client ID:     <span class="placeholder">from step 4</span>
-Client secret: <span class="placeholder">from step 4</span>
-Scopes:        openid email profile</pre>
-      </li>
-      <li>Tick <strong>Enable OIDC sign-in</strong>, save.</li>
+      <li>Authentik admin → <strong>Applications → Create with wizard</strong>. Slug <code>vitriol</code>.</li>
+      <li>Pick <strong>OAuth2/OpenID Provider</strong>. Authorization flow: <code>default-provider-authorization-implicit-consent</code> (or explicit).</li>
+      <li>Client type: <strong>Confidential</strong>. Note the auto-generated client ID + secret.</li>
+      <li><strong>Redirect URIs</strong>: paste the URL above (with your actual slug).</li>
+      <li>Vitriol → <strong>+ Add OIDC provider → Authentik card</strong>. Replace <code>&lt;your-domain&gt;</code> and <code>&lt;app-slug&gt;</code> in the issuer URL, paste client ID + secret.</li>
     </ol>
+
+    <h4>Authentik auto-provisioning (optional)</h4>
+    <p>
+      Inside the Authentik provider's edit dialog, the <strong>User provisioning</strong>
+      section can auto-create approved Vitriol users in Authentik so the first
+      "Continue with Authentik" click works without you pre-creating each user
+      by hand. Setup:
+    </p>
+    <ol>
+      <li>Authentik admin → <strong>Directory → Tokens → New token</strong>.</li>
+      <li><strong>Identifier</strong>: any (e.g. <code>vitriol-provisioning</code>). <strong>User</strong>: a service account in the <em>Admin</em> group.</li>
+      <li>Copy the generated key. In Vitriol's OIDC edit form, paste it into <strong>IdP admin API token</strong>.</li>
+      <li>Check <strong>Auto-provision approved users into this IdP</strong>. Save.</li>
+      <li>From now on, when an admin approves a pending user in Vitriol, Vitriol POSTs <code>{username, email, name, is_active: true}</code> to Authentik's <code>/api/v3/core/users/</code> — the user lands in Authentik's directory with no password set. They use Authentik's password-recovery flow to set their own.</li>
+    </ol>
+    <p class="muted small">
+      Per-provider provisioning failures don't block the approval — Vitriol's audit log
+      flags failed provisions so the admin can manually create the IdP-side account
+      if needed.
+    </p>
 
     <h3>Keycloak</h3>
     <ol>
       <li>Pick / create a realm.</li>
       <li><strong>Clients → Create client</strong>. Type: <code>OpenID Connect</code>. Client ID: <code>vitriol</code>.</li>
       <li>Client authentication: <strong>On</strong> (so Keycloak issues a secret).</li>
-      <li><strong>Valid redirect URIs</strong>: paste the URI above.</li>
+      <li><strong>Valid redirect URIs</strong>: paste the URL above.</li>
       <li>Save. Open the <strong>Credentials</strong> tab → copy the secret.</li>
-      <li>In Vitriol:
-        <pre>Issuer URL:    https://<span class="placeholder">keycloak.example.com</span>/realms/<span class="placeholder">your-realm</span>
-Client ID:     vitriol
-Client secret: <span class="placeholder">from credentials tab</span></pre>
-      </li>
+      <li>In Vitriol's Keycloak card, replace <code>&lt;your-domain&gt;</code> and <code>&lt;realm-name&gt;</code> in the issuer URL pattern.</li>
     </ol>
 
     <h3>Auth0</h3>
     <ol>
       <li>Auth0 dashboard → <strong>Applications → Create Application</strong> → <em>Regular Web Application</em>.</li>
-      <li>Settings tab → <strong>Allowed Callback URLs</strong>: paste the URI above.</li>
+      <li>Settings tab → <strong>Allowed Callback URLs</strong>: paste the URL above.</li>
       <li>Copy <strong>Domain</strong>, <strong>Client ID</strong>, and <strong>Client Secret</strong>.</li>
-      <li>In Vitriol:
-        <pre>Issuer URL:    https://<span class="placeholder">your-tenant</span>.auth0.com/
-Client ID:     <span class="placeholder">from Auth0</span>
-Client secret: <span class="placeholder">from Auth0</span></pre>
-      </li>
+      <li>Issuer URL pattern: <code>https://&lt;your-tenant&gt;.us.auth0.com/</code>.</li>
     </ol>
 
     <h3>Okta</h3>
     <ol>
       <li>Okta admin → <strong>Applications → Create App Integration</strong> → <em>OIDC – Web Application</em>.</li>
-      <li><strong>Sign-in redirect URIs</strong>: paste the URI above.</li>
+      <li><strong>Sign-in redirect URIs</strong>: paste the URL above.</li>
       <li>Copy <strong>Client ID</strong> and <strong>Client secret</strong> from the General tab.</li>
-      <li>In Vitriol, issuer URL is your Okta org domain:
-        <pre>Issuer URL:    https://<span class="placeholder">your-org</span>.okta.com</pre>
-      </li>
+      <li>Issuer URL: <code>https://&lt;your-org&gt;.okta.com/oauth2/default</code>.</li>
+    </ol>
+
+    <h3>Microsoft Entra ID (Azure AD)</h3>
+    <ol>
+      <li>Azure portal → <strong>App registrations → New registration</strong>.</li>
+      <li><strong>Redirect URI</strong>: Web → paste the URL above.</li>
+      <li>Note <strong>Application (client) ID</strong> and <strong>Directory (tenant) ID</strong>.</li>
+      <li>Under <strong>Certificates &amp; secrets</strong>, create a new client secret. Copy the <em>Value</em> immediately (you can't see it again).</li>
+      <li>Issuer URL pattern: <code>https://login.microsoftonline.com/&lt;tenant-id&gt;/v2.0</code>.</li>
     </ol>
 
     <div class="callout">
       The Issuer URL field accepts either form — bare (<code>https://idp/realms/x</code>) or
       with the suffix (<code>.../.well-known/openid-configuration</code>). Vitriol normalizes
       it on save.
+    </div>
+  </details>
+
+  <!-- ============================================== Server secret key -->
+  <details id="secret-key">
+    <summary>Server secret key</summary>
+    <p>
+      The signing key for session tokens (JWT) and the encryption key
+      (via PBKDF2 → Fernet) for every secret stored at rest — SMTP
+      password, OAuth secrets, OIDC client secrets, IdP API tokens.
+      Vitriol generates one automatically on first boot.
+    </p>
+
+    <h4>Where it's stored</h4>
+    <p>Two locations, in priority order:</p>
+    <ol>
+      <li><strong>Environment variable</strong> — set <code>SECRET_KEY</code> (or <code>VITRIOL_SECRET_KEY</code>) in your orchestrator. Wins over everything else. Optional.</li>
+      <li><strong><code>/data/.secret_key</code> file</strong> — auto-created on first boot.</li>
+      <li><strong>Database fallback</strong> — also auto-mirrored into the <code>vitriol.db</code> file. If the dotfile is ever lost (volume hiccup, Coolify cache cleanup, etc.) Vitriol restores the key from the DB so encrypted secrets stay decryptable.</li>
+    </ol>
+    <p class="muted small">
+      Set the env var only if you want bullet-proof deterministic behaviour across
+      bare-metal restores / volume rebuilds. The dual-storage fallback covers normal
+      operation including container restarts and Docker volume hiccups.
+    </p>
+
+    <h4>Reveal / copy</h4>
+    <p>The <strong>Reveal</strong> button decrypts and displays the current key — useful when you want to copy it into the env var or a settings export. The <strong>Copy</strong> button puts it on the clipboard.</p>
+
+    <h4>Regenerate</h4>
+    <p>
+      Rotates the key safely: decrypts every encrypted column with the
+      old key, generates a fresh key, re-encrypts everything with the
+      new key, persists the new key to file + DB, restarts the container.
+      All active sessions are invalidated (everyone signs in again).
+    </p>
+    <div class="callout warn">
+      <strong>Don't regenerate</strong> while an encrypted column can't
+      be decrypted with the current key (rare — happens after a manual
+      volume restore from a different deployment). The rotation refuses
+      to run in that state and surfaces an error telling you which field
+      to re-enter first.
     </div>
   </details>
 
@@ -426,26 +624,36 @@ echo "$RESPONSE" | jq -r .certKey &gt; "$VITRIOL_CERT_DIR/privkey.pem"</pre>
       and call other HTTP services from within the container's network.
     </p>
 
-    <h4>Tiny Flask example (Vitriol's native webhook format)</h4>
-    <pre>import hmac, hashlib
-from flask import Flask, request, jsonify, abort
-
-SECRET = b"<span class="placeholder">same-shared-secret</span>"
-app = Flask(__name__)
-
-@app.post("/pull-certs")
-def pull():
-    sig = request.headers.get("X-Vitriol-Signature", "")
-    expected = "sha256=" + hmac.new(SECRET, request.data, hashlib.sha256).hexdigest()
-    if not hmac.compare_digest(sig, expected):
-        abort(401)
-    return jsonify(
-        fullchain=open("/etc/letsencrypt/live/<span class="placeholder">your.host</span>/fullchain.pem").read(),
-        privkey=open("/etc/letsencrypt/live/<span class="placeholder">your.host</span>/privkey.pem").read(),
-    )</pre>
-
     <p>Trigger a pull manually with the <strong>Pull certs now</strong> button on the settings page, or from the API:</p>
     <pre>POST /api/v1/server/refresh-certs</pre>
+  </details>
+
+  <!-- ============================================== Output retention -->
+  <details id="retention">
+    <summary>Output retention (per role)</summary>
+    <p>
+      How long converted output files stay in <code>/data/outputs/</code> before
+      being cleaned up. The cleanup task runs every 30 minutes and applies the
+      per-role policy below. Same units (minutes / hours / days) per row.
+    </p>
+
+    <table>
+      <tr><th>Field</th><th>Effect</th></tr>
+      <tr><td class="field-name">Max files</td><td>Keep at most N most-recent done files per user in this role. <code>0</code> = unlimited count.</td></tr>
+      <tr><td class="field-name">Max age</td><td>Delete files older than this. <code>0</code> = no time-based cleanup.</td></tr>
+      <tr><td class="field-name">Unit</td><td>minutes / hours / days — applies to Max age.</td></tr>
+      <tr><td class="field-name">Delete on download</td><td>Remove the file from disk immediately after the user successfully downloads it, regardless of count/age limits. Useful for one-shot transient outputs.</td></tr>
+    </table>
+
+    <p>Default policy:</p>
+    <pre>Super admin: 0 files, 0 age          — unlimited
+Admin:       0 files, 30 days        — unlimited count, 30-day age
+User:        20 files, 24 hours      — strictest tier</pre>
+
+    <div class="callout">
+      Retention deletes the file on disk; the job row stays in the database
+      for audit purposes. Files removed by cleanup don't appear in the Files tab.
+    </div>
   </details>
 
   <!-- ============================================== Self-compile -->
@@ -457,11 +665,170 @@ def pull():
       <li><strong>Admins can self-compile</strong> — turn off if you want self-compile to be an explicit per-user grant rather than implied by the admin role.</li>
     </ul>
     <div class="callout warn">
-      Self-compile produces native <code>.exe</code> output that runs your input file when
+      Self-compile produces a native <code>.exe</code> output that runs your input file when
       executed. There's no malware-pipeline path (.py↔.exe is blocked at the engine level),
       but the resulting file can still be misused. Treat self-compile as a privileged
       capability — don't grant it to untrusted users.
     </div>
+  </details>
+
+  <!-- ============================================== Export / Import -->
+  <details id="export-import">
+    <summary>Export / import settings</summary>
+    <p>
+      <strong>Export</strong> bundles your server config — limits, SMTP, OAuth, OIDC providers,
+      custom roles, retention, cert-pull, notification channels — into a single JSON file you
+      can store, version-control, or restore on another install.
+    </p>
+
+    <h4>Export options</h4>
+    <ul>
+      <li><strong>Encrypt with a password</strong> — checked: file is PBKDF2-derived + Fernet-encrypted. Unchecked: file contains your secrets in plaintext, so treat it like a private key.</li>
+      <li><strong>Hash</strong> — every export embeds a SHA-256 of the canonical payload, so import detects tampering. The hash is generated server-side and isn't user-editable.</li>
+    </ul>
+
+    <h4>Import flow</h4>
+    <ol>
+      <li>Pick a settings file. Vitriol verifies the format header.</li>
+      <li>If encrypted, prompts for the export password.</li>
+      <li>Shows a confirmation page summarizing what's about to be applied (with counts of OIDC providers / custom roles / notification channels).</li>
+      <li>Apply — overwrites existing values. Existing OIDC rows / custom roles / notification channels with matching slugs/names are replaced; others are left alone.</li>
+    </ol>
+
+    <div class="callout warn">
+      Importing an unencrypted file replaces all secrets with the plaintext values it
+      contains. Don't import an export that was generated against a different
+      <code>SECRET_KEY</code> without re-pasting secrets afterward — the encrypted blobs in
+      the file are valid only against the originating instance's key.
+    </div>
+  </details>
+
+  <!-- ============================================== Roles & permissions -->
+  <details id="roles">
+    <summary>Roles &amp; permissions</summary>
+
+    <p>
+      Vitriol has five built-in roles + an unlimited number of operator-defined
+      custom roles that overlay a built-in role's ceiling. Roles are managed from
+      the <a href="/admin/users">Users</a> tab (under <strong>Manage roles</strong>),
+      not here in Server settings — but understanding them is important for picking
+      the right default-on-sign-up role above.
+    </p>
+
+    <h3>Built-in roles</h3>
+
+    <table>
+      <tr><th>Role</th><th>Can do</th><th>Notes</th></tr>
+      <tr>
+        <td class="field-name">super_admin</td>
+        <td>Everything. Restart server, edit server settings, manage all users including admins, view + delete everyone's files, full conversion access.</td>
+        <td>Exactly one row in the DB always has this role. Cannot be deleted, demoted, or banned by any HTTP path. Password sign-in stays enabled for super admin even when the master toggle is off (recovery escape hatch).</td>
+      </tr>
+      <tr>
+        <td class="field-name">admin</td>
+        <td>Manage users below admin (suspend / ban / grant Stone / grant self-compile / approve pending). View server tab. Run conversions with Stone and self-compile by default.</td>
+        <td>Can't edit server settings, create or delete admins, or touch the super admin. Subject to the daily/rate caps under <a href="#limits">Limits</a>.</td>
+      </tr>
+      <tr>
+        <td class="field-name">user</td>
+        <td>Run conversions, manage own profile + API keys, view own files. Stone and self-compile only if granted per-user.</td>
+        <td>The standard "real user" role.</td>
+      </tr>
+      <tr>
+        <td class="field-name">pending</td>
+        <td>See the "Awaiting approval" screen and sign out. Nothing else.</td>
+        <td>Used as the default on sign-up when you want manual approval. Notifications fire to admins (email + every enabled notification webhook) on transition to pending.</td>
+      </tr>
+      <tr>
+        <td class="field-name">viewer</td>
+        <td>Read-only — see the UI but can't run conversions. Request access from profile.</td>
+        <td>Useful for "demo viewer" accounts or trial users.</td>
+      </tr>
+    </table>
+
+    <h3>Custom roles</h3>
+
+    <p>
+      Custom roles are an <em>overlay</em> on top of a built-in role. They share the
+      built-in's ceiling for capabilities the operator hasn't explicitly opted into
+      — i.e. a custom role with <code>base_role = user</code> can never have admin
+      capabilities, even if you check every box.
+    </p>
+
+    <h4>Creating a custom role</h4>
+    <ol>
+      <li><strong>Users tab → Manage roles → New role</strong>.</li>
+      <li>Pick a <strong>name</strong> (free text, e.g. <code>Power user</code>, <code>Beta tester</code>).</li>
+      <li>Pick a <strong>base role</strong> — this is the ceiling. Capabilities checked on this custom role only take effect if the base role would have allowed them.</li>
+      <li>Toggle the individual capabilities you want granted on top of the base.</li>
+      <li>Save.</li>
+    </ol>
+
+    <h4>Capability list</h4>
+    <p>The toggle grid in the Manage Roles dialog corresponds to these capability constants:</p>
+
+    <table>
+      <tr><th>Capability</th><th>What it gates</th></tr>
+      <tr><td class="field-name">view_app</td><td>See the main conversion UI at <code>/</code>.</td></tr>
+      <tr><td class="field-name">run_conversion</td><td>Actually run a conversion (submit + execute).</td></tr>
+      <tr><td class="field-name">use_stone</td><td>Run conversions with Philosopher's Stone mode.</td></tr>
+      <tr><td class="field-name">use_self_compile</td><td>Produce <code>.py</code> / <code>.exe</code> self-extracting outputs.</td></tr>
+      <tr><td class="field-name">view_profile</td><td>See and edit the Profile page (theme, email, password, API keys).</td></tr>
+      <tr><td class="field-name">view_users_tab</td><td>See the Users navigation entry and reach <code>/admin/users</code>.</td></tr>
+      <tr><td class="field-name">view_server_tab</td><td>See the Server navigation entry and reach <code>/admin/server</code>.</td></tr>
+      <tr><td class="field-name">create_user</td><td>Use the "Create user" button on the Users tab.</td></tr>
+      <tr><td class="field-name">create_admin</td><td>Create users with role = admin. Super admin only at the ceiling.</td></tr>
+      <tr><td class="field-name">delete_admin</td><td>Delete admin accounts. Super admin only at the ceiling.</td></tr>
+      <tr><td class="field-name">reset_other_creds</td><td>Reset email / username / temporary password for other users.</td></tr>
+      <tr><td class="field-name">reset_any_creds</td><td>Same as above but reaches into admin accounts. Super admin only at the ceiling.</td></tr>
+      <tr><td class="field-name">suspend_user / ban_user</td><td>Suspend or ban regular users.</td></tr>
+      <tr><td class="field-name">suspend_admin / ban_admin</td><td>Same against admin accounts. Super admin only at the ceiling.</td></tr>
+      <tr><td class="field-name">approve_pending</td><td>Approve or deny pending sign-ups.</td></tr>
+      <tr><td class="field-name">grant_stone / grant_self_compile</td><td>Toggle per-user Stone or self-compile grants from the Users tab.</td></tr>
+      <tr><td class="field-name">restart_server</td><td>POST to <code>/api/v1/server/restart</code>. Doesn't include settings editing.</td></tr>
+      <tr><td class="field-name">edit_server_settings</td><td>PATCH <code>/api/v1/server/settings</code>. Super admin only at the ceiling.</td></tr>
+      <tr><td class="field-name">view_own_files / view_others_files</td><td>See the Files tab. Own = your conversion outputs; others = everyone's.</td></tr>
+      <tr><td class="field-name">download_others_files / delete_others_files</td><td>Files-tab actions against rows you don't own.</td></tr>
+    </table>
+
+    <h4>Assigning a custom role to a user</h4>
+    <ol>
+      <li>Users tab → click the user row → <strong>Edit</strong>.</li>
+      <li>Pick from the <strong>Custom role</strong> dropdown (or leave blank to use the bare built-in role).</li>
+      <li>Save. The user's effective capability set immediately uses the custom-role overlay; their base role stays the same so role-based queries ("all admins") keep working.</li>
+    </ol>
+
+    <h4>Custom role on sign-up</h4>
+    <p>
+      In <a href="#signup">Sign-up</a>'s default-role dropdown, your custom roles appear
+      alongside the built-ins. Pick one to assign new self-sign-ups to it automatically.
+      The base role is aligned server-side based on the custom role's ceiling.
+    </p>
+
+    <div class="callout warn">
+      <strong>Capability changes apply immediately</strong> to every user assigned to the
+      custom role — there's no per-user invalidation step. Changing a role from "admin
+      ceiling" to "user ceiling" instantly demotes everyone wearing that role; they'll
+      see the new effective role on next page render.
+    </div>
+
+    <h3>Per-user grants</h3>
+    <p>
+      Two grants live <em>on the user row</em>, independent of role: <strong>Stone enabled</strong>
+      and <strong>self-compile enabled</strong>. These are admin-toggleable from the Users tab and
+      override whatever the user's role would otherwise allow. Useful for "this one User-role
+      account can also use Stone" without spinning up a new custom role.
+    </p>
+
+    <h3>Approval flow</h3>
+    <p>When a user signs up with default role = Pending:</p>
+    <ol>
+      <li>Vitriol creates the row with status = unverified (if email verification is on) or active (if off).</li>
+      <li>On email verification (or immediately, if verification is off): an <code>ApprovalRequest</code> row is created and notifications fire to every admin/super-admin email + every enabled notification webhook.</li>
+      <li>Admin clicks <strong>Approve</strong> in the Users tab → picks the target role from a dropdown → confirms.</li>
+      <li>If any OIDC provider has <em>Auto-provision approved users</em> enabled, Vitriol pushes the new user into the IdP at this moment.</li>
+      <li>User can now sign in.</li>
+    </ol>
   </details>
 
   <p class="lede">

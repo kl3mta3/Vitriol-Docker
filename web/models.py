@@ -477,9 +477,16 @@ class ServerSettings(Base):
     oauth_google_enabled = Column(Boolean, nullable=False, default=True, server_default="1")
     oauth_google_client_id = Column(String(255), nullable=True)
     oauth_google_client_secret_enc = Column(Text, nullable=True)
+    # Stamped by a successful test-mode SSO round-trip (popup → IdP →
+    # /sso/google/callback) so the admin UI can show "✓ ok 2 min ago"
+    # without forcing the operator to re-test on every page load.
+    oauth_google_last_test_at = Column(DateTime, nullable=True)
+    oauth_google_last_test_ok = Column(Boolean, nullable=True)
     oauth_github_enabled = Column(Boolean, nullable=False, default=True, server_default="1")
     oauth_github_client_id = Column(String(255), nullable=True)
     oauth_github_client_secret_enc = Column(Text, nullable=True)
+    oauth_github_last_test_at = Column(DateTime, nullable=True)
+    oauth_github_last_test_ok = Column(Boolean, nullable=True)
 
     # Generic OpenID Connect (Authentik, Keycloak, Auth0, Okta, etc.).
     # Only requires the issuer URL; the .well-known/openid-configuration
