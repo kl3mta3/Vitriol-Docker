@@ -44,6 +44,14 @@ _log = get_logger()
 # ---------------------------------------------------------------------------
 
 _EXT_TO_PANDOC: dict[str, tuple[Optional[str], Optional[str]]] = {
+    # One canonical extension per format. Aliases (.asciidoc, .latex, .bibtex,
+    # .docbook, .typst, .wiki, .texinfo, .1-.8 for man-page section numbers)
+    # were intentionally dropped — they cluttered the dropdown without
+    # adding any conversion the canonical extension doesn't already cover.
+    # Same for .bbcode, which pandoc has no real writer for (it would have
+    # silently emitted ANSI text under a misleading extension).
+    # Kept in sync with the desktop repo at app/format_handlers/pandoc_handler.py.
+
     # Lightweight markup (most are read+write)
     ".rst":      ("rst", "rst"),
     ".org":      ("org", "org"),
@@ -51,40 +59,28 @@ _EXT_TO_PANDOC: dict[str, tuple[Optional[str], Optional[str]]] = {
     ".textile":  ("textile", "textile"),
     ".djot":     ("djot", "djot"),
     ".adoc":     (None, "asciidoc"),     # pandoc writes asciidoc but does not read it
-    ".asciidoc": (None, "asciidoc"),
     ".t2t":      ("t2t", None),          # txt2tags: read-only
     ".markua":   (None, "markua"),
-    ".bbcode":   (None, "ansi"),         # closest pandoc has — TODO: there is no real bbcode
     # Notebook
     ".ipynb":    ("ipynb", "ipynb"),
     # Outline
     ".opml":     ("opml", "opml"),
     # TeX family
     ".tex":      ("latex", "latex"),
-    ".latex":    ("latex", "latex"),
     ".context":  (None, "context"),
     # Documentation
-    ".texinfo":  (None, "texinfo"),
-    ".texi":     (None, "texinfo"),
+    ".texi":     (None, "texinfo"),       # GNU TexInfo (canonical extension)
     ".haddock":  ("haddock", "haddock"),
     # Roff / man pages
     ".man":      ("man", "man"),
-    ".1":        ("man", "man"),
-    ".2":        ("man", "man"),
-    ".3":        ("man", "man"),
-    ".5":        ("man", "man"),
-    ".7":        ("man", "man"),
-    ".8":        ("man", "man"),
     ".ms":       (None, "ms"),
     # XML formats
-    ".docbook":  ("docbook", "docbook"),
-    ".dbk":      ("docbook", "docbook"),
+    ".dbk":      ("docbook", "docbook"),  # DocBook (canonical extension)
     ".jats":     ("jats", "jats"),
-    ".bits":     ("bits", None),         # BITS: read-only
+    ".bits":     ("bits", None),          # BITS: read-only
     ".tei":      (None, "tei"),
     # Wiki markup
     ".mediawiki": ("mediawiki", "mediawiki"),
-    ".wiki":     ("mediawiki", "mediawiki"),
     ".dokuwiki": ("dokuwiki", "dokuwiki"),
     ".jira":     ("jira", "jira"),
     ".creole":   ("creole", None),       # read-only
@@ -95,14 +91,12 @@ _EXT_TO_PANDOC: dict[str, tuple[Optional[str], Optional[str]]] = {
     ".zimwiki":  (None, "zimwiki"),      # write-only
     # Bibliography
     ".bib":      ("bibtex", "bibtex"),
-    ".bibtex":   ("bibtex", "bibtex"),
     ".biblatex": ("biblatex", "biblatex"),
     ".csljson":  ("csljson", "csljson"),
     ".ris":      ("ris", None),          # read-only
     ".enl":      ("endnotexml", None),   # read-only (EndNote XML)
     # Page layout
     ".typ":      ("typst", "typst"),
-    ".typst":    ("typst", "typst"),
     ".icml":     (None, "icml"),         # InDesign Markup Language
     # Ebook (pandoc handles fb2 fully; epub stays with epub_handler)
     ".fb2":      ("fb2", "fb2"),
