@@ -35,6 +35,12 @@ CAN_EDIT_SERVER_SETTINGS = "edit_server_settings"
 CAN_APPROVE_PENDING = "approve_pending"
 CAN_GRANT_STONE = "grant_stone"
 CAN_GRANT_SELF_COMPILE = "grant_self_compile"
+# Lets the actor change a user's max_file_size_bytes override (the
+# per-user layer of the three-tier file-size cap). Useful for "this
+# specific user occasionally needs to upload a 2 GB file" without
+# raising the server-wide default. Granted to admin + super_admin by
+# default — custom roles can opt in via the can_set_file_size_cap flag.
+CAN_SET_USER_FILE_SIZE_CAP = "set_user_file_size_cap"
 
 # Files tab — managing the user's own (and optionally others') converted
 # outputs. own_files implicitly grants download + delete on the user's
@@ -57,6 +63,7 @@ _ROLE_CAPS: dict[Role, set[str]] = {
         CAN_SUSPEND_USER, CAN_BAN_USER, CAN_SUSPEND_ADMIN, CAN_BAN_ADMIN,
         CAN_RESTART_SERVER, CAN_EDIT_SERVER_SETTINGS,
         CAN_APPROVE_PENDING, CAN_GRANT_STONE, CAN_GRANT_SELF_COMPILE,
+        CAN_SET_USER_FILE_SIZE_CAP,
         CAN_VIEW_OWN_FILES, CAN_VIEW_OTHERS_FILES,
         CAN_DOWNLOAD_OTHERS_FILES, CAN_DELETE_OTHERS_FILES,
     },
@@ -67,6 +74,7 @@ _ROLE_CAPS: dict[Role, set[str]] = {
         CAN_SUSPEND_USER, CAN_BAN_USER, CAN_SUSPEND_ADMIN,
         CAN_RESTART_SERVER,
         CAN_APPROVE_PENDING, CAN_GRANT_STONE, CAN_GRANT_SELF_COMPILE,
+        CAN_SET_USER_FILE_SIZE_CAP,
         CAN_VIEW_OWN_FILES, CAN_VIEW_OTHERS_FILES,
         CAN_DOWNLOAD_OTHERS_FILES, CAN_DELETE_OTHERS_FILES,
     },
@@ -111,6 +119,7 @@ _CUSTOM_FLAG_FOR_CAP: dict[str, str] = {
     CAN_GRANT_SELF_COMPILE: "can_grant_self_compile",
     CAN_RESTART_SERVER: "can_restart_server",
     CAN_RESET_OTHER_CREDS: "can_reset_other_creds",
+    CAN_SET_USER_FILE_SIZE_CAP: "can_set_user_file_size_cap",
     # Files-tab permissions — own_files behaves like Stone (no ceiling
     # check, grantable to any base); the *_others variants are
     # admin-tier and require the base to permit them.

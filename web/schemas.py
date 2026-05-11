@@ -54,6 +54,7 @@ class UserOut(BaseModel):
     self_compile_enabled: bool
     daily_conversion_limit: Optional[int]
     rate_limit_per_minute: Optional[int]
+    max_file_size_bytes: Optional[int] = None    # per-user upload cap override
     theme: str = "default"
     custom_role_id: Optional[int] = None
     custom_role_name: Optional[str] = None
@@ -80,6 +81,11 @@ class UserUpdateRequest(BaseModel):
     self_compile_enabled: Optional[bool] = None
     daily_conversion_limit: Optional[int] = None
     rate_limit_per_minute: Optional[int] = None
+    # Per-user max upload size override. 0/null clears the override
+    # (falls back to custom-role → server default). Only honored when
+    # the actor has the `set_user_file_size_cap` capability; otherwise
+    # the field is silently dropped from the patch.
+    max_file_size_bytes: Optional[int] = None
 
 
 class SuspendRequest(BaseModel):
@@ -293,6 +299,10 @@ class CustomRoleOut(BaseModel):
     can_view_others_files: bool = False
     can_download_others_files: bool = False
     can_delete_others_files: bool = False
+    can_set_user_file_size_cap: bool = False
+    # Role-level upload cap. Null means inherit from server default.
+    # Per-user overrides on individual rows further override this.
+    max_file_size_bytes: Optional[int] = None
     created_at: datetime
     user_count: int = 0
 
@@ -318,6 +328,8 @@ class CustomRoleCreateRequest(BaseModel):
     can_view_others_files: bool = False
     can_download_others_files: bool = False
     can_delete_others_files: bool = False
+    can_set_user_file_size_cap: bool = False
+    max_file_size_bytes: Optional[int] = None
 
 
 class CustomRoleUpdateRequest(BaseModel):
@@ -341,6 +353,8 @@ class CustomRoleUpdateRequest(BaseModel):
     can_view_others_files: Optional[bool] = None
     can_download_others_files: Optional[bool] = None
     can_delete_others_files: Optional[bool] = None
+    can_set_user_file_size_cap: Optional[bool] = None
+    max_file_size_bytes: Optional[int] = None
 
 
 class MessageResponse(BaseModel):

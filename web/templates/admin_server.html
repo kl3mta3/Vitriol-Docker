@@ -36,26 +36,7 @@
       </p>
     </details>
 
-    <details name="server-settings"><summary>Limits</summary>
-      <div class="grid-2">
-        <label><span>Global rate limit / min</span><input name="global_rate_limit_per_minute" type="number" /></label>
-        <label>
-          <span>Max file size</span>
-          <div class="size-input">
-            <input id="max-file-size-value" type="number" min="1" step="1" />
-            <select id="max-file-size-unit">
-              <option value="MB">MB</option>
-              <option value="GB">GB</option>
-            </select>
-            <span id="max-file-size-bytes-display" class="muted small"></span>
-          </div>
-        </label>
-        <label><span>Default user — daily limit</span><input name="default_user_daily_limit" type="number" /></label>
-        <label><span>Default user — rate / min</span><input name="default_user_rate_limit" type="number" /></label>
-        <label><span>Default admin — daily limit</span><input name="default_admin_daily_limit" type="number" /></label>
-        <label><span>Default admin — rate / min</span><input name="default_admin_rate_limit" type="number" /></label>
-      </div>
-    </details>
+   
 
     <details name="server-settings"><summary>Sign-up</summary>
       <div class="grid-2">
@@ -82,35 +63,7 @@
       </div>
     </details>
 
-    <details name="server-settings"><summary>Disabled formats</summary>
-      <p class="muted small">
-        Three tiers cascade — global is hardest, user is softest.
-        <strong>Globally</strong>: nobody can use these (including you).
-        <strong>Admin+below</strong>: super admin can still use, but anyone with admin role or lower is blocked.
-        <strong>User+below</strong>: users / viewers / pending blocked; admin and super admin can still use.
-        Comma-separated extension list with leading dots, e.g. <code>.exe,.dmg,.iso</code>.
-      </p>
-      <table class="retention-table" id="format-tiers-table">
-        <thead>
-          <tr><th></th><th>Globally</th><th>Admin + below</th><th>User + below</th></tr>
-        </thead>
-        <tbody>
-          <tr>
-            <th>Disabled inputs</th>
-            <td><input data-tier="global" data-dir="input" placeholder=".exe,.dmg" /></td>
-            <td><input data-tier="admin"  data-dir="input" placeholder=".bat" /></td>
-            <td><input data-tier="user"   data-dir="input" placeholder=".pdf" /></td>
-          </tr>
-          <tr>
-            <th>Disabled outputs</th>
-            <td><input data-tier="global" data-dir="output" placeholder=".exe" /></td>
-            <td><input data-tier="admin"  data-dir="output" placeholder=".py" /></td>
-            <td><input data-tier="user"   data-dir="output" placeholder=".exe,.py" /></td>
-          </tr>
-        </tbody>
-      </table>
-    </details>
-
+   
     <details name="server-settings" id="smtp"><summary>SMTP (verification + admin notifications) <span id="smtp-status-pill" class="status-pill"></span></summary>
       <p class="muted small">Required for self-signup verification emails, password resets, and pending-approval notifications. See the <a href="/admin/server/guide#smtp" target="_blank" rel="noopener">Guide</a> for provider-specific examples (Gmail, SendGrid, Mailgun, SES).</p>
       <label class="checkbox-row" style="margin-bottom: 8px;">
@@ -197,21 +150,6 @@
       </div>
     </details>
 
-    <details name="server-settings"><summary>Server secret key</summary>
-      <p class="muted small">
-        Used to sign session tokens and encrypt SMTP / OAuth / SSL secrets at rest.
-        Generated automatically on first run and persisted to <code>/data/.secret_key</code>.
-        Rotating invalidates all sessions and re-encrypts stored secrets in place.
-      </p>
-      <div class="secret-key-row">
-        <input id="secret-key-display" type="password" value="••••••••••••••••••••••••••••••••" readonly />
-        <button type="button" id="secret-key-reveal" class="btn btn-secondary">Reveal</button>
-        <button type="button" id="secret-key-copy" class="btn btn-ghost" hidden>Copy</button>
-        <button type="button" id="secret-key-rotate" class="btn btn-danger">Regenerate</button>
-      </div>
-      <p id="secret-key-msg" class="muted small" hidden></p>
-    </details>
-
     <details name="server-settings"><summary>SSL cert pull <span id="ssl-last-pill" class="status-pill"></span></summary>
       <p class="muted small">
         Pulls renewed TLS certs into <code>/data/certs/</code> for your reverse proxy
@@ -267,16 +205,16 @@
         </p>
         <label class="full"><span>Script body</span>
           <textarea name="ssl_cert_pull_script" rows="14" spellcheck="false" placeholder="#!/usr/bin/env bash
-set -euo pipefail
+			set -euo pipefail
 
-API_KEY='your-api-key'
-DOMAIN='your.host'
-URL=&quot;https://ca.example/api/cert/$DOMAIN&quot;
+			API_KEY='your-api-key'
+			DOMAIN='your.host'
+			URL=&quot;https://ca.example/api/cert/$DOMAIN&quot;
 
-RESPONSE=$(curl -fsSL -H &quot;X-Api-Key: $API_KEY&quot; &quot;$URL&quot;)
-echo &quot;$RESPONSE&quot; | jq -r .certPem > &quot;$VITRIOL_CERT_DIR/fullchain.pem&quot;
-echo &quot;$RESPONSE&quot; | jq -r .certKey > &quot;$VITRIOL_CERT_DIR/privkey.pem&quot;
-"></textarea>
+			RESPONSE=$(curl -fsSL -H &quot;X-Api-Key: $API_KEY&quot; &quot;$URL&quot;)
+			echo &quot;$RESPONSE&quot; | jq -r .certPem > &quot;$VITRIOL_CERT_DIR/fullchain.pem&quot;
+			echo &quot;$RESPONSE&quot; | jq -r .certKey > &quot;$VITRIOL_CERT_DIR/privkey.pem&quot;
+			"></textarea>
         </label>
       </div>
 
@@ -292,6 +230,56 @@ echo &quot;$RESPONSE&quot; | jq -r .certKey > &quot;$VITRIOL_CERT_DIR/privkey.pe
 
       <button type="button" id="refresh-certs" class="btn btn-secondary">Pull certs now</button>
       <p id="refresh-certs-msg" class="ok small" hidden></p>
+    </details>
+	
+	 <details name="server-settings"><summary>Disabled formats</summary>
+      <p class="muted small">
+        Three tiers cascade — global is hardest, user is softest.
+        <strong>Globally</strong>: nobody can use these (including you).
+        <strong>Admin+below</strong>: super admin can still use, but anyone with admin role or lower is blocked.
+        <strong>User+below</strong>: users / viewers / pending blocked; admin and super admin can still use.
+        Comma-separated extension list with leading dots, e.g. <code>.exe,.dmg,.iso</code>.
+      </p>
+      <table class="retention-table" id="format-tiers-table">
+        <thead>
+          <tr><th></th><th>Globally</th><th>Admin + below</th><th>User + below</th></tr>
+        </thead>
+        <tbody>
+          <tr>
+            <th>Disabled inputs</th>
+            <td><input data-tier="global" data-dir="input" placeholder=".exe,.dmg" /></td>
+            <td><input data-tier="admin"  data-dir="input" placeholder=".bat" /></td>
+            <td><input data-tier="user"   data-dir="input" placeholder=".pdf" /></td>
+          </tr>
+          <tr>
+            <th>Disabled outputs</th>
+            <td><input data-tier="global" data-dir="output" placeholder=".exe" /></td>
+            <td><input data-tier="admin"  data-dir="output" placeholder=".py" /></td>
+            <td><input data-tier="user"   data-dir="output" placeholder=".exe,.py" /></td>
+          </tr>
+        </tbody>
+      </table>
+    </details>
+	
+	 <details name="server-settings"><summary>Limits</summary>
+      <div class="grid-2">
+        <label><span>Global rate limit / min</span><input name="global_rate_limit_per_minute" type="number" /></label>
+        <label>
+          <span>Max file size</span>
+          <div class="size-input">
+            <input id="max-file-size-value" type="number" min="1" step="1" />
+            <select id="max-file-size-unit">
+              <option value="MB">MB</option>
+              <option value="GB">GB</option>
+            </select>
+            <span id="max-file-size-bytes-display" class="muted small"></span>
+          </div>
+        </label>
+        <label><span>Default user — daily limit</span><input name="default_user_daily_limit" type="number" /></label>
+        <label><span>Default user — rate / min</span><input name="default_user_rate_limit" type="number" /></label>
+        <label><span>Default admin — daily limit</span><input name="default_admin_daily_limit" type="number" /></label>
+        <label><span>Default admin — rate / min</span><input name="default_admin_rate_limit" type="number" /></label>
+      </div>
     </details>
 
     <details name="server-settings" id="retention"><summary>Output retention (per role)</summary>
@@ -336,6 +324,21 @@ echo &quot;$RESPONSE&quot; | jq -r .certKey > &quot;$VITRIOL_CERT_DIR/privkey.pe
     <details name="server-settings"><summary>Self-compile defaults</summary>
       <label class="checkbox-row"><input type="checkbox" name="super_admin_can_self_compile" /> <span>Super admin can self-compile</span></label>
       <label class="checkbox-row"><input type="checkbox" name="admin_can_self_compile" /> <span>Admins can self-compile</span></label>
+    </details>
+	
+	<details name="server-settings"><summary>Server secret key</summary>
+	  <p class="muted small">
+        Used to sign session tokens and encrypt SMTP / OAuth / SSL secrets at rest.
+        Generated automatically on first run and persisted to <code>/data/.secret_key</code>.
+        Rotating invalidates all sessions and re-encrypts stored secrets in place.
+      </p>
+      <div class="secret-key-row">
+        <input id="secret-key-display" type="password" value="••••••••••••••••••••••••••••••••" readonly />
+        <button type="button" id="secret-key-reveal" class="btn btn-secondary">Reveal</button>
+        <button type="button" id="secret-key-copy" class="btn btn-ghost" hidden>Copy</button>
+        <button type="button" id="secret-key-rotate" class="btn btn-danger">Regenerate</button>
+      </div>
+      <p id="secret-key-msg" class="muted small" hidden></p>
     </details>
 
     <div class="form-actions">

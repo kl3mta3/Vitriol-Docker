@@ -119,6 +119,14 @@
         <label><span>Daily conversion limit (blank = base default)</span><input name="daily_conversion_limit" type="number" min="0" /></label>
         <label><span>Rate limit / minute (blank = base default)</span><input name="rate_limit_per_minute" type="number" min="0" /></label>
       </div>
+      <label class="full" style="margin-top: 8px;">
+        <span>Max upload size for this role (in MB — 0 or blank = inherit from server default)</span>
+        <input name="max_file_size_mb" type="number" min="0" step="1" placeholder="e.g. 500" />
+      </label>
+      <label class="checkbox-row" style="margin-top: 8px;">
+        <input type="checkbox" name="can_set_user_file_size_cap" />
+        <span>Members of this role can change other users' max upload size override <em class="muted small">(admin-tier — requires base_role = admin)</em></span>
+      </label>
     </details>
 
     <details>
@@ -245,6 +253,16 @@
         <label class="checkbox-row"><input type="checkbox" name="self_compile_enabled" /> <span>Self-compile (.py / .exe)</span></label>
         <label><span>Daily conversion limit (blank = role default)</span><input name="daily_conversion_limit" type="number" min="0" /></label>
         <label><span>Rate limit / minute (blank = role default)</span><input name="rate_limit_per_minute" type="number" min="0" /></label>
+      </div>
+      {# Per-user max upload size override — requires the actor to have
+         the set_user_file_size_cap capability. JS hides this row when
+         the calling admin lacks it (we leave the field in the DOM so
+         the form keeps consistent structure across reloads). #}
+      <div class="grid-2" id="manage-file-size-row" hidden>
+        <label class="full">
+          <span>Max upload size override (in MB — 0 or blank = inherit from role/server default)</span>
+          <input name="max_file_size_mb" type="number" min="0" step="1" placeholder="e.g. 500" />
+        </label>
       </div>
     </details>
 

@@ -186,17 +186,6 @@ def create_app() -> FastAPI:
             return RedirectResponse(url="/setup")
         return await call_next(request)
 
-    # NOTE: the legacy `allowed_origin` Host-header lock used to live here.
-    # It caused two production outages (one from a browser-autofill leak
-    # putting "masterlocke" into the field, then locking the entire API
-    # surface; and a follow-on where the lock blocked /api/v1/formats and
-    # /api/v1/files even after the UI paths were exempted). The TLS proxy
-    # in front of us (Cloudflare → Coolify reverse proxy) already validates
-    # the Host header, and SameSite=Lax cookies plus the same-origin
-    # CORS policy mitigate DNS rebinding. Net value: negative. The column
-    # remains in `server_settings` and the input still lives on /admin/server
-    # so existing data isn't lost, but it is intentionally never read here.
-    # Auto-clear any stale value on boot so old DBs stop carrying it around.
 
     @app.exception_handler(404)
     async def _not_found(request: Request, exc):

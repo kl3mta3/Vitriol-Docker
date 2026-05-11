@@ -11,7 +11,7 @@ from ..auth.password import hash_password
 from ..auth.permissions import (
     has_capability, is_super_admin, is_admin_or_above,
     CAN_CREATE_ADMIN, CAN_DELETE_ADMIN, CAN_GRANT_STONE, CAN_GRANT_SELF_COMPILE,
-    CAN_RESET_OTHER_CREDS,
+    CAN_RESET_OTHER_CREDS, CAN_SET_USER_FILE_SIZE_CAP,
 )
 from ..deps import get_current_user, get_db, require_admin, require_super_admin
 from ..models import ApprovalRequest, ApprovalStatus, Role, Status, User
@@ -138,6 +138,18 @@ def update_user(user_id: int, req: UserUpdateRequest, actor: User = Depends(requ
         target.daily_conversion_limit = req.daily_conversion_limit
     if req.rate_limit_per_minute is not None:
         target.rate_limit_per_minute = req.rate_limit_per_minute
+    if req.max_file_size_bytes is not None:
+        # Capability-gated: must be admin / super_admin or hold the
+        # explicit `set_user_file_size_cap` flag via a custom role.
+        # 403 instead of silently ignoring so the operator knows the
+        # field didn't apply.
+        if not has_capability(actor, CAN_SET_USER_FILE_SIZE_CAP):
+            raise HTTPException(
+                status_code=403,
+                detail="Cannot change max_file_size_bytes — missing set_user_file_size_cap capability.",
+            )
+        # 0 explicitly clears the override (back to role/server default).
+        target.max_file_size_bytes = req.max_file_size_bytes if req.max_file_size_bytes > 0 else None
 
     db.commit()
     db.refresh(target)

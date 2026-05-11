@@ -92,6 +92,13 @@ class User(Base):
     self_compile_enabled = Column(Boolean, nullable=False, default=False)
     daily_conversion_limit = Column(Integer, nullable=True)     # null = role default
     rate_limit_per_minute = Column(Integer, nullable=True)      # null = role default
+    # Per-user max-file-size override. Resolution order:
+    #   1. This column (per-user override) if set
+    #   2. custom_role.max_file_size_bytes (per-role override) if user has one set
+    #   3. server_settings.max_file_size_bytes (global default)
+    # Super admin is always unlimited regardless of the chain.
+    # Editing this field requires the `set_user_file_size_cap` capability.
+    max_file_size_bytes = Column(Integer, nullable=True)
 
     # User-facing theme preference. One of THEMES (web/static/css/theme.css).
     theme = Column(String(32), nullable=False, default="default")
@@ -258,6 +265,9 @@ class CustomRole(Base):
     self_compile_enabled = Column(Boolean, nullable=False, default=False)
     daily_conversion_limit = Column(Integer, nullable=True)
     rate_limit_per_minute = Column(Integer, nullable=True)
+    # Role-level max upload size. Used when no per-user override is set
+    # (User.max_file_size_bytes). Null = inherit from server default.
+    max_file_size_bytes = Column(Integer, nullable=True)
 
     # Admin-tier capabilities (only meaningful when base_role == admin).
     can_create_user = Column(Boolean, nullable=False, default=False)
@@ -279,6 +289,11 @@ class CustomRole(Base):
     can_view_others_files = Column(Boolean, nullable=False, default=False, server_default="0")
     can_download_others_files = Column(Boolean, nullable=False, default=False, server_default="0")
     can_delete_others_files = Column(Boolean, nullable=False, default=False, server_default="0")
+    # When True, members of this role can change other users'
+    # `max_file_size_bytes` per-user override (the third tier of the
+    # file-size cap). Admin-tier capability — only meaningful when
+    # base_role permits it (super_admin + admin get it free).
+    can_set_user_file_size_cap = Column(Boolean, nullable=False, default=False, server_default="0")
 
     created_at = Column(DateTime, nullable=False, default=datetime.utcnow)
     updated_at = Column(DateTime, nullable=False, default=datetime.utcnow, onupdate=datetime.utcnow)

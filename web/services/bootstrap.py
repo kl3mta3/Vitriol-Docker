@@ -126,6 +126,17 @@ _ADDITIVE_COLUMNS: list[tuple[str, str, str]] = [
     # Password sign-in master toggle — when False, /signin only offers SSO.
     ("server_settings", "password_signin_enabled",
      "ALTER TABLE server_settings ADD COLUMN password_signin_enabled BOOLEAN NOT NULL DEFAULT 1"),
+    # Layered max-file-size: per-user override on users + per-role
+    # override on custom_roles. Null on both means "inherit from
+    # server_settings.max_file_size_bytes" (the global default).
+    # Editing the per-user value is gated on the new
+    # `set_user_file_size_cap` capability.
+    ("users", "max_file_size_bytes",
+     "ALTER TABLE users ADD COLUMN max_file_size_bytes INTEGER"),
+    ("custom_roles", "max_file_size_bytes",
+     "ALTER TABLE custom_roles ADD COLUMN max_file_size_bytes INTEGER"),
+    ("custom_roles", "can_set_user_file_size_cap",
+     "ALTER TABLE custom_roles ADD COLUMN can_set_user_file_size_cap BOOLEAN NOT NULL DEFAULT 0"),
     ("server_settings", "smtp_enabled",
      "ALTER TABLE server_settings ADD COLUMN smtp_enabled BOOLEAN NOT NULL DEFAULT 1"),
     ("server_settings", "oauth_google_enabled",

@@ -233,6 +233,25 @@ function openManage(u) {
   f.daily_conversion_limit.value = u.daily_conversion_limit ?? '';
   f.rate_limit_per_minute.value = u.rate_limit_per_minute ?? '';
 
+  // Per-user max-upload-size override: only show this row when the
+  // calling admin holds the `set_user_file_size_cap` capability. The
+  // backend enforces the same gate; this just keeps the UI honest so
+  // an admin who can't change the value also doesn't see a field that
+  // appears editable. Capability list is set on the page by base.html
+  // (window.VITRIOL_CAPS) — fall back to an empty list if it's missing
+  // somehow (older deployments / cached pages).
+  const _caps = window.VITRIOL_CAPS || [];
+  const _canEditFileSizeCap = _caps.includes('set_user_file_size_cap');
+  const fileSizeRow = document.getElementById('manage-file-size-row');
+  if (fileSizeRow) fileSizeRow.hidden = !_canEditFileSizeCap;
+  if (f.max_file_size_mb) {
+    // Server stores bytes; UI works in MB. Round to nearest MB on
+    // display; the user can type a fresh value to override.
+    f.max_file_size_mb.value = u.max_file_size_bytes
+      ? Math.round(u.max_file_size_bytes / (1024 * 1024))
+      : '';
+  }
+
   document.getElementById('manage-title').textContent = `Manage — ${u.username}`;
   const roleTag = document.getElementById('manage-role-tag');
   roleTag.textContent = u.custom_role_name || u.role;
@@ -396,6 +415,16 @@ manageForm.addEventListener('submit', async (e) => {
       ? null : Number(manageForm.daily_conversion_limit.value),
     rate_limit_per_minute: manageForm.rate_limit_per_minute.value === ''
       ? null : Number(manageForm.rate_limit_per_minute.value),
+    // Convert MB → bytes on save; empty or 0 → null = inherit from
+    // role/server default. Only meaningful when the actor has the
+    // capability (the row is hidden otherwise — and even if the field
+    // sneaks in, the backend re-checks the capability and 403s).
+    max_file_size_bytes: (() => {
+      const el = manageForm.max_file_size_mb;
+      if (!el || el.value === '') return null;
+      const mb = Number(el.value);
+      return mb > 0 ? Math.round(mb * 1024 * 1024) : 0;
+    })(),
   };
 
   const currentCustomId = u.custom_role_id || 0;
@@ -411,6 +440,14 @@ manageForm.addEventListener('submit', async (e) => {
     patch.daily_conversion_limit = formValues.daily_conversion_limit;
   if (formValues.rate_limit_per_minute !== (u.rate_limit_per_minute ?? null))
     patch.rate_limit_per_minute = formValues.rate_limit_per_minute;
+  // Only ship the file-size field if the actor has the capability AND
+  // the value actually changed. Without the capability the backend
+  // would 403 — easier to skip the field entirely.
+  const _saveCanEditCap = (window.VITRIOL_CAPS || []).includes('set_user_file_size_cap');
+  if (_saveCanEditCap
+      && formValues.max_file_size_bytes !== (u.max_file_size_bytes ?? null)) {
+    patch.max_file_size_bytes = formValues.max_file_size_bytes;
+  }
 
   // Username and password go through reset-credentials.
   const resetReq = {};
@@ -542,11 +579,19 @@ function openRoleForm(cr) {
     // updateRoleAdminBlockVisibility below).
     'can_view_own_files', 'can_view_others_files',
     'can_download_others_files', 'can_delete_others_files',
+    // Per-user file-size-cap edit permission — also admin-tier.
+    'can_set_user_file_size_cap',
   ]) {
     if (f[flag]) f[flag].checked = !!(cr && cr[flag]);
   }
   f.daily_conversion_limit.value = cr && cr.daily_conversion_limit != null ? cr.daily_conversion_limit : '';
   f.rate_limit_per_minute.value = cr && cr.rate_limit_per_minute != null ? cr.rate_limit_per_minute : '';
+  // Role-level upload cap, stored as bytes server-side, edited as MB.
+  if (f.max_file_size_mb) {
+    f.max_file_size_mb.value = (cr && cr.max_file_size_bytes)
+      ? Math.round(cr.max_file_size_bytes / (1024 * 1024))
+      : '';
+  }
   document.getElementById('role-delete-btn').hidden = !cr;
   document.getElementById('role-form-msg').hidden = true;
   updateRoleAdminBlockVisibility();
@@ -602,6 +647,13 @@ roleForm.addEventListener('submit', async (e) => {
     can_view_others_files: roleForm.can_view_others_files ? roleForm.can_view_others_files.checked : false,
     can_download_others_files: roleForm.can_download_others_files ? roleForm.can_download_others_files.checked : false,
     can_delete_others_files: roleForm.can_delete_others_files ? roleForm.can_delete_others_files.checked : false,
+    can_set_user_file_size_cap: roleForm.can_set_user_file_size_cap ? roleForm.can_set_user_file_size_cap.checked : false,
+    max_file_size_bytes: (() => {
+      const el = roleForm.max_file_size_mb;
+      if (!el || el.value === '') return null;
+      const mb = Number(el.value);
+      return mb > 0 ? Math.round(mb * 1024 * 1024) : 0;
+    })(),
   };
   try {
     if (id) await api.patch(`/roles/${id}`, data);

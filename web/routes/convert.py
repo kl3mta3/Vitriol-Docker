@@ -95,7 +95,9 @@ async def submit_conversion(
         raise HTTPException(status_code=429, detail=f"Daily limit reached ({count}/{limit}).")
 
     s: Optional[ServerSettings] = db.query(ServerSettings).get(1)
-    max_size = s.max_file_size_bytes if s else 1024 * 1024 * 1024
+    # Effective cap is three-tier: per-user override > custom-role
+    # override > server-wide default. Super admin → unlimited (None).
+    max_size = quotas.max_file_size_for(user, s)
 
     src_ext = "." + (file.filename.rsplit(".", 1)[-1] if file.filename and "." in file.filename else "bin").lower()
     dst_ext_norm = dst_ext if dst_ext.startswith(".") else "." + dst_ext
@@ -119,7 +121,9 @@ async def submit_conversion(
             if not chunk:
                 break
             bytes_in += len(chunk)
-            if bytes_in > max_size:
+            # max_size = None → unlimited (super admin path). Only
+            # enforce when a real cap is set for this user's tier.
+            if max_size is not None and bytes_in > max_size:
                 out.close()
                 src_path.unlink(missing_ok=True)
                 raise HTTPException(status_code=413, detail=f"File exceeds max size ({max_size} bytes).")

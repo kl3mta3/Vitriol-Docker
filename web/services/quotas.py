@@ -23,6 +23,30 @@ def daily_limit_for(user: User, settings: ServerSettings) -> Optional[int]:
     return 0
 
 
+def max_file_size_for(user: User, settings: ServerSettings) -> Optional[int]:
+    """Three-tier resolution for max upload size, most specific wins:
+
+    1. ``user.max_file_size_bytes`` (per-user override set by admin
+       with the ``set_user_file_size_cap`` capability)
+    2. ``user.custom_role.max_file_size_bytes`` (per-role override)
+    3. ``settings.max_file_size_bytes`` (server-wide default)
+
+    Super admin is always unlimited (returns ``None``) — the cap
+    exists to protect non-privileged users from accidentally uploading
+    a 50 GB file, not to gate the operator's own diagnostic work.
+
+    Returns ``None`` to mean "no limit"; otherwise an integer byte count
+    that the caller compares against the incoming upload size.
+    """
+    if user.role == Role.super_admin:
+        return None
+    if user.max_file_size_bytes is not None:
+        return user.max_file_size_bytes
+    if user.custom_role is not None and user.custom_role.max_file_size_bytes is not None:
+        return user.custom_role.max_file_size_bytes
+    return settings.max_file_size_bytes if settings else None
+
+
 def rate_limit_for(user: User, settings: ServerSettings) -> int:
     if user.rate_limit_per_minute is not None:
         return user.rate_limit_per_minute

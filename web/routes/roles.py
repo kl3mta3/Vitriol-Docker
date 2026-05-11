@@ -53,6 +53,8 @@ def _to_out(cr: CustomRole, user_count: int) -> CustomRoleOut:
         can_view_others_files=cr.can_view_others_files,
         can_download_others_files=cr.can_download_others_files,
         can_delete_others_files=cr.can_delete_others_files,
+        can_set_user_file_size_cap=cr.can_set_user_file_size_cap,
+        max_file_size_bytes=cr.max_file_size_bytes,
         created_at=cr.created_at,
         user_count=user_count,
     )
@@ -84,6 +86,9 @@ def _enforce_admin_only_flags(payload, base: Role) -> None:
         # someone else's outputs requires the base to permit it.
         "can_view_others_files", "can_download_others_files",
         "can_delete_others_files",
+        # Editing another user's max_file_size_bytes is admin-tier too;
+        # a user-base role can never grant cross-user write access.
+        "can_set_user_file_size_cap",
     )
     on = [f for f in admin_only if getattr(payload, f, False)]
     if on:
@@ -124,6 +129,7 @@ def create_role(
         self_compile_enabled=req.self_compile_enabled,
         daily_conversion_limit=req.daily_conversion_limit,
         rate_limit_per_minute=req.rate_limit_per_minute,
+        max_file_size_bytes=req.max_file_size_bytes if req.max_file_size_bytes and req.max_file_size_bytes > 0 else None,
         can_create_user=req.can_create_user,
         can_suspend_user=req.can_suspend_user,
         can_ban_user=req.can_ban_user,
@@ -137,6 +143,7 @@ def create_role(
         can_view_others_files=req.can_view_others_files,
         can_download_others_files=req.can_download_others_files,
         can_delete_others_files=req.can_delete_others_files,
+        can_set_user_file_size_cap=req.can_set_user_file_size_cap,
         created_by_user_id=actor.id,
     )
     db.add(cr)
@@ -173,6 +180,7 @@ def update_role(
         "can_restart_server", "can_view_users_tab", "can_reset_other_creds",
         "can_view_own_files", "can_view_others_files",
         "can_download_others_files", "can_delete_others_files",
+        "can_set_user_file_size_cap",
     )
     for f in bool_fields:
         v = getattr(req, f)
@@ -182,6 +190,9 @@ def update_role(
         cr.daily_conversion_limit = req.daily_conversion_limit
     if req.rate_limit_per_minute is not None:
         cr.rate_limit_per_minute = req.rate_limit_per_minute
+    if req.max_file_size_bytes is not None:
+        # 0 clears the role-level override; positive sets it.
+        cr.max_file_size_bytes = req.max_file_size_bytes if req.max_file_size_bytes > 0 else None
 
     # Re-validate after applying changes.
     _enforce_admin_only_flags(cr, cr.base_role)
