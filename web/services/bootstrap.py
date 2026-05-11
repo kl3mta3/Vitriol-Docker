@@ -329,6 +329,23 @@ _ADDITIVE_COLUMNS: list[tuple[str, str, str]] = [
     # verification step. Default OFF; requires SMTP configured + tested.
     ("server_settings", "password_reset_via_email",
      "ALTER TABLE server_settings ADD COLUMN password_reset_via_email BOOLEAN NOT NULL DEFAULT 0"),
+    # Operator-customizable brand title + link shown in the nav. NULL =
+    # fall back to the built-in "VITRIOL → vitriol.rocks" pairing at
+    # render time, so existing deploys without explicit values keep the
+    # same look they had before.
+    ("server_settings", "brand_title",
+     "ALTER TABLE server_settings ADD COLUMN brand_title VARCHAR(64)"),
+    ("server_settings", "brand_link",
+     "ALTER TABLE server_settings ADD COLUMN brand_link VARCHAR(512)"),
+    # Operator-uploaded logo filename. File lives under
+    # {data_dir}/branding/; column is NULL when no upload exists and
+    # the bundled default SVG is served instead.
+    ("server_settings", "brand_logo_filename",
+     "ALTER TABLE server_settings ADD COLUMN brand_logo_filename VARCHAR(255)"),
+    # Per-user toggle for the alchemy SVG border. Default ON so existing
+    # users see the same visual they had before the column existed.
+    ("users", "show_border",
+     "ALTER TABLE users ADD COLUMN show_border BOOLEAN NOT NULL DEFAULT 1"),
 ]
 
 

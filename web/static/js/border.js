@@ -79,6 +79,16 @@
     const svg = document.getElementById("alchemy-border");
     if (!svg) return;
 
+    // Per-user opt-out — read `data-show-border` on <html>. Default
+    // (missing attribute or value="on") renders. value="off" wipes
+    // the SVG and stops. The MutationObserver below picks up changes
+    // to this attribute so the flip is live, no reload needed.
+    const showBorder = document.documentElement.getAttribute("data-show-border");
+    if (showBorder === "off") {
+      svg.innerHTML = "";
+      return;
+    }
+
     const w = window.innerWidth;
     const h = window.innerHeight;
 
@@ -245,7 +255,7 @@
       const obs = new MutationObserver(() => renderBorder());
       obs.observe(document.documentElement, {
         attributes: true,
-        attributeFilter: ["data-theme", "class"],
+        attributeFilter: ["data-theme", "data-show-border", "class"],
       });
     } catch (_) {
       // Older browsers without MutationObserver — they'll just keep

@@ -1,5 +1,12 @@
 <!DOCTYPE html>
-<html lang="en"{% if user and user.theme and user.theme != 'default' %} data-theme="{{ user.theme }}"{% endif %}>
+{#- <html> carries two preference attributes:
+      - data-theme       : visual palette (set when user picked a non-default)
+      - data-show-border : "on"/"off" — toggles the alchemy SVG border.
+                           border.js reads this on every render and on
+                           MutationObserver attribute-change.
+    Anonymous pages (signin/signup/reset/forgot — no `user` in context)
+    default to "on" so the brand visual stays present pre-login. -#}
+<html lang="en"{% if user and user.theme and user.theme != 'default' %} data-theme="{{ user.theme }}"{% endif %} data-show-border="{% if user and user.show_border is sameas false %}off{% else %}on{% endif %}">
 <head>
   <meta charset="UTF-8" />
   <meta name="viewport" content="width=device-width, initial-scale=1.0" />
@@ -30,12 +37,18 @@
   {% if user %}
   <nav class="nav">
     <div class="nav-inner">
-      {# Brand link points at the marketing site, not the app home. The
-         "App" entry in nav-links covers in-app navigation back to / —
-         the brand mark is for "take me back to vitriol.rocks". #}
-      <a href="https://vitriol.rocks" class="nav-brand" rel="noopener">
-        <img class="nav-logo" src="/static/img/logo.svg" alt="" width="28" height="28" />
-        <span>VITRIOL</span>
+      {# Brand link points at the marketing site by default, not the
+         app home. The "App" entry in nav-links covers in-app navigation
+         back to /. Both the title text and the target URL are
+         operator-customizable from Server settings → UI. #}
+      <a href="{{ brand_link or 'https://vitriol.rocks' }}" class="nav-brand" rel="noopener">
+        {# Logo URL routes through /api/v1/server/branding/logo so an
+           operator-uploaded file is served when present, falling back
+           to the bundled SVG. ?v={{ v }} forces a cache-bust on app
+           version bumps; uploading a new logo invalidates within ~60s
+           (the GET endpoint sets Cache-Control: public, max-age=60). #}
+        <img class="nav-logo" src="/api/v1/server/branding/logo?v={{ v }}" alt="" width="28" height="28" />
+        <span>{{ brand_title or 'VITRIOL' }}</span>
       </a>
       <div class="nav-links">
         <a href="/">App</a>

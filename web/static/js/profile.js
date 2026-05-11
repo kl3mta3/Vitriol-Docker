@@ -217,4 +217,37 @@ refreshKeys();
       }
     });
   });
+
+  // ---- Alchemy border toggle ----
+  // Read/written via `data-show-border` on <html>. border.js checks
+  // this attribute on every render and skips drawing when it's "off".
+  // The MutationObserver in border.js (already watching data-theme)
+  // also picks up data-show-border changes, so the border vanishes /
+  // reappears instantly without a page reload.
+  const borderToggle = document.getElementById('show-border-toggle');
+  if (borderToggle) {
+    // Apply initial state to <html> for immediate consistency on first
+    // paint. The server-side template already rendered the attribute
+    // (see base.html); this is belt-and-suspenders for the case where
+    // the user toggles, navigates, then comes back.
+    document.documentElement.setAttribute(
+      'data-show-border', borderToggle.checked ? 'on' : 'off'
+    );
+    borderToggle.addEventListener('change', async () => {
+      const on = borderToggle.checked;
+      document.documentElement.setAttribute('data-show-border', on ? 'on' : 'off');
+      msg.hidden = true;
+      try {
+        await api.patch('/me', { show_border: on });
+        msg.textContent = on ? 'Border on.' : 'Border off.';
+        msg.hidden = false;
+      } catch (ex) {
+        // Roll back the visual change if save failed.
+        borderToggle.checked = !on;
+        document.documentElement.setAttribute('data-show-border', !on ? 'on' : 'off');
+        msg.textContent = ex.detail || 'Could not save border preference';
+        msg.hidden = false;
+      }
+    });
+  }
 })();

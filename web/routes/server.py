@@ -10,7 +10,8 @@ from pathlib import Path
 from typing import Optional
 
 import httpx
-from fastapi import APIRouter, BackgroundTasks, Depends, HTTPException
+from fastapi import APIRouter, BackgroundTasks, Depends, File, HTTPException, UploadFile
+from fastapi.responses import FileResponse, RedirectResponse, Response
 from pydantic import BaseModel
 from sqlalchemy.orm import Session
 
@@ -79,6 +80,9 @@ def _to_out(s: ServerSettings) -> ServerSettingsOut:
         oidc_scopes=s.oidc_scopes or "openid email profile",
         public_base_url=s.public_base_url,
         allowed_origin=s.allowed_origin,
+        brand_title=getattr(s, "brand_title", None),
+        brand_link=getattr(s, "brand_link", None),
+        brand_logo_set=bool(getattr(s, "brand_logo_filename", None)),
         ssl_cert_pull_webhook_url=s.ssl_cert_pull_webhook_url,
         ssl_cert_pull_webhook_secret_set=bool(s.ssl_cert_pull_webhook_secret_enc),
         ssl_cert_pull_mode=s.ssl_cert_pull_mode or "webhook",
@@ -176,6 +180,7 @@ def patch_server_settings(
         "oidc_enabled", "oidc_display_name", "oidc_issuer", "oidc_client_id",
         "oidc_scopes",
         "public_base_url", "allowed_origin",
+        "brand_title", "brand_link",
         "ssl_cert_pull_webhook_url",
         "ssl_cert_pull_mode", "ssl_cert_pull_script", "ssl_cert_pull_auto_days",
         "ssl_cert_pull_webhook_method", "ssl_cert_pull_webhook_header_name",
@@ -566,3 +571,154 @@ async def refresh_certs(actor: User = Depends(require_super_admin), db: Session 
         raise HTTPException(status_code=502, detail=str(e))
     audit.log(db, actor.id, "ssl_certs_refresh", metadata={"status": msg})
     return MessageResponse(message=msg)
+
+
+# --------------------------------------------------------- branding logo
+#
+# Operator-uploaded nav logo. Lives under `{data_dir}/branding/` so it
+# survives container restarts on the persistent volume (same place the
+# SQLite DB and cert chain live). The filename — not the full path —
+# is stored on ServerSettings so a /data path rename doesn't invalidate
+# the row. When no upload exists, the GET endpoint redirects to the
+# bundled /static/img/logo.svg.
+
+# Lightweight MIME → extension whitelist. Anything outside this set is
+# refused at upload time. Extensions are normalized so the served
+# Content-Type is honest about what the file actually is.
+_ALLOWED_LOGO_TYPES = {
+    "image/svg+xml":  ".svg",
+    "image/png":      ".png",
+    "image/jpeg":     ".jpg",
+    "image/webp":     ".webp",
+    "image/gif":      ".gif",
+}
+
+_LOGO_MAX_BYTES = 1 * 1024 * 1024   # 1 MB — logos shouldn't be huge
+
+
+def _branding_dir() -> Path:
+    p = _cfg.data_dir / "branding"
+    p.mkdir(parents=True, exist_ok=True)
+    return p
+
+
+@router.get("/branding/logo")
+def get_branding_logo(db: Session = Depends(get_db)):
+    """Public — every authed page renders the nav logo via this URL.
+
+    Resolves in priority order:
+      1. The operator-uploaded file at ``{data_dir}/branding/{filename}``
+         if both the column and the on-disk file exist.
+      2. Redirect to the bundled /static/img/logo.svg fallback.
+
+    Cache-Control allows short browser caching but lets a logo upload
+    propagate within ~60 s; an aggressive cache here would mean a logo
+    change takes a hard refresh to show up.
+    """
+    s = db.query(ServerSettings).get(1)
+    filename = getattr(s, "brand_logo_filename", None) if s else None
+    if filename:
+        target = _branding_dir() / filename
+        if target.exists():
+            # Honest Content-Type from the extension; FileResponse
+            # also handles ETag + Content-Length automatically.
+            ext = target.suffix.lower()
+            media_type = next(
+                (mt for mt, e in _ALLOWED_LOGO_TYPES.items() if e == ext),
+                "application/octet-stream",
+            )
+            resp = FileResponse(target, media_type=media_type)
+            resp.headers["Cache-Control"] = "public, max-age=60"
+            return resp
+    # Fallback — bundled default. 302 so the browser caches it under
+    # the static URL (which has long-lived caching) on next request.
+    return RedirectResponse(url="/static/img/logo.svg", status_code=302)
+
+
+@router.post("/branding/logo", response_model=ServerSettingsOut)
+async def upload_branding_logo(
+    file: UploadFile = File(...),
+    actor: User = Depends(require_super_admin),
+    db: Session = Depends(get_db),
+):
+    """Super-admin only. Accepts a single image file, validates type +
+    size, stores under ``{data_dir}/branding/logo.<ext>`` (overwriting
+    any prior upload), and points the ServerSettings row at it."""
+    if file.content_type not in _ALLOWED_LOGO_TYPES:
+        raise HTTPException(
+            status_code=400,
+            detail=(
+                f"Unsupported logo type {file.content_type!r}. "
+                f"Allowed: {sorted(_ALLOWED_LOGO_TYPES.keys())}."
+            ),
+        )
+    ext = _ALLOWED_LOGO_TYPES[file.content_type]
+    # Read into memory — logos are bounded by _LOGO_MAX_BYTES, so this
+    # is fine. Streaming would just complicate size enforcement.
+    raw = await file.read()
+    if len(raw) > _LOGO_MAX_BYTES:
+        raise HTTPException(
+            status_code=413,
+            detail=f"Logo exceeds max size ({_LOGO_MAX_BYTES:,} bytes).",
+        )
+    if len(raw) == 0:
+        raise HTTPException(status_code=400, detail="Logo file is empty.")
+    # Light SVG scrub — strip <script> and on*= attribute prefixes.
+    # The nav renders the logo via <img src>, where browsers don't
+    # execute SVG-embedded JS anyway, but this scrub is cheap and
+    # protects against any future caller that inlines the SVG.
+    if ext == ".svg":
+        try:
+            text = raw.decode("utf-8", errors="replace")
+            import re
+            text = re.sub(r"<script\b[^>]*>.*?</script\s*>", "", text, flags=re.IGNORECASE | re.DOTALL)
+            text = re.sub(r'\son[a-z]+\s*=\s*"[^"]*"', "", text, flags=re.IGNORECASE)
+            text = re.sub(r"\son[a-z]+\s*=\s*'[^']*'", "", text, flags=re.IGNORECASE)
+            raw = text.encode("utf-8")
+        except Exception:
+            # If decode fails it's not a real SVG — bail.
+            raise HTTPException(status_code=400, detail="SVG file could not be parsed.")
+
+    # Delete any previous upload (might have a different extension) so
+    # the directory doesn't accumulate orphans.
+    s = db.query(ServerSettings).get(1)
+    prior = getattr(s, "brand_logo_filename", None) if s else None
+    if prior:
+        try:
+            (_branding_dir() / prior).unlink(missing_ok=True)
+        except OSError:
+            pass
+
+    target_name = f"logo{ext}"
+    (_branding_dir() / target_name).write_bytes(raw)
+    if s is not None:
+        s.brand_logo_filename = target_name
+        s.updated_by_user_id = actor.id
+        db.commit()
+        db.refresh(s)
+    audit.log(db, actor.id, "branding_logo_upload",
+              metadata={"filename": target_name, "bytes": len(raw), "content_type": file.content_type})
+    return _to_out(s)
+
+
+@router.delete("/branding/logo", response_model=ServerSettingsOut)
+def delete_branding_logo(
+    actor: User = Depends(require_super_admin),
+    db: Session = Depends(get_db),
+):
+    """Revert to the bundled default logo. Deletes the operator
+    upload from disk and clears the filename column."""
+    s = db.query(ServerSettings).get(1)
+    filename = getattr(s, "brand_logo_filename", None) if s else None
+    if filename:
+        try:
+            (_branding_dir() / filename).unlink(missing_ok=True)
+        except OSError:
+            pass
+    if s is not None:
+        s.brand_logo_filename = None
+        s.updated_by_user_id = actor.id
+        db.commit()
+        db.refresh(s)
+    audit.log(db, actor.id, "branding_logo_delete")
+    return _to_out(s)

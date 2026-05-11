@@ -73,6 +73,7 @@ class UserOut(BaseModel):
     #   {"max_files", "max_age", "age_unit", "delete_on_download"}.
     output_retention: Optional[dict] = None
     theme: str = "default"
+    show_border: bool = True
     custom_role_id: Optional[int] = None
     custom_role_name: Optional[str] = None
     # Surfaced as a boolean rather than the hash itself so the UI can
@@ -134,6 +135,7 @@ class SelfUpdateRequest(BaseModel):
     last_name: Optional[str] = Field(default=None, max_length=128)
     email: Optional[EmailStr] = None
     theme: Optional[str] = Field(default=None, max_length=32)
+    show_border: Optional[bool] = None
 
 
 class CredentialResetRequest(BaseModel):
@@ -245,6 +247,12 @@ class ServerSettingsOut(BaseModel):
     oidc_scopes: str = "openid email profile"
     public_base_url: Optional[str]
     allowed_origin: Optional[str]
+    brand_title: Optional[str] = None
+    brand_link: Optional[str] = None
+    # Surfaced as a boolean — the actual filename + bytes aren't useful
+    # to the UI, only "is a custom logo set" so the admin page can show
+    # a preview + "Reset to default" button vs an empty drop zone.
+    brand_logo_set: bool = False
     ssl_cert_pull_webhook_url: Optional[str]
     ssl_cert_pull_webhook_secret_set: bool = False
     ssl_cert_pull_mode: str = "webhook"
@@ -326,6 +334,8 @@ class ServerSettingsPatch(BaseModel):
     oidc_scopes: Optional[str] = None
     public_base_url: Optional[str] = None
     allowed_origin: Optional[str] = None
+    brand_title: Optional[str] = None
+    brand_link: Optional[str] = None
     ssl_cert_pull_webhook_url: Optional[str] = None
     ssl_cert_pull_webhook_secret: Optional[str] = None
     ssl_cert_pull_mode: Optional[str] = None

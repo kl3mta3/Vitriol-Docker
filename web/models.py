@@ -133,6 +133,12 @@ class User(Base):
 
     # User-facing theme preference. One of THEMES (web/static/css/theme.css).
     theme = Column(String(32), nullable=False, default="default")
+    # Per-user toggle for the alchemy SVG border around the viewport.
+    # Default ON — the border is the project's signature visual. Users
+    # who find it distracting or are on small screens where it's cramped
+    # can flip it off in Profile. Read by base.html into a data-attribute
+    # that border.js checks before rendering.
+    show_border = Column(Boolean, nullable=False, default=True, server_default="1")
 
     # Optional custom role overlay. When set, capability checks consult
     # the linked CustomRole (capped at its base_role's ceiling) instead
@@ -628,6 +634,28 @@ class ServerSettings(Base):
 
     public_base_url = Column(String(255), nullable=True)   # used in email links
     allowed_origin = Column(String(255), nullable=True)    # Host-header lock
+
+    # ----------------------------------------------------- branding
+    # Operator-visible brand identity. Default keeps the legacy
+    # "VITRIOL → vitriol.rocks" pairing so existing deploys aren't
+    # surprised by a rename. NULL falls back to the same defaults at
+    # render time.
+    #
+    # brand_title — what shows as the nav brand text (visible top-left
+    #               of every authed page).
+    # brand_link  — where clicking the brand text/logo navigates.
+    #               Typical use cases: operator's own marketing site,
+    #               internal portal, or "javascript:void(0)" to disable
+    #               the link entirely.
+    brand_title = Column(String(64), nullable=True)
+    brand_link = Column(String(512), nullable=True)
+    # Filename of an operator-uploaded logo stored under
+    # ``{data_dir}/branding/``. NULL = no custom logo uploaded, falls
+    # back to the bundled /static/img/logo.svg at render time. Only the
+    # base filename is stored (not the full path) so a /data path
+    # rename doesn't invalidate the column. Extension determines
+    # Content-Type when serving via /api/v1/server/branding/logo.
+    brand_logo_filename = Column(String(255), nullable=True)
 
     ssl_cert_pull_webhook_url = Column(String(512), nullable=True)
     ssl_cert_pull_webhook_secret_enc = Column(Text, nullable=True)

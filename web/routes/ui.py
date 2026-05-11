@@ -48,6 +48,11 @@ def _common_ctx(request: Request, user: Optional[User], db: Session) -> dict:
         # verification step when this is on. Only meaningful when SMTP
         # is healthy; the admin UI greys the toggle out otherwise.
         "password_reset_via_email": bool(getattr(s, "password_reset_via_email", False)) if s else False,
+        # Brand identity for the nav. Falls back to the legacy
+        # "VITRIOL → vitriol.rocks" pairing when the operator hasn't
+        # customized them (NULL columns or no row yet).
+        "brand_title": (getattr(s, "brand_title", None) if s else None) or "VITRIOL",
+        "brand_link": (getattr(s, "brand_link", None) if s else None) or "https://vitriol.rocks",
         "show_users_tab": user is not None and has_capability(user, CAN_VIEW_USERS_TAB),
         "show_server_tab": user is not None and has_capability(user, CAN_VIEW_SERVER_TAB),
         "show_files_tab": user is not None and has_capability(user, CAN_VIEW_OWN_FILES),

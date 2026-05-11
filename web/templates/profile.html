@@ -27,6 +27,10 @@
       <button class="theme-swatch" data-theme="parchment" title="Parchment — light"><span class="sw bg-parchment"></span><em>Parchment</em></button>
       <button class="theme-swatch" data-theme="obsidian" title="Obsidian — minimalist dark"><span class="sw bg-obsidian"></span><em>Obsidian</em></button>
     </div>
+    <label class="checkbox-row" style="margin-top: 12px;">
+      <input type="checkbox" id="show-border-toggle" {% if user.show_border %}checked{% endif %} />
+      <span>Show alchemy border <em class="muted small">(the planetary symbols + frame around the viewport)</em></span>
+    </label>
     <p id="theme-msg" class="ok" hidden></p>
   </div>
 

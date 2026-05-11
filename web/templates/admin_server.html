@@ -36,6 +36,40 @@
       </p>
     </details>
 
+    <details name="server-settings"><summary>UI</summary>
+      <p class="muted small" style="margin-bottom: 8px;">
+        Operator-visible brand text shown in the top-left of every
+        authed page and the URL it links to. Blank in either field
+        falls back to the default <code>VITRIOL → vitriol.rocks</code>
+        pairing.
+      </p>
+      <div class="grid-2">
+        <label>
+          <span>Brand title</span>
+          <input name="brand_title" type="text" maxlength="64" placeholder="VITRIOL" />
+        </label>
+        <label>
+          <span>Brand link <em class="muted small">(where clicking the title goes)</em></span>
+          <input name="brand_link" type="text" maxlength="512" placeholder="https://vitriol.rocks" />
+        </label>
+      </div>
+
+      <p class="muted small" style="margin: 16px 0 8px;">
+        <strong>Server logo.</strong> Replaces the bundled SVG shown next
+        to the brand title. SVG / PNG / JPEG / WebP / GIF, up to 1 MB.
+        Stored on the persistent volume — survives container restarts.
+      </p>
+      <div class="logo-upload-row" style="display: flex; gap: 16px; align-items: center; flex-wrap: wrap;">
+        <img id="logo-preview" src="/api/v1/server/branding/logo?v={{ v }}"
+             alt="Current logo" width="48" height="48"
+             style="border: 1px solid var(--border-2); border-radius: var(--radius); padding: 6px; background: var(--surface-2);" />
+        <input type="file" id="logo-file-input" accept="image/svg+xml,image/png,image/jpeg,image/webp,image/gif" />
+        <button type="button" id="logo-upload-btn" class="btn btn-secondary">Upload logo</button>
+        <button type="button" id="logo-reset-btn" class="btn btn-ghost" hidden>Reset to default</button>
+      </div>
+      <p id="logo-msg" class="muted small" style="margin-top: 6px;" hidden></p>
+    </details>
+
     <details name="server-settings"><summary>Sign-up &amp; Sign-in</summary>
       <div class="grid-2">
         <label class="checkbox-row"><input type="checkbox" name="allow_signup" /> <span>Allow self sign-up</span></label>

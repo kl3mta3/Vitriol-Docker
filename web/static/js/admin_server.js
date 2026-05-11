@@ -2432,6 +2432,103 @@ if (dbPendingRestartBtn) {
   });
 }
 
+// ============================================================
+//   Branding logo — upload + reset.
+// ============================================================
+//
+// Separate from the form-driven settings PATCH because file uploads
+// need multipart/form-data, not JSON. The "Reset to default" button
+// is only visible when an operator upload exists; toggled by a
+// painter that runs after load() so its initial state matches the
+// settings response.
+
+const logoFileInput = document.getElementById('logo-file-input');
+const logoUploadBtn = document.getElementById('logo-upload-btn');
+const logoResetBtn  = document.getElementById('logo-reset-btn');
+const logoPreview   = document.getElementById('logo-preview');
+const logoMsg       = document.getElementById('logo-msg');
+
+function _setLogoMsg(text, isError) {
+  if (!logoMsg) return;
+  logoMsg.textContent = text;
+  logoMsg.className = (isError ? 'error small' : 'ok small');
+  logoMsg.hidden = !text;
+}
+
+function _bustLogoCache() {
+  // The GET endpoint sets Cache-Control: public, max-age=60 — to make
+  // a new upload visible immediately, append a fresh cache-bust query
+  // param to both the preview img on this page and the nav-logo img
+  // up top. Other pages will pick up the new logo on next navigation.
+  if (logoPreview) {
+    logoPreview.src = `/api/v1/server/branding/logo?_=${Date.now()}`;
+  }
+  const navLogo = document.querySelector('.nav-logo');
+  if (navLogo) navLogo.src = `/api/v1/server/branding/logo?_=${Date.now()}`;
+}
+
+function paintLogoResetVisibility(s) {
+  if (!logoResetBtn) return;
+  logoResetBtn.hidden = !s.brand_logo_set;
+}
+
+if (logoUploadBtn && logoFileInput) {
+  logoUploadBtn.addEventListener('click', async () => {
+    const f = logoFileInput.files && logoFileInput.files[0];
+    if (!f) {
+      _setLogoMsg('Pick a file first.', true);
+      return;
+    }
+    // Quick client-side size check so a 50 MB attempt doesn't waste
+    // a round trip. Server enforces the same 1 MB cap.
+    if (f.size > 1024 * 1024) {
+      _setLogoMsg(`File too large (${(f.size / 1024 / 1024).toFixed(2)} MB). Max 1 MB.`, true);
+      return;
+    }
+    _setLogoMsg('Uploading…', false);
+    logoUploadBtn.disabled = true;
+    try {
+      const fd = new FormData();
+      fd.append('file', f);
+      const r = await fetch('/api/v1/server/branding/logo', {
+        method: 'POST', body: fd, credentials: 'same-origin',
+      });
+      if (!r.ok) {
+        const j = await r.json().catch(() => ({}));
+        throw new Error(j.detail || `Upload failed (${r.status}).`);
+      }
+      _setLogoMsg('Logo uploaded.', false);
+      logoFileInput.value = '';
+      _bustLogoCache();
+      const s = await api.get('/server/settings');
+      paintLogoResetVisibility(s);
+    } catch (ex) {
+      _setLogoMsg(ex.message || 'Upload failed.', true);
+    } finally {
+      logoUploadBtn.disabled = false;
+    }
+  });
+}
+
+if (logoResetBtn) {
+  logoResetBtn.addEventListener('click', async () => {
+    if (!confirm('Reset to the bundled default logo? Your uploaded image will be deleted.')) return;
+    _setLogoMsg('Resetting…', false);
+    logoResetBtn.disabled = true;
+    try {
+      await api.del('/server/branding/logo');
+      _setLogoMsg('Reverted to default.', false);
+      _bustLogoCache();
+      const s = await api.get('/server/settings');
+      paintLogoResetVisibility(s);
+    } catch (ex) {
+      _setLogoMsg(ex.detail || 'Reset failed.', true);
+    } finally {
+      logoResetBtn.disabled = false;
+    }
+  });
+}
+
 // Kick everything off. load() populates the bulk of the form;
 // refreshStorageSection + reloadDbProviders paint the new sections
 // that need post-load wiring (visibility, pills, table render).
@@ -2439,4 +2536,9 @@ if (dbPendingRestartBtn) {
   await load();
   await refreshStorageSection();
   await reloadDbProviders();
+  // Initial visibility for the "Reset to default" button.
+  try {
+    const s = await api.get('/server/settings');
+    paintLogoResetVisibility(s);
+  } catch (_) { /* ignore */ }
 })();
