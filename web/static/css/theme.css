@@ -657,6 +657,13 @@ dialog.manage-dialog {
 #server-form details[open] summary { color: var(--purple-soft); }
 .grid-2 { display: grid; grid-template-columns: repeat(2, 1fr); gap: 12px; margin-top: 12px; }
 .grid-2 label.full, label.full { grid-column: 1 / -1; }
+/* Grid items default to `min-width: auto` which honors the contained
+   input's intrinsic min-width — that's how a 128-char `maxlength`
+   input ends up blowing out of a narrow card column (last name
+   overflowing into the next card on /profile was caused by this).
+   Force the cells to shrink and the inputs to fill them. */
+.grid-2 > * { min-width: 0; }
+.grid-2 input, .grid-2 select, .grid-2 textarea { width: 100%; box-sizing: border-box; }
 .form-actions { display: flex; gap: 12px; align-items: center; margin-top: 16px; }
 
 dialog {

@@ -26,7 +26,26 @@
 
   const PLANETARY_GLYPHS = ["☉", "☽", "☿", "♀", "♂", "♃", "♄"];
   const CORNER_GLYPH = "◆";
-  const HUE = "#a78bfa";
+  // Default fallback hue — exactly the value the original const had
+  // before the theme system existed. Used when --purple-soft isn't
+  // defined on :root (very-early boot, malformed CSS) so the border
+  // never renders invisible.
+  const FALLBACK_HUE = "#a78bfa";
+
+  // Read the active theme's accent color from CSS custom properties.
+  // Each theme defines --purple-soft to its own palette (crimson red,
+  // verdant green, parchment violet, obsidian off-white, etc.), so
+  // calling this at every render makes the alchemy border re-color
+  // automatically when the operator switches themes.
+  function currentHue() {
+    try {
+      const v = getComputedStyle(document.documentElement)
+        .getPropertyValue('--purple-soft').trim();
+      return v || FALLBACK_HUE;
+    } catch (_) {
+      return FALLBACK_HUE;
+    }
+  }
 
   // Layout (px). Tuned for a viewport-scale border.
   const OUTER_INSET = 12;     // outer rectangle inset from viewport edge
@@ -75,6 +94,11 @@
     svg.setAttribute("height", h);
     svg.innerHTML = "";
 
+    // Read the theme accent once per render, then pass it down to
+    // every stroke/fill so a single re-render re-skins the whole
+    // border in the new color.
+    const hue = currentHue();
+
     const outer = {
       x: OUTER_INSET, y: OUTER_INSET,
       w: w - 2 * OUTER_INSET,
@@ -89,12 +113,12 @@
     // --- Two concentric rectangles ---
     svg.appendChild(svgEl("rect", {
       x: outer.x, y: outer.y, width: outer.w, height: outer.h,
-      fill: "none", stroke: HUE,
+      fill: "none", stroke: hue,
       "stroke-opacity": OUTER_ALPHA, "stroke-width": 1,
     }));
     svg.appendChild(svgEl("rect", {
       x: inner.x, y: inner.y, width: inner.w, height: inner.h,
-      fill: "none", stroke: HUE,
+      fill: "none", stroke: hue,
       "stroke-opacity": INNER_ALPHA, "stroke-width": 1,
     }));
 
@@ -113,7 +137,7 @@
     for (let i = 0; i < n; i++) {
       const x = outer.x + CORNER_CLEARANCE + spacing * (i + 0.5);
       drawGlyph(svg, PLANETARY_GLYPHS[glyphIndex % 7], x, topYMid,
-                GLYPH_FONT_PX, GLYPH_ALPHA);
+                GLYPH_FONT_PX, GLYPH_ALPHA, hue);
       glyphIndex++;
     }
     // Right: top -> bottom
@@ -123,7 +147,7 @@
     for (let i = 0; i < n; i++) {
       const y = outer.y + CORNER_CLEARANCE + spacing * (i + 0.5);
       drawGlyph(svg, PLANETARY_GLYPHS[glyphIndex % 7], rightXMid, y,
-                GLYPH_FONT_PX, GLYPH_ALPHA);
+                GLYPH_FONT_PX, GLYPH_ALPHA, hue);
       glyphIndex++;
     }
     // Bottom: right -> left (so the sequence reads clockwise around the page)
@@ -133,7 +157,7 @@
     for (let i = 0; i < n; i++) {
       const x = outer.x + outer.w - CORNER_CLEARANCE - spacing * (i + 0.5);
       drawGlyph(svg, PLANETARY_GLYPHS[glyphIndex % 7], x, botYMid,
-                GLYPH_FONT_PX, GLYPH_ALPHA);
+                GLYPH_FONT_PX, GLYPH_ALPHA, hue);
       glyphIndex++;
     }
     // Left: bottom -> top
@@ -143,7 +167,7 @@
     for (let i = 0; i < n; i++) {
       const y = outer.y + outer.h - CORNER_CLEARANCE - spacing * (i + 0.5);
       drawGlyph(svg, PLANETARY_GLYPHS[glyphIndex % 7], leftXMid, y,
-                GLYPH_FONT_PX, GLYPH_ALPHA);
+                GLYPH_FONT_PX, GLYPH_ALPHA, hue);
       glyphIndex++;
     }
 
@@ -156,18 +180,18 @@
       [outer.x + gap, outer.y + outer.h - gap],
     ];
     for (const [cx, cy] of corners) {
-      drawGlyph(svg, CORNER_GLYPH, cx, cy, CORNER_FONT_PX, CORNER_ALPHA);
+      drawGlyph(svg, CORNER_GLYPH, cx, cy, CORNER_FONT_PX, CORNER_ALPHA, hue);
     }
   }
 
-  function drawGlyph(svg, ch, cx, cy, fontPx, alpha) {
+  function drawGlyph(svg, ch, cx, cy, fontPx, alpha, hue) {
     const t = svgEl("text", {
       x: cx, y: cy,
       "text-anchor": "middle",
       "dominant-baseline": "central",
       "font-size": fontPx,
       "font-family": "system-ui, -apple-system, 'Segoe UI Symbol', sans-serif",
-      fill: HUE,
+      fill: hue,
       "fill-opacity": alpha,
     });
     t.textContent = ch;
@@ -212,9 +236,27 @@
 
   // --- Init ---------------------------------------------------------------
 
+  // Re-render whenever the theme changes (operator clicks a swatch on
+  // the profile page, which toggles `data-theme` on <html>). The
+  // MutationObserver listens directly so we don't need profile.js to
+  // know about us — anyone who flips the attribute triggers a repaint.
+  function watchThemeChanges() {
+    try {
+      const obs = new MutationObserver(() => renderBorder());
+      obs.observe(document.documentElement, {
+        attributes: true,
+        attributeFilter: ["data-theme", "class"],
+      });
+    } catch (_) {
+      // Older browsers without MutationObserver — they'll just keep
+      // whatever color the initial render produced. Not a regression.
+    }
+  }
+
   function init() {
     renderBorder();
     window.addEventListener("resize", onResize, { passive: true });
+    watchThemeChanges();
     setupReveal();
   }
 
