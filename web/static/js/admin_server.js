@@ -993,6 +993,17 @@ if (oidcTbody) loadOidcProviders();
   });
 });
 
+// Listen for "test completed" pings from the SSO test popup so the
+// OIDC table refreshes (showing the new last_test_at stamp) without
+// a full page reload. The popup posts this message right before
+// window.close().
+window.addEventListener('message', (e) => {
+  if (e.origin !== location.origin) return;   // only trust our own origin
+  if (e.data && e.data.type === 'vitriol-sso-test-complete') {
+    loadOidcProviders().catch(() => {});
+  }
+});
+
 // ============================================================
 // Notification channels — multi-row replacement for the old singleton
 // Discord webhook. Same Sonarr-style catalog → per-kind form pattern as

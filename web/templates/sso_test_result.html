@@ -19,7 +19,34 @@
     </tbody>
   </table>
   <div class="auth-foot" style="margin-top: 24px;">
-    <a href="/admin/server" class="btn btn-primary">Back to settings</a>
+    <button type="button" id="close-and-return" class="btn btn-primary">Close</button>
+    <a id="fallback-link" href="/admin/server" class="btn btn-secondary" style="margin-left: 8px;">Back to settings</a>
   </div>
 </section>
+<script>
+  // Notify the opener (the /admin/server tab) that a test completed so
+  // it can refresh the OIDC table — picks up the new last_test_at /
+  // last_test_ok stamps without a full reload. Then close this popup.
+  // The <a> fallback stays visible for users whose browser blocks
+  // ``window.close()`` (Firefox in strict mode, etc.) or who landed
+  // here via a regular tab instead of a popup.
+  (function () {
+    const closeBtn = document.getElementById('close-and-return');
+    if (!closeBtn) return;
+    closeBtn.addEventListener('click', () => {
+      try {
+        if (window.opener && !window.opener.closed) {
+          window.opener.postMessage({ type: 'vitriol-sso-test-complete' }, location.origin);
+        }
+      } catch (_) {}
+      // If we can close, do so; otherwise fall back to the link.
+      try { window.close(); } catch (_) {}
+      // Some browsers ignore close() on tabs not opened by script —
+      // bounce to /admin/server in that case so the user isn't stuck.
+      setTimeout(() => {
+        if (!window.closed) location.href = '/admin/server';
+      }, 200);
+    });
+  })();
+</script>
 {% endblock %}
