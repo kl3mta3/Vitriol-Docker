@@ -356,32 +356,6 @@
       </p>
     </details>
 
-    <!-- Confirmation dialog for the storage-backend flip. The operator
-         must type the exact phrase to enable — a hard stop against
-         accidental clicks. -->
-    <dialog id="storage-confirm-dialog" class="manage-dialog">
-      <form id="storage-confirm-form">
-        <header class="manage-head">
-          <h2 class="display small" id="storage-confirm-title">Activate S3 storage?</h2>
-        </header>
-        <p id="storage-confirm-body" class="muted">
-          New uploads and conversion outputs will go to the configured S3
-          bucket from this moment forward. Files already on local disk
-          remain downloadable until they hit their retention window —
-          this switch does not move or delete them.
-        </p>
-        <p class="muted small">
-          Type <code id="storage-confirm-phrase">enable s3</code> exactly to confirm:
-        </p>
-        <input id="storage-confirm-input" type="text" autocomplete="off" />
-        <p id="storage-confirm-msg" class="error small" hidden></p>
-        <footer class="dialog-actions">
-          <button type="button" class="btn btn-ghost" data-close>Cancel</button>
-          <button type="submit" id="storage-confirm-submit" class="btn btn-primary" disabled>Confirm</button>
-        </footer>
-      </form>
-    </dialog>
-
     <details name="server-settings"><summary>Performance</summary>
       <p class="muted small">
         Worker pool size + how aggressively the conversion engine uses
@@ -434,45 +408,6 @@
       </div>
     </details>
 
-    <!-- Migration progress dialog. Opens automatically when a migration
-         starts; polls /migrate/status every 2s until state != 'running'.
-         Read-only — closes when done; user can dismiss while running
-         but the worker keeps going in the background. -->
-    <dialog id="db-migrate-dialog" class="manage-dialog">
-      <form id="db-migrate-form">
-        <header class="manage-head">
-          <h2 class="display small" id="db-migrate-title">Migrating data…</h2>
-        </header>
-        <p class="muted small">
-          Source DB stays online — only reads are happening on it. This
-          can take several minutes on a large database. Do not click
-          "Restart server" until this finishes.
-        </p>
-        <div style="margin: 12px 0;">
-          <div style="background: rgba(255,255,255,0.06); border-radius: 4px; overflow: hidden; height: 12px;">
-            <div id="db-migrate-bar" style="height: 100%; width: 0%; background: var(--accent, #4a90e2); transition: width 0.4s;"></div>
-          </div>
-          <p class="small" style="margin-top: 6px;">
-            <strong id="db-migrate-pct">0%</strong>
-            <span class="muted">— <span id="db-migrate-counts">0 / 0 rows</span></span>
-            <span class="muted">(<span id="db-migrate-tables">0 / 0 tables</span>)</span>
-            <span class="muted"> — current: <span id="db-migrate-current">—</span></span>
-          </p>
-        </div>
-        <details>
-          <summary class="small">Per-table progress</summary>
-          <table class="retention-table" id="db-migrate-pertable">
-            <thead><tr><th>Table</th><th>Copied</th><th>Total</th></tr></thead>
-            <tbody></tbody>
-          </table>
-        </details>
-        <p id="db-migrate-msg" class="muted small" hidden></p>
-        <footer class="dialog-actions">
-          <button type="button" class="btn btn-ghost" data-close>Close <em class="muted small">(migration keeps running)</em></button>
-        </footer>
-      </form>
-    </dialog>
-
     <details name="server-settings"><summary>Self-compile defaults</summary>
       <label class="checkbox-row"><input type="checkbox" name="super_admin_can_self_compile" /> <span>Super admin can self-compile</span></label>
       <label class="checkbox-row"><input type="checkbox" name="admin_can_self_compile" /> <span>Admins can self-compile</span></label>
@@ -502,6 +437,74 @@
     </div>
   </form>
 </section>
+
+<!-- Confirmation dialog for the storage-backend flip. The operator must
+     type the exact phrase to enable — a hard stop against accidental
+     clicks. Lives outside the server-form so the nested <form> doesn't
+     confuse the outer form parser (which was breaking the styling of
+     every <details> after Storage). -->
+<dialog id="storage-confirm-dialog" class="manage-dialog">
+  <form id="storage-confirm-form">
+    <header class="manage-head">
+      <h2 class="display small" id="storage-confirm-title">Activate S3 storage?</h2>
+    </header>
+    <p id="storage-confirm-body" class="muted">
+      New uploads and conversion outputs will go to the configured S3
+      bucket from this moment forward. Files already on local disk
+      remain downloadable until they hit their retention window —
+      this switch does not move or delete them.
+    </p>
+    <p class="muted small">
+      Type <code id="storage-confirm-phrase">enable s3</code> exactly to confirm:
+    </p>
+    <input id="storage-confirm-input" type="text" autocomplete="off" />
+    <p id="storage-confirm-msg" class="error small" hidden></p>
+    <footer class="dialog-actions">
+      <button type="button" class="btn btn-ghost" data-close>Cancel</button>
+      <button type="submit" id="storage-confirm-submit" class="btn btn-primary" disabled>Confirm</button>
+    </footer>
+  </form>
+</dialog>
+
+<!-- Migration progress dialog. Opens automatically when a migration
+     starts; polls /migrate/status every 2s until state != 'running'.
+     Read-only — closes when done; user can dismiss while running but
+     the worker keeps going in the background. Outside the server-form
+     for the same reason as storage-confirm-dialog above. -->
+<dialog id="db-migrate-dialog" class="manage-dialog">
+  <form id="db-migrate-form">
+    <header class="manage-head">
+      <h2 class="display small" id="db-migrate-title">Migrating data…</h2>
+    </header>
+    <p class="muted small">
+      Source DB stays online — only reads are happening on it. This
+      can take several minutes on a large database. Do not click
+      "Restart server" until this finishes.
+    </p>
+    <div style="margin: 12px 0;">
+      <div style="background: rgba(255,255,255,0.06); border-radius: 4px; overflow: hidden; height: 12px;">
+        <div id="db-migrate-bar" style="height: 100%; width: 0%; background: var(--accent, #4a90e2); transition: width 0.4s;"></div>
+      </div>
+      <p class="small" style="margin-top: 6px;">
+        <strong id="db-migrate-pct">0%</strong>
+        <span class="muted">— <span id="db-migrate-counts">0 / 0 rows</span></span>
+        <span class="muted">(<span id="db-migrate-tables">0 / 0 tables</span>)</span>
+        <span class="muted"> — current: <span id="db-migrate-current">—</span></span>
+      </p>
+    </div>
+    <details>
+      <summary class="small">Per-table progress</summary>
+      <table class="retention-table" id="db-migrate-pertable">
+        <thead><tr><th>Table</th><th>Copied</th><th>Total</th></tr></thead>
+        <tbody></tbody>
+      </table>
+    </details>
+    <p id="db-migrate-msg" class="muted small" hidden></p>
+    <footer class="dialog-actions">
+      <button type="button" class="btn btn-ghost" data-close>Close <em class="muted small">(migration keeps running)</em></button>
+    </footer>
+  </form>
+</dialog>
 
 <!-- OIDC provider catalog — Sonarr-style picker shown BEFORE the bare
      add/edit form. Each card pre-fills the form with the chosen

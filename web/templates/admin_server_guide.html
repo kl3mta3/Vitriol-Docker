@@ -94,6 +94,9 @@
       <li><a href="#secret-key">Server secret key</a></li>
       <li><a href="#ssl">SSL cert pull</a></li>
       <li><a href="#retention">Output retention</a></li>
+      <li><a href="#storage">Storage (local / S3)</a></li>
+      <li><a href="#performance">Performance</a></li>
+      <li><a href="#db-providers">Database providers</a></li>
       <li><a href="#self-compile">Self-compile defaults</a></li>
       <li><a href="#export-import">Export / import settings</a></li>
       <li><a href="#roles">Roles &amp; permissions</a></li>
@@ -662,6 +665,150 @@ User:        20 files, 24 hours      — strictest tier</pre>
     <div class="callout">
       Retention deletes the file on disk; the job row stays in the database
       for audit purposes. Files removed by cleanup don't appear in the Files tab.
+    </div>
+  </details>
+
+  <!-- ============================================== Storage -->
+  <details id="storage">
+    <summary>Storage (local / S3)</summary>
+    <p>Where converted outputs and uploaded sources physically live.</p>
+    <ul>
+      <li>
+        <strong>Local disk (default)</strong> — files land in <code>/data/uploads/</code> and
+        <code>/data/outputs/</code> on the container's persistent volume. No setup required;
+        this is what every install starts on and what you want unless you've outgrown
+        a single host's disk.
+      </li>
+      <li>
+        <strong>S3-compatible</strong> — points the app at AWS S3, MinIO, Backblaze B2,
+        Cloudflare R2, or any other endpoint that speaks the S3 API. New writes go to
+        the configured bucket; files already on local disk remain downloadable until they
+        age out via retention.
+      </li>
+    </ul>
+
+    <h4>The two-step activation flow (intentional)</h4>
+    <p>
+      Filling in S3 fields and clicking Save <em>does not</em> change anything — it just
+      saves the credentials so they're ready when you decide to flip. Activation is a
+      separate, gated decision:
+    </p>
+    <ol>
+      <li><strong>Fill in the fields</strong> (Endpoint URL, Bucket, Region, Access key, Secret key, optional Path prefix) and click <strong>Save settings</strong>.</li>
+      <li><strong>Test connection</strong> — runs <code>head_bucket</code> against the saved credentials. Activation stays disabled until this succeeds.</li>
+      <li><strong>Activate S3</strong> — opens a confirmation dialog. Type <code>enable s3</code> exactly to confirm.</li>
+      <li>The "Active backend" readout flips to <code>S3 (bucket)</code> and new conversions start writing there immediately. No restart needed — the storage backend is cache-invalidated on every settings PATCH.</li>
+    </ol>
+
+    <h4>Reverting</h4>
+    <p>
+      The <strong>Revert to local</strong> button appears once S3 is active. It also
+      requires a typed confirmation (<code>use local</code>) so you can't accidentally
+      flip both directions in a session. After reverting, files left in the bucket
+      remain downloadable as long as the credentials are still valid — only new writes
+      go back to <code>/data</code>.
+    </p>
+
+    <h4>Endpoint examples</h4>
+    <ul>
+      <li><strong>AWS S3</strong> — leave Endpoint URL blank, set Region to the bucket's region (<code>us-east-1</code> etc.). Path-style URLs off.</li>
+      <li><strong>MinIO</strong> — Endpoint URL = <code>https://minio.example.com</code>, Region = anything (<code>us-east-1</code> works), Path-style URLs <em>on</em>.</li>
+      <li><strong>Backblaze B2</strong> — Endpoint URL = <code>https://s3.us-east-005.backblazeb2.com</code> (region-prefixed), Region matches the URL, Path-style off.</li>
+      <li><strong>Cloudflare R2</strong> — Endpoint URL = <code>https://&lt;account-id&gt;.r2.cloudflarestorage.com</code>, Region = <code>auto</code>, Path-style off.</li>
+    </ul>
+
+    <div class="callout">
+      The S3 secret key is encrypted at rest with the server's secret key, same
+      treatment as SMTP / OAuth / OIDC client secrets. Rotating the server secret
+      key re-encrypts this value in place.
+    </div>
+  </details>
+
+  <!-- ============================================== Performance -->
+  <details id="performance">
+    <summary>Performance</summary>
+    <p>Two knobs that govern how the conversion engine uses host resources.</p>
+    <ul>
+      <li>
+        <strong>Max concurrent conversions</strong> — number of worker threads that
+        process queued jobs. Default 3. Higher values let more conversions run in
+        parallel but compete for CPU + RAM + disk. <em>Applies on restart</em> —
+        the underlying <code>ThreadPoolExecutor</code> isn't resizable while running.
+      </li>
+      <li>
+        <strong>Streaming safety divisor</strong> — divides available RAM to compute
+        the in-memory budget. Default 4 (75&nbsp;% headroom for everything else in
+        the process). Lower values (2–3) let the engine load larger inputs into
+        memory before falling back to the streaming path (faster but more RAM use);
+        higher values (5–8) trigger streaming earlier (slower but kinder to memory).
+        Takes effect on the next conversion — no restart needed.
+      </li>
+    </ul>
+    <div class="callout">
+      The streaming-vs-in-memory choice is internal to the engine and never rejects
+      a job — it just picks the slower code path when in-memory would blow the budget.
+      A "too conservative" divisor makes large jobs slower, not failed.
+    </div>
+  </details>
+
+  <!-- ============================================== Database providers -->
+  <details id="db-providers">
+    <summary>Database providers</summary>
+    <p>
+      Operator-defined alternative databases (PostgreSQL, MySQL, MariaDB, SQL Server,
+      or a different SQLite file). Lets you test, prepare, copy data into, and
+      promote a new database — all without ever leaving the admin UI.
+    </p>
+
+    <h4>What the section does <em>not</em> do</h4>
+    <p>
+      Saving a provider row is metadata only — it does <strong>not</strong> change
+      the running database. The current DB stays serving every request until you
+      complete the full activation flow (test → init → optionally migrate → set
+      active → restart). At any step before Restart you can back out with zero
+      consequence; the original database is untouched.
+    </p>
+
+    <h4>End-to-end flow</h4>
+    <ol>
+      <li><strong>Add provider</strong> — pick a kind from the dropdown (PostgreSQL, MySQL, MariaDB, SQL Server, or SQLite), fill in host / port / user / db_name / password (SQLite just needs a file path). Save.</li>
+      <li><strong>Test connection</strong> — opens a SQLAlchemy connection and runs <code>SELECT 1</code>. Stamps <code>last_test_ok</code> on the row.</li>
+      <li><strong>Create blank DB</strong> — issues <code>CREATE DATABASE</code> against the server-level database with the same credentials. Idempotent: returns 200 if the database already exists. SQLite: just touches the file.</li>
+      <li><strong>Initialize schema</strong> — connects to the target and runs <code>Base.metadata.create_all</code>. Produces every Vitriol table with no rows. Stamps <code>last_init_at</code>.</li>
+      <li><strong>Try migrate</strong> (optional, but recommended before switching) — kicks off a background worker that copies every row from the <em>currently running</em> DB into the target. Source stays online and only reads happen on it. A progress dialog opens with rows-copied / total + per-table breakdown. Target must be empty (refused otherwise — drop + re-init to retry).</li>
+      <li><strong>Set as active</strong> — types <code>set active</code> to confirm. Writes the resolved URL to <code>/data/active_db.url</code>. A "Pending switch" banner appears at the top of the section.</li>
+      <li><strong>Restart server</strong> — the banner button hits <code>/server/restart</code>. On reboot, <code>web/db.py</code> reads the active-db file; if the target is unreachable it logs loudly and falls back to <code>DATABASE_URL</code> / SQLite, so you stay reachable.</li>
+    </ol>
+
+    <h4>Snapshot current DB</h4>
+    <p>
+      The <strong>Snapshot current DB</strong> button at the bottom of the section is a
+      one-click backup: it auto-creates a SQLite provider pointed at
+      <code>/data/vitriol-snapshot-&lt;timestamp&gt;.db</code>, initializes its schema,
+      and starts a copy of the running DB into it. Source stays online throughout.
+      The resulting file is a single-file portable backup you can <code>scp</code> off.
+      You can also click <strong>Set as active → Restart</strong> on the snapshot row
+      to promote it (e.g. to migrate Postgres → SQLite when reverting).
+    </p>
+
+    <h4>Reverting</h4>
+    <ul>
+      <li><strong>Before restart</strong> — click <strong>Cancel pending</strong> on the banner. Deletes <code>/data/active_db.url</code> and clears <code>is_active</code>. Next restart goes back to <code>DATABASE_URL</code>/SQLite.</li>
+      <li><strong>After restart</strong> — to go back to the original database: Cancel pending → Restart. The original DB was never written to during the switch, so it's a frozen snapshot of pre-switch state.</li>
+      <li><strong>After running on the new DB for a while</strong> (and wanting to preserve recently-added data) — add a fresh provider pointed at the original kind/host, run the full flow (Init → Migrate → Set Active → Restart). Or use Snapshot for one-click SQLite-backed export.</li>
+    </ul>
+
+    <div class="callout warn">
+      A migration on a large database can take several minutes. The progress dialog can
+      be dismissed while the worker runs — the operation continues in the background.
+      Don't click <strong>Restart server</strong> until migration completes; you'd boot
+      onto a half-populated target.
+    </div>
+    <div class="callout">
+      The migration worker copies tables in foreign-key-dependency order
+      (<code>Base.metadata.sorted_tables</code>) and temporarily disables
+      <code>session_replication_role</code> on PostgreSQL so partial-batch FK checks don't
+      reject mid-copy. SQLite doesn't enforce FKs by default, so it's a no-op there.
     </div>
   </details>
 
