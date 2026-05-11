@@ -11,7 +11,7 @@ from ..auth.password import hash_password
 from ..auth.permissions import (
     has_capability, is_super_admin, is_admin_or_above,
     CAN_CREATE_ADMIN, CAN_DELETE_ADMIN, CAN_GRANT_STONE, CAN_GRANT_SELF_COMPILE,
-    CAN_RESET_OTHER_CREDS, CAN_SET_USER_FILE_SIZE_CAP,
+    CAN_RESET_OTHER_CREDS, CAN_SET_USER_FILE_SIZE_CAP, CAN_SET_USER_RETENTION,
 )
 from ..deps import get_current_user, get_db, require_admin, require_super_admin
 from ..models import ApprovalRequest, ApprovalStatus, Role, Status, User
@@ -150,6 +150,26 @@ def update_user(user_id: int, req: UserUpdateRequest, actor: User = Depends(requ
             )
         # 0 explicitly clears the override (back to role/server default).
         target.max_file_size_bytes = req.max_file_size_bytes if req.max_file_size_bytes > 0 else None
+    if req.output_retention is not None:
+        # Capability-gated mirror of max_file_size_bytes above. Empty dict
+        # explicitly clears the per-user override (falls back to custom
+        # role → server default for the user's role).
+        if not has_capability(actor, CAN_SET_USER_RETENTION):
+            raise HTTPException(
+                status_code=403,
+                detail="Cannot change output_retention — missing set_user_retention capability.",
+            )
+        if req.output_retention:
+            import json as _json
+            # Only persist the canonical keys so callers can't smuggle
+            # extra junk into the blob.
+            cleaned = {
+                k: v for k, v in req.output_retention.items()
+                if k in ("max_files", "max_age", "age_unit", "delete_on_download")
+            }
+            target.output_retention_json = _json.dumps(cleaned) if cleaned else None
+        else:
+            target.output_retention_json = None
 
     db.commit()
     db.refresh(target)

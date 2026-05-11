@@ -190,6 +190,12 @@ async function load() {
   paintProviderLastTest('google-last-test', s.oauth_google_last_test_at, s.oauth_google_last_test_ok);
   paintProviderLastTest('github-last-test', s.oauth_github_last_test_at, s.oauth_github_last_test_ok);
 
+  // Repaint the SSO summary pill now that the Google/GitHub enabled
+  // checkboxes are populated. loadOidcProviders() also paints this,
+  // but races with us — when it lands first, it reads stale (unchecked)
+  // boxes and undercounts. Re-painting here closes the race.
+  paintSsoSummaryPill(_lastOidcRows);
+
   // SMTP / Discord status pills — reflect last-test state so a green
   // "configured" sticks across reloads (vs. the old "configured the
   // moment fields are non-empty" which was misleading after a failed
@@ -471,10 +477,19 @@ const oidcForm = document.getElementById('oidc-form');
 const oidcAddBtn = document.getElementById('oidc-add-btn');
 const oidcRedirectPreview = document.getElementById('oidc-form-redirect');
 
+// Module-level cache of the most recently-loaded OIDC rows. Lets
+// load() repaint the SSO summary pill *after* it has populated the
+// Google/GitHub enabled checkboxes — without that, we had a race:
+// loadOidcProviders() (smaller GET, finishes first) called the
+// painter while load() (bigger GET) hadn't yet checked the boxes,
+// so the count came out missing Google + GitHub.
+let _lastOidcRows = [];
+
 async function loadOidcProviders() {
   if (!oidcTbody) return;
   let rows = [];
   try { rows = await api.get('/server/oidc-providers'); } catch (_) { rows = []; }
+  _lastOidcRows = Array.isArray(rows) ? rows : [];
   oidcTbody.innerHTML = '';
   // Paint the SSO summary pill regardless of how many providers there
   // are — depends on Google + GitHub + the OIDC enabled count.

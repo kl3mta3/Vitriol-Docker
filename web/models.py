@@ -100,6 +100,14 @@ class User(Base):
     # Editing this field requires the `set_user_file_size_cap` capability.
     max_file_size_bytes = Column(Integer, nullable=True)
 
+    # Per-user output-retention override. JSON object matching the
+    # `output_retention[<role>]` shape on ServerSettings:
+    #   {"max_files": int, "max_age": int, "age_unit": str, "delete_on_download": bool}
+    # NULL = inherit from custom_role.output_retention_json, then from
+    # the role's row in server_settings.output_retention_json.
+    # Editing this field requires the `set_user_retention` capability.
+    output_retention_json = Column(Text, nullable=True)
+
     # User-facing theme preference. One of THEMES (web/static/css/theme.css).
     theme = Column(String(32), nullable=False, default="default")
 
@@ -130,6 +138,20 @@ class User(Base):
     @property
     def has_password(self) -> bool:
         return bool(self.password_hash)
+
+    # Parsed view of the per-user retention override JSON blob — None when
+    # the column is empty or malformed. UserOut surfaces this so the admin
+    # UI can render the override fields without re-parsing JSON itself.
+    @property
+    def output_retention(self):
+        import json as _json
+        if not self.output_retention_json:
+            return None
+        try:
+            parsed = _json.loads(self.output_retention_json)
+        except (ValueError, TypeError):
+            return None
+        return parsed if isinstance(parsed, dict) else None
 
     __table_args__ = (
         # Only one super admin row may exist. Partial unique indexes are
@@ -268,6 +290,11 @@ class CustomRole(Base):
     # Role-level max upload size. Used when no per-user override is set
     # (User.max_file_size_bytes). Null = inherit from server default.
     max_file_size_bytes = Column(Integer, nullable=True)
+    # Role-level output retention override (same JSON shape as the
+    # per-role rows in server_settings.output_retention_json). NULL =
+    # inherit from the matching built-in role default. Per-user
+    # overrides on individual user rows further override this.
+    output_retention_json = Column(Text, nullable=True)
 
     # Admin-tier capabilities (only meaningful when base_role == admin).
     can_create_user = Column(Boolean, nullable=False, default=False)
@@ -294,10 +321,25 @@ class CustomRole(Base):
     # file-size cap). Admin-tier capability — only meaningful when
     # base_role permits it (super_admin + admin get it free).
     can_set_user_file_size_cap = Column(Boolean, nullable=False, default=False, server_default="0")
+    # When True, members of this role can change other users'
+    # output_retention override. Admin-tier capability — base_role
+    # must allow it (i.e. must equal admin).
+    can_set_user_retention = Column(Boolean, nullable=False, default=False, server_default="0")
 
     created_at = Column(DateTime, nullable=False, default=datetime.utcnow)
     updated_at = Column(DateTime, nullable=False, default=datetime.utcnow, onupdate=datetime.utcnow)
     created_by_user_id = Column(Integer, ForeignKey("users.id"), nullable=True)
+
+    @property
+    def output_retention(self):
+        import json as _json
+        if not self.output_retention_json:
+            return None
+        try:
+            parsed = _json.loads(self.output_retention_json)
+        except (ValueError, TypeError):
+            return None
+        return parsed if isinstance(parsed, dict) else None
 
 
 class APIKey(Base):

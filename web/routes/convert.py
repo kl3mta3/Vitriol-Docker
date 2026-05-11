@@ -291,23 +291,18 @@ def download_result(job_id: int, user: User = Depends(get_current_user), db: Ses
 
 
 def _should_delete_on_download(db, job) -> bool:
-    """Read the per-role retention policy and decide if this job's
-    output should be removed after a successful download."""
-    from ..models import ServerSettings, Role
+    """Decide if this job's output should be removed after a successful
+    download. Uses the three-tier resolver — per-user override beats
+    per-custom-role beats built-in role default."""
+    from ..models import ServerSettings
+    from ..services.cleanup import _load_policy, effective_retention_for
     s = db.query(ServerSettings).get(1)
-    if s is None or not s.output_retention_json:
-        return False
-    import json as _json
-    try:
-        policy = _json.loads(s.output_retention_json)
-    except (_json.JSONDecodeError, TypeError):
-        return False
     owner = db.query(User).get(job.user_id)
     if owner is None:
         return False
-    role_key = owner.role.value if hasattr(owner.role, "value") else str(owner.role)
-    role_cfg = policy.get(role_key) or policy.get("user") or {}
-    return bool(role_cfg.get("delete_on_download", False))
+    server_policy = _load_policy(s)
+    cfg = effective_retention_for(owner, server_policy)
+    return bool(cfg.get("delete_on_download", False))
 
 
 def _post_download_delete(path: str, job_id: int, user_id: int) -> None:

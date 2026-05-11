@@ -252,6 +252,16 @@ function openManage(u) {
       : '';
   }
 
+  // Per-user retention override — same capability-gated row pattern.
+  const _canEditRetention = _caps.includes('set_user_retention');
+  const retRow = document.getElementById('manage-retention-row');
+  if (retRow) retRow.hidden = !_canEditRetention;
+  const ret = u.output_retention || {};
+  if (f.ret_max_files) f.ret_max_files.value = (ret.max_files ?? '') === '' ? '' : String(ret.max_files);
+  if (f.ret_max_age) f.ret_max_age.value = (ret.max_age ?? '') === '' ? '' : String(ret.max_age);
+  if (f.ret_age_unit) f.ret_age_unit.value = ret.age_unit || '';
+  if (f.ret_delete_on_download) f.ret_delete_on_download.checked = !!ret.delete_on_download;
+
   document.getElementById('manage-title').textContent = `Manage — ${u.username}`;
   const roleTag = document.getElementById('manage-role-tag');
   roleTag.textContent = u.custom_role_name || u.role;
@@ -449,6 +459,34 @@ manageForm.addEventListener('submit', async (e) => {
     patch.max_file_size_bytes = formValues.max_file_size_bytes;
   }
 
+  // Same shape for the retention override. The backend treats an empty
+  // dict as "clear the override"; a populated dict has its keys
+  // whitelisted server-side.
+  const _saveCanEditRetention = (window.VITRIOL_CAPS || []).includes('set_user_retention');
+  if (_saveCanEditRetention) {
+    const _retOut = {};
+    const _mf = manageForm.ret_max_files && manageForm.ret_max_files.value;
+    const _ma = manageForm.ret_max_age && manageForm.ret_max_age.value;
+    const _au = manageForm.ret_age_unit && manageForm.ret_age_unit.value;
+    const _dd = manageForm.ret_delete_on_download && manageForm.ret_delete_on_download.checked;
+    if (_mf !== '' && _mf != null) _retOut.max_files = Number(_mf);
+    if (_ma !== '' && _ma != null) _retOut.max_age = Number(_ma);
+    if (_au) _retOut.age_unit = _au;
+    if (_dd) _retOut.delete_on_download = true;
+    // Diff against the row we loaded — only ship if the user actually
+    // touched something. Stringify-compare keeps it simple for a small
+    // dict with stable key order on our side.
+    const _existing = u.output_retention || {};
+    const _existingNorm = {};
+    if (_existing.max_files != null) _existingNorm.max_files = Number(_existing.max_files);
+    if (_existing.max_age != null) _existingNorm.max_age = Number(_existing.max_age);
+    if (_existing.age_unit) _existingNorm.age_unit = _existing.age_unit;
+    if (_existing.delete_on_download) _existingNorm.delete_on_download = true;
+    if (JSON.stringify(_retOut) !== JSON.stringify(_existingNorm)) {
+      patch.output_retention = _retOut;
+    }
+  }
+
   // Username and password go through reset-credentials.
   const resetReq = {};
   if (formValues.username && formValues.username !== u.username) resetReq.new_username = formValues.username;
@@ -581,6 +619,8 @@ function openRoleForm(cr) {
     'can_download_others_files', 'can_delete_others_files',
     // Per-user file-size-cap edit permission — also admin-tier.
     'can_set_user_file_size_cap',
+    // Per-user retention edit permission — also admin-tier.
+    'can_set_user_retention',
   ]) {
     if (f[flag]) f[flag].checked = !!(cr && cr[flag]);
   }
@@ -592,6 +632,13 @@ function openRoleForm(cr) {
       ? Math.round(cr.max_file_size_bytes / (1024 * 1024))
       : '';
   }
+  // Role-level retention override. Empty fields = inherit from server
+  // default for the base role.
+  const _crRet = (cr && cr.output_retention) || {};
+  if (f.ret_max_files) f.ret_max_files.value = (_crRet.max_files ?? '') === '' ? '' : String(_crRet.max_files);
+  if (f.ret_max_age) f.ret_max_age.value = (_crRet.max_age ?? '') === '' ? '' : String(_crRet.max_age);
+  if (f.ret_age_unit) f.ret_age_unit.value = _crRet.age_unit || '';
+  if (f.ret_delete_on_download) f.ret_delete_on_download.checked = !!_crRet.delete_on_download;
   document.getElementById('role-delete-btn').hidden = !cr;
   document.getElementById('role-form-msg').hidden = true;
   updateRoleAdminBlockVisibility();
@@ -648,11 +695,24 @@ roleForm.addEventListener('submit', async (e) => {
     can_download_others_files: roleForm.can_download_others_files ? roleForm.can_download_others_files.checked : false,
     can_delete_others_files: roleForm.can_delete_others_files ? roleForm.can_delete_others_files.checked : false,
     can_set_user_file_size_cap: roleForm.can_set_user_file_size_cap ? roleForm.can_set_user_file_size_cap.checked : false,
+    can_set_user_retention: roleForm.can_set_user_retention ? roleForm.can_set_user_retention.checked : false,
     max_file_size_bytes: (() => {
       const el = roleForm.max_file_size_mb;
       if (!el || el.value === '') return null;
       const mb = Number(el.value);
       return mb > 0 ? Math.round(mb * 1024 * 1024) : 0;
+    })(),
+    output_retention: (() => {
+      const out = {};
+      const mf = roleForm.ret_max_files && roleForm.ret_max_files.value;
+      const ma = roleForm.ret_max_age && roleForm.ret_max_age.value;
+      const au = roleForm.ret_age_unit && roleForm.ret_age_unit.value;
+      const dd = roleForm.ret_delete_on_download && roleForm.ret_delete_on_download.checked;
+      if (mf !== '' && mf != null) out.max_files = Number(mf);
+      if (ma !== '' && ma != null) out.max_age = Number(ma);
+      if (au) out.age_unit = au;
+      if (dd) out.delete_on_download = true;
+      return out;   // empty dict = clear the role-level override
     })(),
   };
   try {

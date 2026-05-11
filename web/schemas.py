@@ -55,6 +55,10 @@ class UserOut(BaseModel):
     daily_conversion_limit: Optional[int]
     rate_limit_per_minute: Optional[int]
     max_file_size_bytes: Optional[int] = None    # per-user upload cap override
+    # Per-user retention override. Same shape as the per-role objects
+    # under server_settings.output_retention_json:
+    #   {"max_files", "max_age", "age_unit", "delete_on_download"}.
+    output_retention: Optional[dict] = None
     theme: str = "default"
     custom_role_id: Optional[int] = None
     custom_role_name: Optional[str] = None
@@ -86,6 +90,11 @@ class UserUpdateRequest(BaseModel):
     # the actor has the `set_user_file_size_cap` capability; otherwise
     # the field is silently dropped from the patch.
     max_file_size_bytes: Optional[int] = None
+    # Per-user retention override. Same shape as the per-role entries
+    # under server_settings.output_retention_json. {} or null clears
+    # the override. Only honored when the actor has the
+    # `set_user_retention` capability; otherwise silently dropped.
+    output_retention: Optional[dict] = None
 
 
 class SuspendRequest(BaseModel):
@@ -300,9 +309,14 @@ class CustomRoleOut(BaseModel):
     can_download_others_files: bool = False
     can_delete_others_files: bool = False
     can_set_user_file_size_cap: bool = False
+    can_set_user_retention: bool = False
     # Role-level upload cap. Null means inherit from server default.
     # Per-user overrides on individual rows further override this.
     max_file_size_bytes: Optional[int] = None
+    # Role-level retention override. Empty/null means inherit from
+    # server default for the base role. Per-user overrides on
+    # individual rows further override this.
+    output_retention: Optional[dict] = None
     created_at: datetime
     user_count: int = 0
 
@@ -329,7 +343,9 @@ class CustomRoleCreateRequest(BaseModel):
     can_download_others_files: bool = False
     can_delete_others_files: bool = False
     can_set_user_file_size_cap: bool = False
+    can_set_user_retention: bool = False
     max_file_size_bytes: Optional[int] = None
+    output_retention: Optional[dict] = None
 
 
 class CustomRoleUpdateRequest(BaseModel):
@@ -354,7 +370,9 @@ class CustomRoleUpdateRequest(BaseModel):
     can_download_others_files: Optional[bool] = None
     can_delete_others_files: Optional[bool] = None
     can_set_user_file_size_cap: Optional[bool] = None
+    can_set_user_retention: Optional[bool] = None
     max_file_size_bytes: Optional[int] = None
+    output_retention: Optional[dict] = None
 
 
 class MessageResponse(BaseModel):

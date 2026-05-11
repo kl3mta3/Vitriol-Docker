@@ -127,6 +127,26 @@
         <input type="checkbox" name="can_set_user_file_size_cap" />
         <span>Members of this role can change other users' max upload size override <em class="muted small">(admin-tier — requires base_role = admin)</em></span>
       </label>
+      <label class="checkbox-row" style="margin-top: 4px;">
+        <input type="checkbox" name="can_set_user_retention" />
+        <span>Members of this role can change other users' output retention override <em class="muted small">(admin-tier — requires base_role = admin)</em></span>
+      </label>
+      <p class="muted small" style="margin: 12px 0 4px;">
+        Output retention for this role <em>(blank = inherit the built-in default for the base role)</em>
+      </p>
+      <div class="grid-2">
+        <label><span>Max files kept (0 = unlimited)</span><input name="ret_max_files" type="number" min="0" step="1" /></label>
+        <label><span>Max age (0 = unlimited)</span><input name="ret_max_age" type="number" min="0" step="1" /></label>
+        <label><span>Age unit</span>
+          <select name="ret_age_unit">
+            <option value="">(inherit)</option>
+            <option value="minutes">Minutes</option>
+            <option value="hours">Hours</option>
+            <option value="days">Days</option>
+          </select>
+        </label>
+        <label class="checkbox-row"><input type="checkbox" name="ret_delete_on_download" /> <span>Delete on download</span></label>
+      </div>
     </details>
 
     <details>
@@ -263,6 +283,27 @@
           <span>Max upload size override (in MB — 0 or blank = inherit from role/server default)</span>
           <input name="max_file_size_mb" type="number" min="0" step="1" placeholder="e.g. 500" />
         </label>
+      </div>
+      {# Per-user output-retention override — requires `set_user_retention`.
+         All four fields blank = clear the override. Mirrors the role-level
+         retention block on the custom-role dialog. #}
+      <div id="manage-retention-row" hidden>
+        <p class="muted small" style="margin: 8px 0 4px;">
+          Output retention override <em>(blank = inherit from role / server default)</em>
+        </p>
+        <div class="grid-2">
+          <label><span>Max files kept (0 = unlimited)</span><input name="ret_max_files" type="number" min="0" step="1" /></label>
+          <label><span>Max age (0 = unlimited)</span><input name="ret_max_age" type="number" min="0" step="1" /></label>
+          <label><span>Age unit</span>
+            <select name="ret_age_unit">
+              <option value="">(inherit)</option>
+              <option value="minutes">Minutes</option>
+              <option value="hours">Hours</option>
+              <option value="days">Days</option>
+            </select>
+          </label>
+          <label class="checkbox-row"><input type="checkbox" name="ret_delete_on_download" /> <span>Delete on download</span></label>
+        </div>
       </div>
     </details>
 

@@ -30,6 +30,21 @@ router = APIRouter(prefix="/roles", tags=["roles"])
 _VALID_BASES = {"admin", "user", "viewer", "pending"}
 
 
+def _encode_retention(d) -> Optional[str]:
+    """Whitelist + serialize a retention dict for storage. None / empty
+    dict become NULL (= inherit from server default)."""
+    if not d:
+        return None
+    cleaned = {
+        k: v for k, v in d.items()
+        if k in ("max_files", "max_age", "age_unit", "delete_on_download")
+    }
+    if not cleaned:
+        return None
+    import json as _json
+    return _json.dumps(cleaned)
+
+
 def _to_out(cr: CustomRole, user_count: int) -> CustomRoleOut:
     return CustomRoleOut(
         id=cr.id,
@@ -54,7 +69,9 @@ def _to_out(cr: CustomRole, user_count: int) -> CustomRoleOut:
         can_download_others_files=cr.can_download_others_files,
         can_delete_others_files=cr.can_delete_others_files,
         can_set_user_file_size_cap=cr.can_set_user_file_size_cap,
+        can_set_user_retention=cr.can_set_user_retention,
         max_file_size_bytes=cr.max_file_size_bytes,
+        output_retention=cr.output_retention,
         created_at=cr.created_at,
         user_count=user_count,
     )
@@ -89,6 +106,8 @@ def _enforce_admin_only_flags(payload, base: Role) -> None:
         # Editing another user's max_file_size_bytes is admin-tier too;
         # a user-base role can never grant cross-user write access.
         "can_set_user_file_size_cap",
+        # Same shape — editing per-user retention is admin-tier.
+        "can_set_user_retention",
     )
     on = [f for f in admin_only if getattr(payload, f, False)]
     if on:
@@ -130,6 +149,7 @@ def create_role(
         daily_conversion_limit=req.daily_conversion_limit,
         rate_limit_per_minute=req.rate_limit_per_minute,
         max_file_size_bytes=req.max_file_size_bytes if req.max_file_size_bytes and req.max_file_size_bytes > 0 else None,
+        output_retention_json=_encode_retention(req.output_retention),
         can_create_user=req.can_create_user,
         can_suspend_user=req.can_suspend_user,
         can_ban_user=req.can_ban_user,
@@ -144,6 +164,7 @@ def create_role(
         can_download_others_files=req.can_download_others_files,
         can_delete_others_files=req.can_delete_others_files,
         can_set_user_file_size_cap=req.can_set_user_file_size_cap,
+        can_set_user_retention=req.can_set_user_retention,
         created_by_user_id=actor.id,
     )
     db.add(cr)
@@ -180,7 +201,7 @@ def update_role(
         "can_restart_server", "can_view_users_tab", "can_reset_other_creds",
         "can_view_own_files", "can_view_others_files",
         "can_download_others_files", "can_delete_others_files",
-        "can_set_user_file_size_cap",
+        "can_set_user_file_size_cap", "can_set_user_retention",
     )
     for f in bool_fields:
         v = getattr(req, f)
@@ -193,6 +214,10 @@ def update_role(
     if req.max_file_size_bytes is not None:
         # 0 clears the role-level override; positive sets it.
         cr.max_file_size_bytes = req.max_file_size_bytes if req.max_file_size_bytes > 0 else None
+    if req.output_retention is not None:
+        # Empty dict clears the per-role override (back to server default
+        # for the base role); a populated dict gets whitelisted + stored.
+        cr.output_retention_json = _encode_retention(req.output_retention)
 
     # Re-validate after applying changes.
     _enforce_admin_only_flags(cr, cr.base_role)

@@ -41,6 +41,12 @@ CAN_GRANT_SELF_COMPILE = "grant_self_compile"
 # raising the server-wide default. Granted to admin + super_admin by
 # default — custom roles can opt in via the can_set_file_size_cap flag.
 CAN_SET_USER_FILE_SIZE_CAP = "set_user_file_size_cap"
+# Same shape, but for output-retention overrides. Lets the actor
+# adjust how long a specific user's converted outputs stay on disk
+# (max files / max age / delete-on-download) beyond what the role
+# default permits. Useful for "VIP user gets indefinite retention"
+# without loosening the policy for the whole role.
+CAN_SET_USER_RETENTION = "set_user_retention"
 
 # Files tab — managing the user's own (and optionally others') converted
 # outputs. own_files implicitly grants download + delete on the user's
@@ -63,7 +69,7 @@ _ROLE_CAPS: dict[Role, set[str]] = {
         CAN_SUSPEND_USER, CAN_BAN_USER, CAN_SUSPEND_ADMIN, CAN_BAN_ADMIN,
         CAN_RESTART_SERVER, CAN_EDIT_SERVER_SETTINGS,
         CAN_APPROVE_PENDING, CAN_GRANT_STONE, CAN_GRANT_SELF_COMPILE,
-        CAN_SET_USER_FILE_SIZE_CAP,
+        CAN_SET_USER_FILE_SIZE_CAP, CAN_SET_USER_RETENTION,
         CAN_VIEW_OWN_FILES, CAN_VIEW_OTHERS_FILES,
         CAN_DOWNLOAD_OTHERS_FILES, CAN_DELETE_OTHERS_FILES,
     },
@@ -74,7 +80,7 @@ _ROLE_CAPS: dict[Role, set[str]] = {
         CAN_SUSPEND_USER, CAN_BAN_USER, CAN_SUSPEND_ADMIN,
         CAN_RESTART_SERVER,
         CAN_APPROVE_PENDING, CAN_GRANT_STONE, CAN_GRANT_SELF_COMPILE,
-        CAN_SET_USER_FILE_SIZE_CAP,
+        CAN_SET_USER_FILE_SIZE_CAP, CAN_SET_USER_RETENTION,
         CAN_VIEW_OWN_FILES, CAN_VIEW_OTHERS_FILES,
         CAN_DOWNLOAD_OTHERS_FILES, CAN_DELETE_OTHERS_FILES,
     },
@@ -120,6 +126,7 @@ _CUSTOM_FLAG_FOR_CAP: dict[str, str] = {
     CAN_RESTART_SERVER: "can_restart_server",
     CAN_RESET_OTHER_CREDS: "can_reset_other_creds",
     CAN_SET_USER_FILE_SIZE_CAP: "can_set_user_file_size_cap",
+    CAN_SET_USER_RETENTION: "can_set_user_retention",
     # Files-tab permissions — own_files behaves like Stone (no ceiling
     # check, grantable to any base); the *_others variants are
     # admin-tier and require the base to permit them.

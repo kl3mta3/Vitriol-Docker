@@ -137,6 +137,15 @@ _ADDITIVE_COLUMNS: list[tuple[str, str, str]] = [
      "ALTER TABLE custom_roles ADD COLUMN max_file_size_bytes INTEGER"),
     ("custom_roles", "can_set_user_file_size_cap",
      "ALTER TABLE custom_roles ADD COLUMN can_set_user_file_size_cap BOOLEAN NOT NULL DEFAULT 0"),
+    # Layered output-retention overrides (same three-tier pattern as
+    # max_file_size_bytes). Stored as JSON to match the existing
+    # per-built-in-role shape on server_settings.output_retention_json.
+    ("users", "output_retention_json",
+     "ALTER TABLE users ADD COLUMN output_retention_json TEXT"),
+    ("custom_roles", "output_retention_json",
+     "ALTER TABLE custom_roles ADD COLUMN output_retention_json TEXT"),
+    ("custom_roles", "can_set_user_retention",
+     "ALTER TABLE custom_roles ADD COLUMN can_set_user_retention BOOLEAN NOT NULL DEFAULT 0"),
     ("server_settings", "smtp_enabled",
      "ALTER TABLE server_settings ADD COLUMN smtp_enabled BOOLEAN NOT NULL DEFAULT 1"),
     ("server_settings", "oauth_google_enabled",

@@ -57,6 +57,53 @@ def _role_key(user: User) -> str:
     return role if role in _DEFAULT else "user"
 
 
+def _parse_override(blob: Optional[str]) -> Optional[dict]:
+    """Decode a stored JSON override (User or CustomRole). Returns None
+    if the column is empty / malformed — caller falls through to the
+    next layer in the resolution chain."""
+    if not blob:
+        return None
+    try:
+        parsed = json.loads(blob)
+    except (json.JSONDecodeError, TypeError):
+        return None
+    return parsed if isinstance(parsed, dict) else None
+
+
+def effective_retention_for(user: User, server_policy: dict) -> dict:
+    """Three-tier retention resolution, most specific wins:
+
+      1. user.output_retention_json (per-user override)
+      2. user.custom_role.output_retention_json (per-role override)
+      3. server_policy[<role>] (built-in role default loaded from settings)
+
+    Each layer can partially override the next — e.g. a per-user
+    override that only sets ``max_files`` keeps ``max_age`` and
+    ``delete_on_download`` from the role layer. This lets admins do
+    targeted tweaks ("this one user keeps 200 files but same age").
+
+    Returns a dict matching the standard retention shape:
+      {"max_files": int, "max_age": int, "age_unit": str, "delete_on_download": bool}
+    """
+    # Start with the built-in role's default.
+    base = dict(server_policy.get(_role_key(user), _DEFAULT[_role_key(user)]))
+
+    # Layer in the custom-role override (if any).
+    if user.custom_role is not None:
+        role_over = _parse_override(getattr(user.custom_role, "output_retention_json", None))
+        if role_over:
+            base.update({k: v for k, v in role_over.items()
+                         if k in ("max_files", "max_age", "age_unit", "delete_on_download")})
+
+    # Finally the per-user override.
+    user_over = _parse_override(user.output_retention_json)
+    if user_over:
+        base.update({k: v for k, v in user_over.items()
+                     if k in ("max_files", "max_age", "age_unit", "delete_on_download")})
+
+    return base
+
+
 def _delete_file(job: Job) -> bool:
     try:
         p = Path(job.dst_path)
@@ -77,16 +124,27 @@ def run_once(db: Session) -> dict:
     age_deleted = 0
     count_deleted = 0
 
-    # 1. Age-based pass — every done job whose owner role has max_age>0.
+    # 1. Age-based pass — every done job whose effective retention has
+    #    max_age > 0. Effective retention is the three-tier resolution:
+    #    per-user → per-custom-role → built-in role default.
     done_jobs = (
         db.query(Job, User)
         .join(User, Job.user_id == User.id)
         .filter(Job.status == JobStatus.done)
         .all()
     )
+    # Cache the effective policy per user so we don't re-resolve it on
+    # every job row for a chatty user.
+    user_policy_cache: dict[int, dict] = {}
+    def _policy_for(owner: User) -> dict:
+        cached = user_policy_cache.get(owner.id)
+        if cached is None:
+            cached = effective_retention_for(owner, policy)
+            user_policy_cache[owner.id] = cached
+        return cached
+
     for job, owner in done_jobs:
-        role = _role_key(owner)
-        cfg = policy.get(role, _DEFAULT[role])
+        cfg = _policy_for(owner)
         max_age = int(cfg.get("max_age") or 0)
         if max_age <= 0:
             continue
@@ -109,7 +167,7 @@ def run_once(db: Session) -> dict:
         slot.append(job)
 
     for uid, (owner, jobs) in by_user.items():
-        cfg = policy.get(_role_key(owner), _DEFAULT[_role_key(owner)])
+        cfg = _policy_for(owner)
         max_files = int(cfg.get("max_files") or 0)
         if max_files <= 0:
             continue
