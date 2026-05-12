@@ -93,14 +93,14 @@
           <input type="checkbox" name="password_reset_via_email" id="password-reset-email-toggle" />
           <span>Send password reset email <em class="muted small">(profile-page "Reset password" sends a token-bearing email instead of opening the in-page modal directly — adds an out-of-band verification step against session hijack. Requires SMTP configured + a successful test.)</em></span>
         </label>
-        <p id="password-reset-email-hint" class="muted small" hidden style="margin-top: -4px; margin-left: 24px;">
+        <p id="password-reset-email-hint" class="muted small full" hidden style="margin-top: -4px; margin-left: 24px;">
           Configure SMTP and run a successful test in the section below before enabling this.
         </p>
         <label class="checkbox-row full">
           <input type="checkbox" name="password_signin_enabled" id="password-signin-toggle" />
           <span>Username/password sign-in enabled <em class="muted small">(turn off to force everyone through SSO — the super admin can always sign in with a password as a recovery escape hatch)</em></span>
         </label>
-        <p id="password-signin-warn" class="muted small" hidden>
+        <p id="password-signin-warn" class="muted small full" hidden>
           ⚠ At least one SSO provider must be enabled before you can turn password sign-in off, otherwise every non-super-admin would be locked out.
         </p>
       </div>
