@@ -133,13 +133,20 @@ async def _send(db: Session, to: str, subject: str, plain: str, html: Optional[s
     try:
         import aiosmtplib
         password = decrypt(s.smtp_password_enc)
+        # STARTTLS checkbox checked → connect plain then upgrade (start_tls)
+        # STARTTLS checkbox unchecked → implicit TLS from the start (use_tls)
+        if s.smtp_use_tls:
+            tls_kwargs = {"use_tls": False, "start_tls": True}
+        else:
+            tls_kwargs = {"use_tls": True, "start_tls": False}
         await aiosmtplib.send(
             msg,
             hostname=s.smtp_host,
-            port=s.smtp_port or 587,
+            port=s.smtp_port,
             username=s.smtp_user or None,
             password=password or None,
-            start_tls=bool(s.smtp_use_tls),
+            **tls_kwargs,
+            timeout=30,
         )
         return True
     except Exception as e:

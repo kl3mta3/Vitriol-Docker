@@ -460,22 +460,28 @@ async def test_email(
     msg.attach(MIMEText(plain, "plain", "utf-8"))
     msg.attach(MIMEText(html, "html", "utf-8"))
     from datetime import datetime as _dt
+    # Hard 30s budget for the entire SMTP round trip. aiosmtplib's
+    # default is 60s for both connection and per-command timeouts;
+    # behind a Cloudflare/Coolify proxy chain that's longer than the
+    # proxy's own request timeout, so a hung SMTP server (purelymail
+    # rate-limit, network glitch, etc.) surfaces as "502 Bad Gateway"
+    # with no actionable detail. 30s lets us beat the proxy and
+    # return a real error message.
+    # STARTTLS checkbox checked → connect plain then upgrade (start_tls)
+    # STARTTLS checkbox unchecked → implicit TLS from the start (use_tls)
+    if s.smtp_use_tls:
+        tls_kwargs = {"use_tls": False, "start_tls": True}
+    else:
+        tls_kwargs = {"use_tls": True, "start_tls": False}
     try:
-        # Hard 15s budget for the entire SMTP round trip. aiosmtplib's
-        # default is 60s for both connection and per-command timeouts;
-        # behind a Cloudflare/Coolify proxy chain that's longer than the
-        # proxy's own request timeout, so a hung SMTP server (purelymail
-        # rate-limit, network glitch, etc.) surfaces as "502 Bad Gateway"
-        # with no actionable detail. 15s lets us beat the proxy and
-        # return a real error message.
         await aiosmtplib.send(
             msg,
             hostname=s.smtp_host,
-            port=s.smtp_port or 587,
+            port=s.smtp_port,
             username=s.smtp_user or None,
             password=decrypt(s.smtp_password_enc) or None,
-            start_tls=bool(s.smtp_use_tls),
-            timeout=15,
+            **tls_kwargs,
+            timeout=30,
         )
     except Exception as e:
         s.smtp_last_test_at = _dt.utcnow()
