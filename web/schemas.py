@@ -411,6 +411,10 @@ class TipCreate(BaseModel):
     body: str = Field(..., min_length=1, max_length=500)
 
 
+class TipUpdate(BaseModel):
+    body: str = Field(..., min_length=1, max_length=500)
+
+
 class TipImport(BaseModel):
     tips: List[str]
     replace: bool = False  # when True, wipe existing tips before importing

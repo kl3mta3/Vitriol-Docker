@@ -16,7 +16,7 @@ from fastapi.routing import APIRouter
 
 from ..deps import get_db, require_super_admin
 from ..models import Tip, User
-from ..schemas import MessageResponse, TipCreate, TipImport, TipOut
+from ..schemas import MessageResponse, TipCreate, TipImport, TipOut, TipUpdate
 
 from sqlalchemy.orm import Session
 
@@ -44,6 +44,22 @@ async def create_tip(
     return tip
 
 
+@router.patch("/{tip_id}", response_model=TipOut)
+async def update_tip(
+    tip_id: int,
+    payload: TipUpdate,
+    actor: User = Depends(require_super_admin),
+    db: Session = Depends(get_db),
+):
+    tip = db.query(Tip).get(tip_id)
+    if tip is None:
+        raise HTTPException(status_code=404, detail="Tip not found.")
+    tip.body = payload.body.strip()
+    db.commit()
+    db.refresh(tip)
+    return tip
+
+
 @router.delete("/{tip_id}", response_model=MessageResponse)
 async def delete_tip(
     tip_id: int,
@@ -56,6 +72,17 @@ async def delete_tip(
     db.delete(tip)
     db.commit()
     return MessageResponse(message="Tip deleted.")
+
+
+@router.delete("", response_model=MessageResponse)
+async def clear_tips(
+    actor: User = Depends(require_super_admin),
+    db: Session = Depends(get_db),
+):
+    """Delete every tip in one shot."""
+    deleted = db.query(Tip).delete()
+    db.commit()
+    return MessageResponse(message=f"Cleared {deleted} tip(s).")
 
 
 @router.post("/import", response_model=MessageResponse)

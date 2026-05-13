@@ -2609,6 +2609,7 @@ if (logoResetBtn) {
   const tipBodyInput   = document.getElementById('tip-body-input');
   const tipAddBtn      = document.getElementById('tip-add-btn');
   const tipsMsg        = document.getElementById('tips-msg');
+  const tipsClearBtn   = document.getElementById('tips-clear-btn');
   const tipsExportBtn  = document.getElementById('tips-export-btn');
   const tipsImportFile = document.getElementById('tips-import-file');
   const tipsImportRepl = document.getElementById('tips-import-replace');
@@ -2635,16 +2636,100 @@ if (logoResetBtn) {
       }
       for (const t of tips) {
         const li = document.createElement('li');
-        li.style.cssText = 'display:flex;align-items:flex-start;gap:8px;padding:4px 0;';
+        li.style.cssText = 'display:flex;align-items:flex-start;gap:8px;padding:4px 0;border-bottom:1px solid var(--border);';
+
+        // ── view mode ──────────────────────────────────────────────
+        const viewRow = document.createElement('div');
+        viewRow.style.cssText = 'display:flex;align-items:flex-start;gap:8px;flex:1;';
+
         const span = document.createElement('span');
-        span.style.flex = '1';
+        span.style.cssText = 'flex:1;cursor:pointer;padding:2px 4px;border-radius:4px;transition:background 0.1s;';
+        span.title = 'Click to edit';
         span.textContent = t.body;
+        span.addEventListener('mouseenter', () => span.style.background = 'var(--surface-2)');
+        span.addEventListener('mouseleave', () => span.style.background = '');
+
         const del = document.createElement('button');
         del.type = 'button';
         del.className = 'btn btn-ghost';
-        del.style.cssText = 'padding:2px 8px;font-size:11px;flex-shrink:0;';
+        del.style.cssText = 'padding:2px 8px;font-size:11px;flex-shrink:0;color:var(--red);';
         del.textContent = '✕';
         del.title = 'Delete tip';
+
+        viewRow.appendChild(span);
+        viewRow.appendChild(del);
+
+        // ── edit mode (hidden until span is clicked) ───────────────
+        const editRow = document.createElement('div');
+        editRow.style.cssText = 'display:none;flex:1;flex-direction:column;gap:6px;';
+
+        const ta = document.createElement('textarea');
+        ta.rows = 2;
+        ta.maxLength = 500;
+        ta.value = t.body;
+        ta.style.cssText = 'resize:vertical;width:100%;font-size:13px;box-sizing:border-box;';
+
+        const editBtns = document.createElement('div');
+        editBtns.style.cssText = 'display:flex;gap:6px;';
+
+        const saveBtn = document.createElement('button');
+        saveBtn.type = 'button';
+        saveBtn.className = 'btn btn-secondary';
+        saveBtn.style.cssText = 'padding:2px 12px;font-size:12px;';
+        saveBtn.textContent = 'Save';
+
+        const cancelBtn = document.createElement('button');
+        cancelBtn.type = 'button';
+        cancelBtn.className = 'btn btn-ghost';
+        cancelBtn.style.cssText = 'padding:2px 12px;font-size:12px;';
+        cancelBtn.textContent = 'Cancel';
+
+        editBtns.appendChild(saveBtn);
+        editBtns.appendChild(cancelBtn);
+        editRow.appendChild(ta);
+        editRow.appendChild(editBtns);
+
+        li.appendChild(viewRow);
+        li.appendChild(editRow);
+
+        // ── interactions ───────────────────────────────────────────
+        function enterEdit() {
+          viewRow.style.display = 'none';
+          editRow.style.display = 'flex';
+          ta.focus();
+          ta.setSelectionRange(ta.value.length, ta.value.length);
+        }
+        function exitEdit() {
+          editRow.style.display = 'none';
+          viewRow.style.display = 'flex';
+          ta.value = span.textContent; // reset
+        }
+
+        span.addEventListener('click', enterEdit);
+        cancelBtn.addEventListener('click', exitEdit);
+
+        ta.addEventListener('keydown', e => {
+          if (e.key === 'Escape') { e.preventDefault(); exitEdit(); }
+          if (e.key === 'Enter' && (e.ctrlKey || e.metaKey)) { e.preventDefault(); saveBtn.click(); }
+        });
+
+        saveBtn.addEventListener('click', async () => {
+          const newBody = ta.value.trim();
+          if (!newBody) { _setTipsMsg('Tip cannot be empty.', true); return; }
+          saveBtn.disabled = true;
+          try {
+            const updated = await api.patch(`/server/tips/${t.id}`, { body: newBody });
+            span.textContent = updated.body;
+            t.body = updated.body;
+            _setTipsMsg('Tip updated.', false);
+            exitEdit();
+          } catch (ex) {
+            _setTipsMsg(ex.detail || 'Update failed.', true);
+          } finally {
+            saveBtn.disabled = false;
+          }
+        });
+
         del.addEventListener('click', async () => {
           del.disabled = true;
           try {
@@ -2656,8 +2741,7 @@ if (logoResetBtn) {
             del.disabled = false;
           }
         });
-        li.appendChild(span);
-        li.appendChild(del);
+
         tipsList.appendChild(li);
       }
     } catch (ex) {
@@ -2679,6 +2763,22 @@ if (logoResetBtn) {
         _setTipsMsg(ex.detail || 'Failed to add tip.', true);
       } finally {
         tipAddBtn.disabled = false;
+      }
+    });
+  }
+
+  if (tipsClearBtn) {
+    tipsClearBtn.addEventListener('click', async () => {
+      if (!confirm('Delete all tips? This cannot be undone.')) return;
+      tipsClearBtn.disabled = true;
+      try {
+        const r = await api.del('/server/tips');
+        _setTipsMsg(r.message || 'All tips cleared.', false);
+        await reloadTips();
+      } catch (ex) {
+        _setTipsMsg(ex.detail || 'Clear failed.', true);
+      } finally {
+        tipsClearBtn.disabled = false;
       }
     });
   }

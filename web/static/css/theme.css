@@ -844,6 +844,13 @@ html[data-theme="obsidian"] {
   --glow: rgba(232, 232, 240, 0.10);
 }
 html[data-theme="obsidian"] body { background-image: none; }
+/* Obsidian: --purple is near-white — buttons need dark text to be readable. */
+html[data-theme="obsidian"] .btn-primary { color: #0a0a0f; }
+html[data-theme="obsidian"] .btn-primary:hover { background: #c0c0cc; border-color: #c0c0cc; color: #0a0a0f; }
+
+/* Verdant: --purple is bright green (~2.2:1 contrast with white) — use dark text. */
+html[data-theme="verdant"] .btn-primary { color: #061009; }
+html[data-theme="verdant"] .btn-primary:hover { color: #061009; }
 
 /* ---------- Theme picker swatches ---------- */
 .theme-picker {
