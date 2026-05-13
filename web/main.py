@@ -79,6 +79,15 @@ async def lifespan(app: FastAPI):
                 _log.exception("Failed to apply streaming_safety_divisor override")
     finally:
         db.close()
+
+    # Sweep any orphan vitriol-job-* temp dirs left by prior runs that
+    # were killed before their finally blocks ran. Best-effort.
+    try:
+        from .services.conversion import sweep_orphan_tempdirs
+        sweep_orphan_tempdirs()
+    except Exception:
+        _log.debug("Orphan temp-dir sweep skipped (conversion module not ready)")
+
     _log.info("Vitriol web v%s started; data dir=%s", __version__, cfg.data_dir)
 
     # Background cert-pull scheduler. Wakes hourly, runs the pull if

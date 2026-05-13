@@ -1,5 +1,6 @@
 """Conversion API: upload + submit + list jobs + cancel + download."""
 from __future__ import annotations
+import asyncio
 import json
 import os
 import secrets
@@ -172,7 +173,9 @@ async def submit_conversion(
                 out.close()
                 local_upload_path.unlink(missing_ok=True)
                 raise HTTPException(status_code=413, detail=f"File exceeds max size ({max_size} bytes).")
-            out.write(chunk)
+            # Write on a thread so the event loop stays free for other
+            # requests and WebSocket traffic during large uploads.
+            await asyncio.to_thread(out.write, chunk)
 
     safe_stem = (file.filename or "output").rsplit(".", 1)[0]
     safe_stem = "".join(c for c in safe_stem if c.isalnum() or c in ("-", "_"))[:96] or "output"
@@ -291,10 +294,12 @@ def download_zip(req: _ZipRequest, user: User = Depends(get_current_user), db: S
     if not available:
         raise HTTPException(status_code=404, detail="None of the selected jobs are available for download.")
 
-    import io
     import os
+    import tempfile
     import zipfile
-    buf = io.BytesIO()
+    # SpooledTemporaryFile keeps small zips in memory (fast) and spills
+    # to disk for large ones — prevents OOM when users zip many files.
+    buf = tempfile.SpooledTemporaryFile(max_size=10 * 1024 * 1024)
     used: set[str] = set()
     with zipfile.ZipFile(buf, mode="w", compression=zipfile.ZIP_DEFLATED) as zf:
         for j in available:

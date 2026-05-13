@@ -11,6 +11,7 @@ import asyncio
 import json
 import os
 import threading
+import time
 from concurrent.futures import ThreadPoolExecutor
 from datetime import datetime
 from pathlib import Path
@@ -159,15 +160,23 @@ def _run(job_id: int) -> None:
             except OSError:
                 password = b""
 
+        _last_db_write = [0.0]
+
         def _progress(p: float) -> None:
             pct = max(0, min(100, int(p * 100)))
-            try:
-                # Reuse the open session — small writes, low contention.
-                job.progress = pct
-                db.commit()
-            except Exception:
-                db.rollback()
+            # WebSocket publish at full engine rate — real-time for clients.
             _publish(job_id, {"type": "progress", "progress": pct})
+            # DB write throttled to 1/sec (+ always at 100%) to reduce
+            # SQLite write contention. The DB value is only used for
+            # rehydration after page navigation — 1/sec is plenty.
+            now = time.monotonic()
+            if now - _last_db_write[0] >= 1.0 or pct >= 100:
+                _last_db_write[0] = now
+                try:
+                    job.progress = pct
+                    db.commit()
+                except Exception:
+                    db.rollback()
 
         try:
             convert_file(
@@ -320,3 +329,29 @@ def supported_formats() -> dict:
         "targets_for": targets_for,
         "media_categories": dict(fh.MEDIA_CATEGORY_OF),
     }
+
+
+def sweep_orphan_tempdirs() -> int:
+    """Remove leftover ``vitriol-job-*`` temp directories from previous
+    runs that were killed before their ``finally`` blocks could clean up.
+
+    Called once at boot from the lifespan. Only targets the specific
+    ``vitriol-job-`` prefix so it can't touch unrelated temp files.
+    Returns the number of directories removed.
+    """
+    import glob
+    import shutil
+    import tempfile
+    import logging
+    log = logging.getLogger("vitriol.cleanup")
+    pattern = os.path.join(tempfile.gettempdir(), "vitriol-job-*")
+    removed = 0
+    for d in glob.glob(pattern):
+        try:
+            shutil.rmtree(d, ignore_errors=True)
+            removed += 1
+        except Exception:
+            pass
+    if removed:
+        log.info("Swept %d orphan vitriol-job-* temp dirs at startup", removed)
+    return removed
