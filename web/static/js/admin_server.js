@@ -2521,20 +2521,17 @@ if (logoUploadBtn && logoFileInput) {
     try {
       const fd = new FormData();
       fd.append('file', f);
-      const r = await fetch('/api/v1/server/branding/logo', {
-        method: 'POST', body: fd, credentials: 'same-origin',
-      });
-      if (!r.ok) {
-        const j = await r.json().catch(() => ({}));
-        throw new Error(j.detail || `Upload failed (${r.status}).`);
-      }
+      // Use api.post (isForm=true) so the 401→refresh→retry path in
+      // api.js fires automatically when the access cookie has expired,
+      // instead of surfacing a spurious "Not authenticated" error.
+      await api.post('/server/branding/logo', fd, true);
       _setLogoMsg('Logo uploaded.', false);
       logoFileInput.value = '';
       _bustLogoCache();
       const s = await api.get('/server/settings');
       paintLogoResetVisibility(s);
     } catch (ex) {
-      _setLogoMsg(ex.message || 'Upload failed.', true);
+      _setLogoMsg(ex.detail || ex.message || 'Upload failed.', true);
     } finally {
       logoUploadBtn.disabled = false;
     }
