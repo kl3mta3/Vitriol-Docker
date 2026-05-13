@@ -552,7 +552,7 @@ async def test_email_preview(
     ``kind`` must be one of ``verification``, ``reset``, or ``approval``.
     ``to`` is optional — falls back to the actor's own email address.
     """
-    from ..auth.email import _button_html, _html_email, _send, _brand, _logo_url, _email_border
+    from ..auth.email import _button_html, _html_email, _send, _brand, _logo_url, _email_border, public_url
     from html import escape as _esc
 
     s = db.query(ServerSettings).get(1)
