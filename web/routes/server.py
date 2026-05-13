@@ -218,9 +218,14 @@ def patch_server_settings(
         "show_limit_hit_notice", "show_user_support_button",
     }
     for f in plain_fields:
-        v = getattr(req, f)
-        if v is not None:
-            setattr(s, f, v)
+        # Use model_fields_set rather than `v is not None` so that a field
+        # explicitly sent as null (e.g. the JS sends null when the user
+        # blanks a text input or picks the "default" option in a select)
+        # actually clears the stored value instead of being silently
+        # skipped.  Fields absent from the request body entirely are NOT
+        # in model_fields_set and continue to be left unchanged.
+        if f in req.model_fields_set:
+            setattr(s, f, getattr(req, f))
 
     if req.signup_default_role is not None:
         s.signup_default_role = req.signup_default_role  # SQLAlchemy enum coercion handles string
