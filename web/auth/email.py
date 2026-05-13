@@ -145,6 +145,7 @@ async def _send(db: Session, to: str, subject: str, plain: str, html: Optional[s
             port=s.smtp_port,
             username=s.smtp_user or None,
             password=password or None,
+            validate_certs=False,
             **tls_kwargs,
             timeout=30,
         )
