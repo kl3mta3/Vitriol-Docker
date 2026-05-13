@@ -466,7 +466,7 @@ async def test_email(
         f"Sent by {bn} via {relay} as {auth}.\n"
     )
     from ..auth.email import public_url as _pub_url, _email_border as _eborder
-    _hue, _bstyle = _eborder(db)
+    _primary, _hue, _bstyle = _eborder(db)
     html = _html_email(
         title=f"{bn} — SMTP test",
         greeting="SMTP is working!",
@@ -474,12 +474,13 @@ async def test_email(
             f"This is a test message sent from your {bn} server to verify that outgoing email is configured correctly.",
             f"Relay: {relay}    Auth: {auth}",
         ],
-        button_html=_button_html(f"Open {bn}", str(s.public_base_url or "/")),
+        button_html=_button_html(f"Open {bn}", str(s.public_base_url or "/"), _primary),
         footer="You can safely ignore this email — it was triggered by the SMTP test button in Server settings.",
         brand=bn,
         logo_url=_pub_url(db, "api/v1/server/branding/logo"),
         border_hue=_hue,
         border_style=_bstyle,
+        brand_color=_primary,
     )
 
     from email.mime.multipart import MIMEMultipart
@@ -559,7 +560,7 @@ async def test_email_preview(
 
     bn = _brand(db)
     logo = public_url(db, "api/v1/server/branding/logo")
-    hue, bstyle = _email_border(db)
+    primary, hue, bstyle = _email_border(db)
     preview_link = public_url(db, {
         "verification": "verify?token=PREVIEW_NOT_VALID",
         "reset": "reset?token=PREVIEW_NOT_VALID",
@@ -577,12 +578,13 @@ async def test_email_preview(
             title=subject,
             greeting=f"Hello, {actor.username}!",
             paragraphs=[f"Click the button below to verify your {bn} account."],
-            button_html=_button_html("Verify my account", preview_link),
+            button_html=_button_html("Verify my account", preview_link, primary),
             footer="This link expires in 24 hours. If you didn't create an account, you can safely ignore this email.",
             brand=bn,
             logo_url=logo,
             border_hue=hue,
             border_style=bstyle,
+            brand_color=primary,
         )
     elif kind == "reset":
         subject = f"[Preview] Reset your {bn} password"
@@ -595,12 +597,13 @@ async def test_email_preview(
             title=subject,
             greeting=f"Hello, {actor.username}!",
             paragraphs=[f"We received a request to reset your {bn} password. Click the button below to choose a new one."],
-            button_html=_button_html("Reset my password", preview_link),
+            button_html=_button_html("Reset my password", preview_link, primary),
             footer=f"This link expires in 2 hours. If you didn't request a password reset, you can safely ignore this email — your password has not been changed.",
             brand=bn,
             logo_url=logo,
             border_hue=hue,
             border_style=bstyle,
+            brand_color=primary,
         )
     else:  # approval
         subject = f"[Preview] {bn} — new user awaiting approval"
@@ -618,18 +621,19 @@ async def test_email_preview(
         )
         details_table = (
             f'<table role="presentation" cellspacing="0" cellpadding="0" border="0" '
-            f'style="margin:0 0 24px 0;border-left:3px solid #8b5cf6;padding-left:12px;">'
+            f'style="margin:0 0 24px 0;border-left:3px solid {primary};padding-left:12px;">'
             f'{detail_rows}</table>'
         )
         html = _html_email(
             title=subject,
             greeting="New user awaiting approval",
             paragraphs=[f"A new account has been created on {bn} and is waiting for your review."],
-            button_html=details_table + _button_html("Review in admin panel", preview_link),
+            button_html=details_table + _button_html("Review in admin panel", preview_link, primary),
             brand=bn,
             logo_url=logo,
             border_hue=hue,
             border_style=bstyle,
+            brand_color=primary,
         )
 
     ok = await _send(db, to, subject, plain, html)

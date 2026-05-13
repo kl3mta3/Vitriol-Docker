@@ -22,7 +22,7 @@
   // --- Glyph style table ----------------------------------------------------
 
   const GLYPH_STYLES = {
-    vitriol: { glyphs: ["☉", "☽", "☿", "♀", "♂", "♃", "♄"], corner: "◆" },
+    vitriol: { glyphs: ["☉", "☽", "☿", "♆", "♇", "♃", "♄"], corner: "◆" },
     runes:   { glyphs: ["ᚠ", "ᚢ", "ᚦ", "ᚨ", "ᚱ", "ᚲ", "ᚷ"], corner: "ᛉ" },
     arcane:  { glyphs: ["⊕", "⊗", "✦", "⊙", "⋆", "✧", "⊛"], corner: "✦" },
     // circuit, minimal, vine, helix handled specially — no glyph array needed
