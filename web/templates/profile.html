@@ -38,11 +38,9 @@
       <input type="checkbox" id="show-border-toggle"
         {% if user.show_border %}checked{% endif %}
         {% if not server_show_border %}disabled{% endif %} />
-      <span>Show alchemy border
+      <span>Show border
         {% if not server_show_border %}
           <em class="muted small">(disabled server-wide — contact your administrator)</em>
-        {% else %}
-          <em class="muted small">(the planetary symbols + frame around the viewport)</em>
         {% endif %}
       </span>
     </label>
