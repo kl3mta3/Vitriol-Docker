@@ -465,7 +465,8 @@ async def test_email(
         f"If you can read this, SMTP is wired up correctly.\n\n"
         f"Sent by {bn} via {relay} as {auth}.\n"
     )
-    from ..auth.email import public_url as _pub_url
+    from ..auth.email import public_url as _pub_url, _email_border as _eborder
+    _hue, _bstyle = _eborder(db)
     html = _html_email(
         title=f"{bn} — SMTP test",
         greeting="SMTP is working!",
@@ -477,6 +478,8 @@ async def test_email(
         footer="You can safely ignore this email — it was triggered by the SMTP test button in Server settings.",
         brand=bn,
         logo_url=_pub_url(db, "api/v1/server/branding/logo"),
+        border_hue=_hue,
+        border_style=_bstyle,
     )
 
     from email.mime.multipart import MIMEMultipart
@@ -541,7 +544,7 @@ async def test_email_preview(
     ``kind`` must be one of ``verification``, ``reset``, or ``approval``.
     ``to`` is optional — falls back to the actor's own email address.
     """
-    from ..auth.email import _button_html, _html_email, _send, _brand, public_url
+    from ..auth.email import _button_html, _html_email, _send, _brand, public_url, _email_border
     from html import escape as _esc
 
     s = db.query(ServerSettings).get(1)
@@ -556,6 +559,7 @@ async def test_email_preview(
 
     bn = _brand(db)
     logo = public_url(db, "api/v1/server/branding/logo")
+    hue, bstyle = _email_border(db)
     preview_link = public_url(db, {
         "verification": "verify?token=PREVIEW_NOT_VALID",
         "reset": "reset?token=PREVIEW_NOT_VALID",
@@ -577,6 +581,8 @@ async def test_email_preview(
             footer="This link expires in 24 hours. If you didn't create an account, you can safely ignore this email.",
             brand=bn,
             logo_url=logo,
+            border_hue=hue,
+            border_style=bstyle,
         )
     elif kind == "reset":
         subject = f"[Preview] Reset your {bn} password"
@@ -593,6 +599,8 @@ async def test_email_preview(
             footer=f"This link expires in 2 hours. If you didn't request a password reset, you can safely ignore this email — your password has not been changed.",
             brand=bn,
             logo_url=logo,
+            border_hue=hue,
+            border_style=bstyle,
         )
     else:  # approval
         subject = f"[Preview] {bn} — new user awaiting approval"
@@ -620,6 +628,8 @@ async def test_email_preview(
             button_html=details_table + _button_html("Review in admin panel", preview_link),
             brand=bn,
             logo_url=logo,
+            border_hue=hue,
+            border_style=bstyle,
         )
 
     ok = await _send(db, to, subject, plain, html)

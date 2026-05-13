@@ -23,6 +23,30 @@ logger = logging.getLogger("vitriol.email")
 _BRAND_COLOR = "#8b5cf6"
 _BRAND_COLOR_DARK = "#7c3aed"
 
+# Matches --purple-soft per theme in theme.css — the hue border.js uses.
+_THEME_HUE: dict[str, str] = {
+    "default":   "#a78bfa",
+    "crimson":   "#e74c3c",
+    "verdant":   "#5be09a",
+    "cobalt":    "#60a5fa",
+    "parchment": "#8a5cd6",
+    "obsidian":  "#d4d4dc",
+}
+
+# Unicode glyph sets per border style — mirrors the GLYPH_STYLES table in
+# border.js. Styles that use pure-path rendering (vine, helix, circuit,
+# minimal) get a matching Unicode approximation that degrades gracefully in
+# any email client.
+_BORDER_GLYPHS: dict[str, list[str]] = {
+    "vitriol": ["☉", "☽", "☿", "♀", "♂", "♃", "♄"],
+    "runes":   ["ᚠ", "ᚢ", "ᚦ", "ᚨ", "ᚱ", "ᚲ", "ᚷ"],
+    "arcane":  ["⊕", "⊗", "✦", "⊙", "⋆", "✧", "⊛"],
+    "circuit": ["■", "·", "─", "·", "■", "·", "─"],
+    "minimal": ["—", "·", "—", "·", "—", "·", "—"],
+    "vine":    ["❧", "✿", "❀", "❦", "✾", "❁", "❧"],
+    "helix":   ["◎", "·", "◎", "∞", "◎", "·", "◎"],
+}
+
 
 def _settings_row(db: Session) -> Optional[ServerSettings]:
     return db.query(ServerSettings).get(1)
@@ -51,13 +75,37 @@ def _button_html(label: str, url: str) -> str:
 </p>"""
 
 
-def _html_email(title: str, greeting: str, paragraphs: list[str], button_html: str, footer: str = "", brand: str = "VITRIOL", logo_url: Optional[str] = None) -> str:
+def _glyph_strip_row(hue: str, style: str) -> str:
+    """A thin table row of border glyphs styled in the theme colour.
+
+    Used as a decorative divider just below the header bar and again at the
+    very bottom of the email card — echoing the alchemy border frame that
+    surrounds the web app.  Unicode glyphs render in all major email clients;
+    the font stack falls back gracefully if a particular glyph is absent.
+    """
+    glyphs = _BORDER_GLYPHS.get(style) or _BORDER_GLYPHS["vitriol"]
+    text = "   ".join(glyphs)
+    return (
+        f'<tr><td style="padding:5px 32px;text-align:center;'
+        f'font-family:\'Segoe UI Symbol\',system-ui,-apple-system,sans-serif;'
+        f'font-size:12px;letter-spacing:4px;color:{hue};'
+        f'border-top:1px solid #eeeeee;">'
+        f'{text}</td></tr>'
+    )
+
+
+def _html_email(title: str, greeting: str, paragraphs: list[str], button_html: str, footer: str = "", brand: str = "VITRIOL", logo_url: Optional[str] = None, border_hue: Optional[str] = None, border_style: str = "vitriol") -> str:
     """Full HTML email shell with inline CSS.
 
     ``logo_url`` should be an absolute URL to the operator logo (e.g.
     ``https://example.com/api/v1/server/branding/logo``).  When provided it
     is shown as a small image in the header bar beside the brand name.  Omit
     or pass ``None`` to show the brand name only.
+
+    ``border_hue`` + ``border_style`` add a thin glyph-strip divider just
+    below the header bar and at the bottom of the card, echoing the alchemy
+    border frame in the app.  Pass ``None`` for ``border_hue`` to omit the
+    decorative strips entirely.
     """
     safe_title = escape(title)
     safe_brand = escape(brand)
@@ -71,6 +119,9 @@ def _html_email(title: str, greeting: str, paragraphs: list[str], button_html: s
         f'color:#888888;border-top:1px solid #eeeeee;padding-top:16px;">{escape(footer)}</p>'
         if footer else ""
     )
+    # Optional glyph-strip rows — present when border_hue is set.
+    strip_row = _glyph_strip_row(border_hue, border_style) if border_hue else ""
+
     # Header content: logo (when available) + brand name side-by-side.
     if logo_url:
         safe_logo = escape(logo_url, quote=True)
@@ -107,6 +158,8 @@ def _html_email(title: str, greeting: str, paragraphs: list[str], button_html: s
       <tr><td style="background:{_BRAND_COLOR};padding:24px 32px;">
         {header_content}
       </td></tr>
+      <!-- top glyph strip (theme border echo) -->
+      {strip_row}
       <!-- body -->
       <tr><td style="padding:32px 32px 24px 32px;">
         <p style="margin:0 0 24px 0;font-family:Arial,sans-serif;font-size:17px;
@@ -115,6 +168,8 @@ def _html_email(title: str, greeting: str, paragraphs: list[str], button_html: s
         {button_html}
         {footer_html}
       </td></tr>
+      <!-- bottom glyph strip (theme border echo) -->
+      {strip_row}
     </table>
   </td></tr>
 </table>
@@ -255,6 +310,20 @@ def _brand(db: Session) -> str:
     return (getattr(s, "brand_title", None) or "VITRIOL") if s else "VITRIOL"
 
 
+def _email_border(db: Session) -> tuple[str, str]:
+    """Return ``(hue, style)`` for the decorative glyph strips in emails.
+
+    Reads ``server_default_theme`` and ``server_border_style`` from
+    ServerSettings and maps them to a hex colour and a glyph-set name.
+    Falls back to the default purple + vitriol style when settings are absent.
+    """
+    s = _settings_row(db)
+    theme = (getattr(s, "server_default_theme", None) or "default") if s else "default"
+    style = (getattr(s, "server_border_style", None) or "vitriol") if s else "vitriol"
+    hue = _THEME_HUE.get(theme or "default", _THEME_HUE["default"])
+    return hue, style
+
+
 async def send_verification_email(db: Session, user: User, raw_token: str) -> bool:
     # Points at the public-facing /verify HTML page (handled by ui.py)
     # rather than the bare /api/v1/auth/verify JSON endpoint, so a
@@ -262,6 +331,7 @@ async def send_verification_email(db: Session, user: User, raw_token: str) -> bo
     link = public_url(db, f"verify?token={raw_token}")
     bn = _brand(db)
     logo = public_url(db, "api/v1/server/branding/logo")
+    hue, bstyle = _email_border(db)
     plain = (
         f"Hello {user.username},\n\n"
         f"Verify your {bn} account by visiting:\n{link}\n\n"
@@ -275,6 +345,8 @@ async def send_verification_email(db: Session, user: User, raw_token: str) -> bo
         footer="This link expires in 24 hours. If you didn't create an account, you can safely ignore this email.",
         brand=bn,
         logo_url=logo,
+        border_hue=hue,
+        border_style=bstyle,
     )
     return await _send(db, user.email, f"Verify your {bn} account", plain, html)
 
@@ -283,6 +355,7 @@ async def send_password_reset_email(db: Session, user: User, raw_token: str) -> 
     link = public_url(db, f"reset?token={raw_token}")
     bn = _brand(db)
     logo = public_url(db, "api/v1/server/branding/logo")
+    hue, bstyle = _email_border(db)
     plain = (
         f"Hello {user.username},\n\n"
         f"Reset your {bn} password by visiting:\n{link}\n\n"
@@ -296,6 +369,8 @@ async def send_password_reset_email(db: Session, user: User, raw_token: str) -> 
         footer=f"This link expires in 2 hours. If you didn't request a password reset, you can safely ignore this email — your password has not been changed.",
         brand=bn,
         logo_url=logo,
+        border_hue=hue,
+        border_style=bstyle,
     )
     return await _send(db, user.email, f"Reset your {bn} password", plain, html)
 
@@ -339,6 +414,7 @@ async def send_pending_approval_notification(db: Session, pending_user: User, re
         f'{detail_rows}</table>'
     )
     logo = public_url(db, "api/v1/server/branding/logo")
+    hue, bstyle = _email_border(db)
     html = _html_email(
         title=f"{bn} — new user awaiting approval",
         greeting="New user awaiting approval",
@@ -346,6 +422,8 @@ async def send_pending_approval_notification(db: Session, pending_user: User, re
         button_html=details_table + _button_html("Review in admin panel", admin_url),
         brand=bn,
         logo_url=logo,
+        border_hue=hue,
+        border_style=bstyle,
     )
     for to in recipients:
         if not to:
