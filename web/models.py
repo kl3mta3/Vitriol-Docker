@@ -144,6 +144,10 @@ class User(Base):
     # can flip it off in Profile. Read by base.html into a data-attribute
     # that border.js checks before rendering.
     show_border = Column(Boolean, nullable=False, default=True, server_default="1")
+    # Per-user border style override. NULL = inherit server_border_style.
+    # Lets individual users pick their preferred glyph / line style without
+    # changing the server-wide default.
+    border_style = Column(String(32), nullable=True, default=None)
 
     # Optional custom role overlay. When set, capability checks consult
     # the linked CustomRole (capped at its base_role's ceiling) instead
@@ -679,6 +683,12 @@ class ServerSettings(Base):
     # (which is still respected when server_show_border=True).
     server_show_border = Column(Boolean, nullable=False, default=True, server_default="1")
     server_border_style = Column(String(32), nullable=False, default="vitriol", server_default=text("'vitriol'"))
+    # Site-wide theme defaults. server_default_theme sets the palette that
+    # everyone sees before (or instead of) their personal choice.
+    # server_allow_user_theme=False locks the UI — users can see but not
+    # change the theme picker; the server_default_theme is always applied.
+    server_default_theme = Column(String(32), nullable=True, default=None)
+    server_allow_user_theme = Column(Boolean, nullable=False, default=True, server_default="1")
 
     ssl_cert_pull_webhook_url = Column(String(512), nullable=True)
     ssl_cert_pull_webhook_secret_enc = Column(Text, nullable=True)

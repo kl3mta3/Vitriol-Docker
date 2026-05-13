@@ -94,6 +94,8 @@ _SETTINGS_COLUMNS = (
     "queue_weight_super_admin", "queue_weight_admin", "queue_weight_user",
     # Server-level border control
     "server_show_border", "server_border_style",
+    # Site-wide theme defaults
+    "server_default_theme", "server_allow_user_theme",
 )
 
 # Encrypted-at-rest columns we decrypt for export and re-encrypt on

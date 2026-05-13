@@ -57,6 +57,8 @@ def _common_ctx(request: Request, user: Optional[User], db: Session) -> dict:
         # MutationObserver in border.js picks up the right initial state.
         "server_show_border": bool(getattr(s, "server_show_border", True)) if s else True,
         "server_border_style": str(getattr(s, "server_border_style", None) or "vitriol") if s else "vitriol",
+        "server_default_theme": (getattr(s, "server_default_theme", None) or None) if s else None,
+        "server_allow_user_theme": bool(getattr(s, "server_allow_user_theme", True)) if s else True,
         "show_users_tab": user is not None and has_capability(user, CAN_VIEW_USERS_TAB),
         "show_server_tab": user is not None and has_capability(user, CAN_VIEW_SERVER_TAB),
         "show_files_tab": user is not None and has_capability(user, CAN_VIEW_OWN_FILES),

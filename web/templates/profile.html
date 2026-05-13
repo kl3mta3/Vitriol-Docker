@@ -18,8 +18,15 @@
 
   <div class="card">
     <h2 class="display small">Theme</h2>
+    {% if not server_allow_user_theme %}
+    <p class="muted small">Theme is set by your administrator and cannot be changed.</p>
+    {% else %}
     <p class="muted small">Pick a look. Applies immediately and saves to your account.</p>
-    <div class="theme-picker" id="theme-picker" data-current="{{ user.theme or 'default' }}">
+    {% endif %}
+    <div class="theme-picker{% if not server_allow_user_theme %} theme-picker--locked{% endif %}"
+         id="theme-picker"
+         data-current="{{ user.theme or 'default' }}"
+         data-allow="{{ 'true' if server_allow_user_theme else 'false' }}">
       <button class="theme-swatch" data-theme="default" title="Default — alchemical purple"><span class="sw bg-default"></span><em>Default</em></button>
       <button class="theme-swatch" data-theme="crimson" title="Crimson — blood ritual"><span class="sw bg-crimson"></span><em>Crimson</em></button>
       <button class="theme-swatch" data-theme="verdant" title="Verdant — emerald & brass"><span class="sw bg-verdant"></span><em>Verdant</em></button>
@@ -39,6 +46,23 @@
         {% endif %}
       </span>
     </label>
+    {% if server_show_border %}
+    <label style="margin-top: 10px;">
+      <span>Border style <em class="muted small">(your personal preference)</em></span>
+      <select id="border-style-select"
+              data-current="{{ user.border_style or '' }}"
+              data-server="{{ server_border_style or 'vitriol' }}">
+        <option value="">Server default</option>
+        <option value="vitriol">Vitriol — planetary glyphs (◆ corners)</option>
+        <option value="runes">Runes — Elder Futhark (ᛉ corners)</option>
+        <option value="arcane">Arcane — geometric sigils (✦ corners)</option>
+        <option value="circuit">Circuit — ticks &amp; dots (■ corners)</option>
+        <option value="minimal">Minimal — lines only, no glyphs</option>
+        <option value="vine">Vine — botanical bezier curves + leaves</option>
+        <option value="helix">Helix — DNA double-helix + rungs</option>
+      </select>
+    </label>
+    {% endif %}
     <p id="theme-msg" class="ok" hidden></p>
   </div>
 

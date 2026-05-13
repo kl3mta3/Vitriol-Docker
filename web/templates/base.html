@@ -7,7 +7,17 @@
       - data-border-style : which glyph/line style to render (default "vitriol")
     Anonymous pages (signin/signup/reset/forgot — no `user` in context)
     default to "on" so the brand visual stays present pre-login. -#}
-<html lang="en"{% if user and user.theme and user.theme != 'default' %} data-theme="{{ user.theme }}"{% endif %} data-show-border="{% if not server_show_border %}off{% elif user and user.show_border is sameas false %}off{% else %}on{% endif %}" data-border-style="{{ server_border_style or 'vitriol' }}">
+<html lang="en"
+  {#- Theme priority:
+      1. If the server locks themes (server_allow_user_theme=false), use server_default_theme.
+      2. Otherwise prefer the user's own choice.
+      3. Fall back to server_default_theme.
+      4. Omit attribute entirely when the effective theme is "default" or empty. -#}
+  {%- set _eff_theme = (server_default_theme if not server_allow_user_theme else (user.theme if user and user.theme and user.theme != 'default' else server_default_theme)) or '' -%}
+  {% if _eff_theme and _eff_theme != 'default' %} data-theme="{{ _eff_theme }}"{% endif %}
+  data-show-border="{% if not server_show_border %}off{% elif user and user.show_border is sameas false %}off{% else %}on{% endif %}"
+  data-border-style="{{ (user.border_style if user and user.border_style else None) or server_border_style or 'vitriol' }}"
+>
 <head>
   <meta charset="UTF-8" />
   <meta name="viewport" content="width=device-width, initial-scale=1.0" />

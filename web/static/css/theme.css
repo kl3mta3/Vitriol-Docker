@@ -813,6 +813,10 @@ html[data-theme="parchment"] body {
 html[data-theme="parchment"] #vignette {
   background: radial-gradient(ellipse at center, transparent 60%, rgba(40, 30, 10, 0.18) 100%);
 }
+html[data-theme="parchment"] .nav {
+  background: rgba(236, 225, 196, 0.90);
+  border-bottom-color: rgba(160, 130, 80, 0.30);
+}
 
 /* Obsidian — pure dark with no accent gradients. Minimalist option. */
 html[data-theme="obsidian"] {
@@ -852,6 +856,8 @@ html[data-theme="obsidian"] body { background-image: none; }
 .theme-swatch:hover { color: var(--ink); border-color: var(--border-2); }
 .theme-swatch.active { border-color: var(--purple); color: var(--ink); box-shadow: 0 0 0 1px var(--purple) inset; }
 .theme-swatch em { font-style: normal; }
+/* Locked state — server has disabled user theme changes */
+.theme-picker--locked .theme-swatch { opacity: 0.5; cursor: default; pointer-events: none; }
 .theme-swatch .sw {
   width: 56px; height: 32px; border-radius: 6px;
   border: 1px solid rgba(255,255,255,0.05);

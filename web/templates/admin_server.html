@@ -87,7 +87,34 @@
           <option value="arcane">Arcane — geometric sigils (✦ corners)</option>
           <option value="circuit">Circuit — ticks &amp; dots (■ corners)</option>
           <option value="minimal">Minimal — lines only, no glyphs</option>
+          <option value="vine">Vine — botanical bezier curves + leaves</option>
+          <option value="helix">Helix — DNA double-helix + rungs</option>
         </select>
+      </label>
+
+      <hr style="margin: 20px 0; border-color: var(--border-2);" />
+
+      <p class="muted small" style="margin-bottom: 8px;">
+        <strong>Site-wide theme.</strong> Sets a default theme for all users and controls
+        whether users may customise their own theme from their profile.
+      </p>
+      <label style="margin-bottom: 12px;">
+        <span>Default theme</span>
+        <select name="server_default_theme" id="server-default-theme-select">
+          <option value="">Default (no override)</option>
+          <option value="default">Default — alchemical purple</option>
+          <option value="crimson">Crimson — blood ritual</option>
+          <option value="verdant">Verdant — emerald &amp; brass</option>
+          <option value="cobalt">Cobalt — deep navy</option>
+          <option value="parchment">Parchment — light</option>
+          <option value="obsidian">Obsidian — minimalist dark</option>
+        </select>
+      </label>
+      <label class="checkbox-row">
+        <input type="checkbox" name="server_allow_user_theme" id="server-allow-user-theme-toggle" />
+        <span>Allow users to change their own theme
+          <em class="muted small">(uncheck to lock everyone to the default theme above)</em>
+        </span>
       </label>
     </details>
 

@@ -25,7 +25,7 @@
     vitriol: { glyphs: ["☉", "☽", "☿", "♀", "♂", "♃", "♄"], corner: "◆" },
     runes:   { glyphs: ["ᚠ", "ᚢ", "ᚦ", "ᚨ", "ᚱ", "ᚲ", "ᚷ"], corner: "ᛉ" },
     arcane:  { glyphs: ["⊕", "⊗", "✦", "⊙", "⋆", "✧", "⊛"], corner: "✦" },
-    // circuit and minimal handled specially — no glyph array needed
+    // circuit, minimal, vine, helix handled specially — no glyph array needed
   };
 
   // Default fallback hue — used before CSS custom properties are readable.
@@ -207,6 +207,195 @@
     // No glyphs — just the two rectangles.
   }
 
+  // --- Vine ---------------------------------------------------------------
+  // Organic botanical style: a wavy bezier vine stem runs along each edge's
+  // mid-stripe with small leaf ellipses at every peak. Corners get a trefoil
+  // (three small circles arranged in a flower).
+
+  function renderVine(svg, outer, inner, hue) {
+    drawRects(svg, outer, inner, hue);
+
+    const WAVE_AMP = 4;   // ±px perpendicular to the edge
+    const LEAF_RX  = 6;   // semi-major axis of each leaf ellipse
+    const LEAF_RY  = 2;   // semi-minor axis
+
+    const topY  = (outer.y + (outer.y + LINE_GAP)) / 2;
+    const botY  = ((outer.y + outer.h) + (outer.y + outer.h - LINE_GAP)) / 2;
+    const leftX = (outer.x + (outer.x + LINE_GAP)) / 2;
+    const rightX= ((outer.x + outer.w) + (outer.x + outer.w - LINE_GAP)) / 2;
+    const cl    = CORNER_CLEARANCE;
+
+    // Horizontal vine (top / bottom edge)
+    function vineH(x0, x1, midY) {
+      const len   = x1 - x0;
+      const nHalf = Math.max(2, Math.round(len / (TARGET_SPACING * 0.55)));
+      const seg   = len / nHalf;
+      let d = `M ${x0},${midY}`;
+      for (let i = 0; i < nHalf; i++) {
+        const mx  = x0 + (i + 0.5) * seg;
+        const ex  = x0 + (i + 1) * seg;
+        const dir = i % 2 === 0 ? -1 : 1;
+        d += ` Q ${mx},${midY + dir * WAVE_AMP} ${ex},${midY}`;
+      }
+      svg.appendChild(svgEl("path", {
+        d, fill: "none", stroke: hue,
+        "stroke-opacity": INNER_ALPHA, "stroke-width": 1.2,
+      }));
+      // Leaf at each wave peak
+      for (let i = 0; i < nHalf; i++) {
+        const px  = x0 + (i + 0.5) * seg;
+        const dir = i % 2 === 0 ? -1 : 1;
+        const py  = midY + dir * WAVE_AMP;
+        const rot = dir * 25 + (i % 3 - 1) * 12;
+        svg.appendChild(svgEl("ellipse", {
+          cx: px, cy: py, rx: LEAF_RX, ry: LEAF_RY,
+          transform: `rotate(${rot} ${px} ${py})`,
+          fill: "none", stroke: hue,
+          "stroke-opacity": GLYPH_ALPHA, "stroke-width": 0.9,
+        }));
+      }
+    }
+
+    // Vertical vine (left / right edge)
+    function vineV(y0, y1, midX) {
+      const len   = y1 - y0;
+      const nHalf = Math.max(2, Math.round(len / (TARGET_SPACING * 0.55)));
+      const seg   = len / nHalf;
+      let d = `M ${midX},${y0}`;
+      for (let i = 0; i < nHalf; i++) {
+        const my  = y0 + (i + 0.5) * seg;
+        const ey  = y0 + (i + 1) * seg;
+        const dir = i % 2 === 0 ? -1 : 1;
+        d += ` Q ${midX + dir * WAVE_AMP},${my} ${midX},${ey}`;
+      }
+      svg.appendChild(svgEl("path", {
+        d, fill: "none", stroke: hue,
+        "stroke-opacity": INNER_ALPHA, "stroke-width": 1.2,
+      }));
+      for (let i = 0; i < nHalf; i++) {
+        const py  = y0 + (i + 0.5) * seg;
+        const dir = i % 2 === 0 ? -1 : 1;
+        const px  = midX + dir * WAVE_AMP;
+        // +90° so the leaf points away from the edge (not along it)
+        const rot = dir * 25 + (i % 3 - 1) * 12 + 90;
+        svg.appendChild(svgEl("ellipse", {
+          cx: px, cy: py, rx: LEAF_RX, ry: LEAF_RY,
+          transform: `rotate(${rot} ${px} ${py})`,
+          fill: "none", stroke: hue,
+          "stroke-opacity": GLYPH_ALPHA, "stroke-width": 0.9,
+        }));
+      }
+    }
+
+    vineH(outer.x + cl, outer.x + outer.w - cl, topY);
+    vineH(outer.x + cl, outer.x + outer.w - cl, botY);
+    vineV(outer.y + cl, outer.y + outer.h - cl, leftX);
+    vineV(outer.y + cl, outer.y + outer.h - cl, rightX);
+
+    // Trefoil corner: three small circles arranged around the corner point
+    const CR = 3;
+    for (const [cx, cy] of cornerPositions(outer)) {
+      const offsets = [[0, -CR * 2.2], [CR * 1.9, CR * 1.1], [-CR * 1.9, CR * 1.1]];
+      for (const [dx, dy] of offsets) {
+        svg.appendChild(svgEl("circle", {
+          cx: cx + dx, cy: cy + dy, r: CR,
+          fill: "none", stroke: hue, "stroke-opacity": CORNER_ALPHA, "stroke-width": 1,
+        }));
+      }
+    }
+  }
+
+  // --- Helix (DNA double-helix) -------------------------------------------
+  // Two phase-inverted sine waves run along each edge's mid-stripe.
+  // Short rung lines connect the strands at their peak positions (base pairs).
+  // Corners get two concentric circles.
+
+  function renderHelix(svg, outer, inner, hue) {
+    drawRects(svg, outer, inner, hue);
+
+    const WAVE_AMP  = 5;   // ±px perpendicular
+    const HALF_WAVE = 22;  // target px per half-wave (~44px full period)
+    const RUNG_STEP = 2;   // draw a rung every N half-waves
+
+    const topY  = (outer.y + (outer.y + LINE_GAP)) / 2;
+    const botY  = ((outer.y + outer.h) + (outer.y + outer.h - LINE_GAP)) / 2;
+    const leftX = (outer.x + (outer.x + LINE_GAP)) / 2;
+    const rightX= ((outer.x + outer.w) + (outer.x + outer.w - LINE_GAP)) / 2;
+    const cl    = CORNER_CLEARANCE;
+
+    // Horizontal helix (top / bottom edge)
+    function helixH(x0, x1, midY) {
+      const len   = x1 - x0;
+      const nHalf = Math.max(4, Math.round(len / HALF_WAVE));
+      const seg   = len / nHalf;
+      let d1 = `M ${x0},${midY}`;
+      let d2 = `M ${x0},${midY}`;
+      for (let i = 0; i < nHalf; i++) {
+        const mx  = x0 + (i + 0.5) * seg;
+        const ex  = x0 + (i + 1) * seg;
+        const dir = i % 2 === 0 ? -1 : 1;
+        d1 += ` Q ${mx},${midY + dir * WAVE_AMP} ${ex},${midY}`;
+        d2 += ` Q ${mx},${midY - dir * WAVE_AMP} ${ex},${midY}`;
+      }
+      svg.appendChild(svgEl("path", { d: d1, fill: "none", stroke: hue, "stroke-opacity": INNER_ALPHA, "stroke-width": 1 }));
+      svg.appendChild(svgEl("path", { d: d2, fill: "none", stroke: hue, "stroke-opacity": GLYPH_ALPHA, "stroke-width": 1 }));
+      // Rungs at peak positions (every RUNG_STEP half-waves)
+      for (let i = 0; i < nHalf; i += RUNG_STEP) {
+        const rx  = x0 + (i + 0.5) * seg;
+        const dir = i % 2 === 0 ? -1 : 1;
+        svg.appendChild(svgEl("line", {
+          x1: rx, y1: midY + dir * WAVE_AMP,
+          x2: rx, y2: midY - dir * WAVE_AMP,
+          stroke: hue, "stroke-opacity": GLYPH_ALPHA * 0.55, "stroke-width": 0.8,
+        }));
+      }
+    }
+
+    // Vertical helix (left / right edge)
+    function helixV(y0, y1, midX) {
+      const len   = y1 - y0;
+      const nHalf = Math.max(4, Math.round(len / HALF_WAVE));
+      const seg   = len / nHalf;
+      let d1 = `M ${midX},${y0}`;
+      let d2 = `M ${midX},${y0}`;
+      for (let i = 0; i < nHalf; i++) {
+        const my  = y0 + (i + 0.5) * seg;
+        const ey  = y0 + (i + 1) * seg;
+        const dir = i % 2 === 0 ? -1 : 1;
+        d1 += ` Q ${midX + dir * WAVE_AMP},${my} ${midX},${ey}`;
+        d2 += ` Q ${midX - dir * WAVE_AMP},${my} ${midX},${ey}`;
+      }
+      svg.appendChild(svgEl("path", { d: d1, fill: "none", stroke: hue, "stroke-opacity": INNER_ALPHA, "stroke-width": 1 }));
+      svg.appendChild(svgEl("path", { d: d2, fill: "none", stroke: hue, "stroke-opacity": GLYPH_ALPHA, "stroke-width": 1 }));
+      for (let i = 0; i < nHalf; i += RUNG_STEP) {
+        const ry  = y0 + (i + 0.5) * seg;
+        const dir = i % 2 === 0 ? -1 : 1;
+        svg.appendChild(svgEl("line", {
+          x1: midX + dir * WAVE_AMP, y1: ry,
+          x2: midX - dir * WAVE_AMP, y2: ry,
+          stroke: hue, "stroke-opacity": GLYPH_ALPHA * 0.55, "stroke-width": 0.8,
+        }));
+      }
+    }
+
+    helixH(outer.x + cl, outer.x + outer.w - cl, topY);
+    helixH(outer.x + cl, outer.x + outer.w - cl, botY);
+    helixV(outer.y + cl, outer.y + outer.h - cl, leftX);
+    helixV(outer.y + cl, outer.y + outer.h - cl, rightX);
+
+    // Corner: two concentric circles (outer ring + filled inner dot)
+    for (const [cx, cy] of cornerPositions(outer)) {
+      svg.appendChild(svgEl("circle", {
+        cx, cy, r: 5,
+        fill: "none", stroke: hue, "stroke-opacity": CORNER_ALPHA, "stroke-width": 1,
+      }));
+      svg.appendChild(svgEl("circle", {
+        cx, cy, r: 2,
+        fill: hue, "fill-opacity": CORNER_ALPHA,
+      }));
+    }
+  }
+
   // --- Main render ----------------------------------------------------------
 
   function renderBorder() {
@@ -240,6 +429,10 @@
       renderCircuit(svg, outer, inner, hue);
     } else if (style === "minimal") {
       renderMinimal(svg, outer, inner, hue);
+    } else if (style === "vine") {
+      renderVine(svg, outer, inner, hue);
+    } else if (style === "helix") {
+      renderHelix(svg, outer, inner, hue);
     } else {
       // vitriol, runes, arcane — or any unknown value falls back to vitriol
       renderGlyphStyle(svg, outer, inner, hue, GLYPH_STYLES[style] || GLYPH_STYLES.vitriol);

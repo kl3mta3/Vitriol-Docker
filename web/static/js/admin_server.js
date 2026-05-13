@@ -2584,6 +2584,22 @@ if (logoResetBtn) {
       document.documentElement.setAttribute('data-show-border', showToggle.checked ? 'on' : 'off');
     });
   }
+
+  // Live-preview the default-theme select so the operator sees the theme
+  // switch immediately before saving. The MutationObserver in border.js
+  // and CSS handle the rest.
+  const themeSelect   = document.getElementById('server-default-theme-select');
+  const allowUserThme = document.getElementById('server-allow-user-theme-toggle');
+  if (themeSelect) {
+    themeSelect.addEventListener('change', () => {
+      const t = themeSelect.value;
+      if (t && t !== 'default') {
+        document.documentElement.setAttribute('data-theme', t);
+      } else {
+        document.documentElement.removeAttribute('data-theme');
+      }
+    });
+  }
 })();
 
 // Kick everything off. load() populates the bulk of the form;

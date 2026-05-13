@@ -27,6 +27,7 @@ def me(user: User = Depends(get_current_user)):
 
 
 VALID_THEMES = {"default", "crimson", "verdant", "cobalt", "parchment", "obsidian"}
+VALID_BORDER_STYLES = {"", "vitriol", "runes", "arcane", "circuit", "minimal", "vine", "helix"}
 
 
 @router.patch("", response_model=UserOut)
@@ -47,6 +48,11 @@ async def update_me(req: SelfUpdateRequest, user: User = Depends(get_current_use
         user.theme = req.theme
     if req.show_border is not None:
         user.show_border = bool(req.show_border)
+    if req.border_style is not None:
+        style = req.border_style or ""
+        if style not in VALID_BORDER_STYLES:
+            raise HTTPException(status_code=400, detail=f"Unknown border style. Choose from {sorted(s for s in VALID_BORDER_STYLES if s)}")
+        user.border_style = style or None  # empty string → clear override
     if req.first_name is not None:
         user.first_name = req.first_name.strip() or None
     if req.last_name is not None:

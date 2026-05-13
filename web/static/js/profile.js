@@ -218,6 +218,14 @@ refreshKeys();
     });
   });
 
+  // ---- Theme lock ----
+  // When data-allow="false" on the picker, disable all swatch buttons so the
+  // user can see the current theme but cannot change it.
+  const allowTheme = picker.dataset.allow !== 'false';
+  if (!allowTheme) {
+    swatches.forEach(s => { s.disabled = true; s.style.opacity = '0.5'; s.style.cursor = 'default'; });
+  }
+
   // ---- Alchemy border toggle ----
   // Read/written via `data-show-border` on <html>. border.js checks
   // this attribute on every render and skips drawing when it's "off".
@@ -246,6 +254,44 @@ refreshKeys();
         borderToggle.checked = !on;
         document.documentElement.setAttribute('data-show-border', !on ? 'on' : 'off');
         msg.textContent = ex.detail || 'Could not save border preference';
+        msg.hidden = false;
+      }
+    });
+  }
+
+  // ---- Border style select ----
+  // Per-user override. Empty string = follow server default.
+  // The select's data-current attribute is populated server-side.
+  const borderStyleSel = document.getElementById('border-style-select');
+  if (borderStyleSel) {
+    // Pre-select the user's saved style (or "" for server default)
+    const currentBorderStyle = borderStyleSel.dataset.current || '';
+    borderStyleSel.value = currentBorderStyle;
+    // If the saved value isn't in the list, fall back to ""
+    if (borderStyleSel.value !== currentBorderStyle) borderStyleSel.value = '';
+
+    // Server fallback: the value to show when the user clears their override.
+    // Stored as data-server on the select by the template (server_border_style).
+    const _serverStyle = borderStyleSel.dataset.server || 'vitriol';
+    function applyBorderStyle(val) {
+      document.documentElement.setAttribute('data-border-style', val || _serverStyle);
+    }
+    applyBorderStyle(currentBorderStyle);
+
+    borderStyleSel.addEventListener('change', async () => {
+      const style = borderStyleSel.value;  // "" = clear override (follow server)
+      applyBorderStyle(style);
+      msg.hidden = true;
+      try {
+        // Send null to clear the override, string to set it
+        await api.patch('/me', { border_style: style || null });
+        msg.textContent = style ? `Border style: ${style}.` : 'Using server default border style.';
+        msg.hidden = false;
+      } catch (ex) {
+        // Roll back
+        borderStyleSel.value = currentBorderStyle;
+        applyBorderStyle(currentBorderStyle);
+        msg.textContent = ex.detail || 'Could not save border style';
         msg.hidden = false;
       }
     });

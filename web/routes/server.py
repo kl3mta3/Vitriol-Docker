@@ -115,6 +115,8 @@ def _to_out(s: ServerSettings) -> ServerSettingsOut:
         queue_weight_user=int(getattr(s, "queue_weight_user", None) or 1),
         server_show_border=bool(getattr(s, "server_show_border", True)),
         server_border_style=str(getattr(s, "server_border_style", None) or "vitriol"),
+        server_default_theme=getattr(s, "server_default_theme", None) or None,
+        server_allow_user_theme=bool(getattr(s, "server_allow_user_theme", True)),
     )
 
 
@@ -204,6 +206,8 @@ def patch_server_settings(
         "queue_weight_super_admin", "queue_weight_admin", "queue_weight_user",
         # Server-level border control
         "server_show_border", "server_border_style",
+        # Site-wide theme defaults
+        "server_default_theme", "server_allow_user_theme",
     }
     for f in plain_fields:
         v = getattr(req, f)

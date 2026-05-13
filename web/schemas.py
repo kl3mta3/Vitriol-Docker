@@ -75,6 +75,7 @@ class UserOut(BaseModel):
     queue_weight_override: Optional[int] = None
     theme: str = "default"
     show_border: bool = True
+    border_style: Optional[str] = None
     custom_role_id: Optional[int] = None
     custom_role_name: Optional[str] = None
     # Surfaced as a boolean rather than the hash itself so the UI can
@@ -138,6 +139,7 @@ class SelfUpdateRequest(BaseModel):
     email: Optional[EmailStr] = None
     theme: Optional[str] = Field(default=None, max_length=32)
     show_border: Optional[bool] = None
+    border_style: Optional[str] = Field(default=None, max_length=32)
 
 
 class CredentialResetRequest(BaseModel):
@@ -292,6 +294,9 @@ class ServerSettingsOut(BaseModel):
     # Server-level border control
     server_show_border: bool = True
     server_border_style: str = "vitriol"
+    # Site-wide theme defaults
+    server_default_theme: Optional[str] = None
+    server_allow_user_theme: bool = True
 
 
 class ServerSettingsPatch(BaseModel):
@@ -372,6 +377,8 @@ class ServerSettingsPatch(BaseModel):
     streaming_safety_divisor: Optional[int] = None
     server_show_border: Optional[bool] = None
     server_border_style: Optional[str] = None
+    server_default_theme: Optional[str] = None
+    server_allow_user_theme: Optional[bool] = None
 
 
 class CustomRoleOut(BaseModel):

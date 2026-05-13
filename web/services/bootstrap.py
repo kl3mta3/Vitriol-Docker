@@ -373,6 +373,14 @@ _ADDITIVE_COLUMNS: list[tuple[str, str, str]] = [
      "ALTER TABLE server_settings ADD COLUMN server_show_border BOOLEAN NOT NULL DEFAULT 1"),
     ("server_settings", "server_border_style",
      "ALTER TABLE server_settings ADD COLUMN server_border_style VARCHAR(32) NOT NULL DEFAULT 'vitriol'"),
+    # Per-user border style override (NULL = follow server default)
+    ("users", "border_style",
+     "ALTER TABLE users ADD COLUMN border_style VARCHAR(32)"),
+    # Server-wide theme defaults + user-theme lock
+    ("server_settings", "server_default_theme",
+     "ALTER TABLE server_settings ADD COLUMN server_default_theme VARCHAR(32)"),
+    ("server_settings", "server_allow_user_theme",
+     "ALTER TABLE server_settings ADD COLUMN server_allow_user_theme BOOLEAN NOT NULL DEFAULT 1"),
 ]
 
 
