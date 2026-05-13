@@ -25,6 +25,7 @@ from .routes import oidc_providers as oidc_routes
 from .routes import roles as roles_routes
 from .routes import server as server_routes
 from .routes import setup as setup_routes
+from .routes import tips as tips_routes
 from .routes import ui as ui_routes
 from .routes import users as users_routes
 from .services.bootstrap import apply_recovery_config, ensure_schema, ensure_server_settings, ensure_super_admin, migrate_legacy_discord, migrate_legacy_oidc, super_admin_exists
@@ -225,6 +226,7 @@ def create_app() -> FastAPI:
     app.include_router(users_routes.router, prefix="/api/v1")
     app.include_router(roles_routes.router, prefix="/api/v1")
     app.include_router(server_routes.router, prefix="/api/v1")
+    app.include_router(tips_routes.router, prefix="/api/v1")
     app.include_router(db_providers_routes.router, prefix="/api/v1")
     app.include_router(oidc_routes.router, prefix="/api/v1")
     app.include_router(notification_routes.router, prefix="/api/v1")

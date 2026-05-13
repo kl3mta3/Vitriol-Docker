@@ -392,6 +392,8 @@ _ADDITIVE_COLUMNS: list[tuple[str, str, str]] = [
      "ALTER TABLE server_settings ADD COLUMN show_limit_hit_notice BOOLEAN NOT NULL DEFAULT 1"),
     ("server_settings", "show_user_support_button",
      "ALTER TABLE server_settings ADD COLUMN show_user_support_button BOOLEAN NOT NULL DEFAULT 0"),
+    ("server_settings", "tips_enabled",
+     "ALTER TABLE server_settings ADD COLUMN tips_enabled BOOLEAN NOT NULL DEFAULT 1"),
 ]
 
 

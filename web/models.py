@@ -781,6 +781,11 @@ class ServerSettings(Base):
     # backend resolver can dispatch by scheme uniformly. Idempotent.
     storage_uris_backfilled = Column(Boolean, nullable=False, default=False, server_default="0")
 
+    # Tips — short lines shown on the main app page below the status bar.
+    # tips_enabled=False hides the tip area entirely. Tips are stored in
+    # the separate `tips` table; one is chosen at random per page load.
+    tips_enabled = Column(Boolean, nullable=False, default=True, server_default="1")
+
     # ---------------------------------------------------------- performance
     # Worker pool size for the conversion executor. Applies at boot —
     # changing this requires a container restart so the executor can be
@@ -853,6 +858,15 @@ class DbProvider(Base):
     created_at = Column(DateTime, nullable=False, default=datetime.utcnow)
     updated_at = Column(DateTime, nullable=False, default=datetime.utcnow, onupdate=datetime.utcnow)
     created_by_user_id = Column(Integer, ForeignKey("users.id"), nullable=True)
+
+
+class Tip(Base):
+    """A single tip shown randomly on the main app page below the status bar."""
+    __tablename__ = "tips"
+
+    id = Column(Integer, primary_key=True, autoincrement=True)
+    body = Column(Text, nullable=False)
+    created_at = Column(DateTime, nullable=False, default=datetime.utcnow)
 
 
 class AuditLog(Base):

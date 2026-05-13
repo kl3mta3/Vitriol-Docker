@@ -122,6 +122,7 @@ def _to_out(s: ServerSettings) -> ServerSettingsOut:
         support_discord_shared=bool(getattr(s, "support_discord_shared", False)),
         show_limit_hit_notice=bool(getattr(s, "show_limit_hit_notice", True)),
         show_user_support_button=bool(getattr(s, "show_user_support_button", False)),
+        tips_enabled=bool(getattr(s, "tips_enabled", True)),
     )
 
 
@@ -216,6 +217,7 @@ def patch_server_settings(
         # Support contact
         "support_email", "support_discord_url", "support_discord_shared",
         "show_limit_hit_notice", "show_user_support_button",
+        "tips_enabled",
     }
     for f in plain_fields:
         # Use model_fields_set rather than `v is not None` so that a field
@@ -470,7 +472,7 @@ async def test_email(
         f"If you can read this, SMTP is wired up correctly.\n\n"
         f"Sent by {bn} via {relay} as {auth}.\n"
     )
-    from ..auth.email import public_url as _pub_url, _email_border as _eborder
+    from ..auth.email import _logo_url as _lurl, _email_border as _eborder
     _primary, _hue, _bstyle = _eborder(db)
     html = _html_email(
         title=f"{bn} — SMTP test",
@@ -482,7 +484,7 @@ async def test_email(
         button_html=_button_html(f"Open {bn}", str(s.public_base_url or "/"), _primary),
         footer="You can safely ignore this email — it was triggered by the SMTP test button in Server settings.",
         brand=bn,
-        logo_url=_pub_url(db, "api/v1/server/branding/logo"),
+        logo_url=_lurl(db),
         border_hue=_hue,
         border_style=_bstyle,
         brand_color=_primary,
@@ -550,7 +552,7 @@ async def test_email_preview(
     ``kind`` must be one of ``verification``, ``reset``, or ``approval``.
     ``to`` is optional — falls back to the actor's own email address.
     """
-    from ..auth.email import _button_html, _html_email, _send, _brand, public_url, _email_border
+    from ..auth.email import _button_html, _html_email, _send, _brand, _logo_url, _email_border
     from html import escape as _esc
 
     s = db.query(ServerSettings).get(1)
@@ -564,7 +566,7 @@ async def test_email_preview(
         raise HTTPException(status_code=400, detail="kind must be verification, reset, or approval.")
 
     bn = _brand(db)
-    logo = public_url(db, "api/v1/server/branding/logo")
+    logo = _logo_url(db)
     primary, hue, bstyle = _email_border(db)
     preview_link = public_url(db, {
         "verification": "verify?token=PREVIEW_NOT_VALID",

@@ -1,5 +1,6 @@
 """HTML page routes (Jinja2 templates)."""
 from __future__ import annotations
+import random
 from datetime import datetime
 from typing import Optional
 
@@ -14,7 +15,7 @@ from ..auth import email as email_svc
 from ..auth.permissions import has_capability, CAN_VIEW_USERS_TAB, CAN_VIEW_SERVER_TAB, CAN_VIEW_OWN_FILES
 from ..deps import get_current_user_optional, get_db
 from ..models import (
-    ApprovalRequest, ApprovalStatus, Role, ServerSettings, Status, TokenPurpose, User,
+    ApprovalRequest, ApprovalStatus, Role, ServerSettings, Status, Tip, TokenPurpose, User,
 )
 from ..auth import discord as discord_svc
 from ..services import audit
@@ -73,7 +74,21 @@ def _common_ctx(request: Request, user: Optional[User], db: Session) -> dict:
         #   2. The status-bar "v1.x.y" badge in app.html
         # Bumping __version__ invalidates browser caches automatically.
         "version": __version__,
+        # Random tip shown below the status bar on the main app page.
+        # None when tips are disabled or the table is empty.
+        "tip_text": _pick_tip(db, s),
     }
+
+
+def _pick_tip(db: Session, s: Optional[ServerSettings]) -> Optional[str]:
+    """Return a random tip body, or None if tips are off / table is empty."""
+    if s is None or not bool(getattr(s, "tips_enabled", True)):
+        return None
+    try:
+        tips = db.query(Tip).all()
+        return random.choice(tips).body if tips else None
+    except Exception:
+        return None
 
 
 @router.get("/", response_class=HTMLResponse)

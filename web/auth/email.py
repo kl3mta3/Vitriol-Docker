@@ -321,6 +321,27 @@ def _brand(db: Session) -> str:
     return (getattr(s, "brand_title", None) or "VITRIOL") if s else "VITRIOL"
 
 
+def _logo_url(db: Session) -> str:
+    """Absolute URL to the operator logo, with a cache-bust parameter.
+
+    Email clients (Gmail in particular) proxy images through their own CDN
+    and cache them indefinitely by URL.  Appending the settings ``updated_at``
+    epoch as ``?v=<ts>`` means the URL changes whenever the logo is re-uploaded
+    (because the upload triggers a ``db.commit()`` which bumps ``updated_at``),
+    forcing a fresh fetch in inboxes that would otherwise show a stale image.
+    """
+    s = _settings_row(db)
+    ts = 0
+    if s is not None:
+        ua = getattr(s, "updated_at", None)
+        if ua is not None:
+            try:
+                ts = int(ua.timestamp())
+            except Exception:
+                ts = 0
+    return public_url(db, f"api/v1/server/branding/logo?v={ts}")
+
+
 def _email_border(db: Session) -> tuple[str, str, str]:
     """Return ``(primary_color, hue, style)`` for theming emails.
 
@@ -346,7 +367,7 @@ async def send_verification_email(db: Session, user: User, raw_token: str) -> bo
     # browser click renders a real success page instead of `{"message":...}`.
     link = public_url(db, f"verify?token={raw_token}")
     bn = _brand(db)
-    logo = public_url(db, "api/v1/server/branding/logo")
+    logo = _logo_url(db)
     primary, hue, bstyle = _email_border(db)
     plain = (
         f"Hello {user.username},\n\n"
@@ -371,7 +392,7 @@ async def send_verification_email(db: Session, user: User, raw_token: str) -> bo
 async def send_password_reset_email(db: Session, user: User, raw_token: str) -> bool:
     link = public_url(db, f"reset?token={raw_token}")
     bn = _brand(db)
-    logo = public_url(db, "api/v1/server/branding/logo")
+    logo = _logo_url(db)
     primary, hue, bstyle = _email_border(db)
     plain = (
         f"Hello {user.username},\n\n"
@@ -426,7 +447,7 @@ async def send_pending_approval_notification(db: Session, pending_user: User, re
         f'<td style="font-family:Arial,sans-serif;font-size:14px;color:#111111;padding:4px 0;">'
         f'{escape(pending_user.email)}</td></tr>'
     )
-    logo = public_url(db, "api/v1/server/branding/logo")
+    logo = _logo_url(db)
     primary, hue, bstyle = _email_border(db)
     details_table = (
         f'<table role="presentation" cellspacing="0" cellpadding="0" border="0" '

@@ -615,6 +615,43 @@
       </label>
     </details>
 
+    <details name="server-settings"><summary>Tips</summary>
+      <p class="muted small" style="margin-bottom: 16px;">
+        Short tips shown randomly below the status bar on the main app page.
+        Each page load picks a different one. Leave the list empty or disable
+        tips to show nothing.
+      </p>
+      <label class="checkbox-row" style="margin-bottom: 16px;">
+        <input type="checkbox" name="tips_enabled" id="tips-enabled-toggle" />
+        <span>Show tips on the app page</span>
+      </label>
+
+      <div id="tips-section">
+        <ul id="tips-list" class="list" style="margin-bottom: 12px; min-height: 24px;"></ul>
+
+        <div class="row-form" style="margin-bottom: 8px; align-items: flex-start;">
+          <textarea id="tip-body-input" rows="2"
+                    placeholder="Enter a tip…"
+                    maxlength="500"
+                    style="resize:vertical; flex:1; font-size:13px;"></textarea>
+          <button type="button" id="tip-add-btn" class="btn btn-secondary" style="align-self:flex-end;">Add</button>
+        </div>
+        <p id="tips-msg" class="muted small" hidden></p>
+
+        <div style="display:flex; gap:8px; flex-wrap:wrap; margin-top: 8px;">
+          <button type="button" id="tips-export-btn" class="btn btn-ghost">Export JSON</button>
+          <label class="btn btn-ghost" style="cursor:pointer; margin:0;">
+            Import JSON
+            <input type="file" id="tips-import-file" accept=".json,application/json" hidden />
+          </label>
+          <label class="checkbox-row" style="margin-left:auto; gap:6px;">
+            <input type="checkbox" id="tips-import-replace" />
+            <span class="muted small">Replace existing on import</span>
+          </label>
+        </div>
+      </div>
+    </details>
+
     <div class="form-actions">
       <button type="submit" class="btn btn-primary">Save settings</button>
       <span style="flex: 1;"></span>

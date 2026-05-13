@@ -49,6 +49,9 @@
     <span id="status-text">Ready.</span>
     <span id="status-version" class="muted small">v{{ version }}</span>
   </footer>
+  {% if tip_text %}
+  <p class="app-tip">{{ tip_text }}</p>
+  {% endif %}
 </section>
 
 <template id="row-template">

@@ -308,6 +308,7 @@ class ServerSettingsOut(BaseModel):
     support_discord_shared: bool = False
     show_limit_hit_notice: bool = True
     show_user_support_button: bool = False
+    tips_enabled: bool = True
 
 
 class ServerSettingsPatch(BaseModel):
@@ -396,6 +397,23 @@ class ServerSettingsPatch(BaseModel):
     support_discord_shared: Optional[bool] = None
     show_limit_hit_notice: Optional[bool] = None
     show_user_support_button: Optional[bool] = None
+    tips_enabled: Optional[bool] = None
+
+
+class TipOut(BaseModel):
+    model_config = ConfigDict(from_attributes=True)
+    id: int
+    body: str
+    created_at: datetime
+
+
+class TipCreate(BaseModel):
+    body: str = Field(..., min_length=1, max_length=500)
+
+
+class TipImport(BaseModel):
+    tips: List[str]
+    replace: bool = False  # when True, wipe existing tips before importing
 
 
 class CustomRoleOut(BaseModel):

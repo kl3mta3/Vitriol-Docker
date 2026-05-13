@@ -99,6 +99,7 @@ _SETTINGS_COLUMNS = (
     # Support contact
     "support_email", "support_discord_url", "support_discord_shared",
     "show_limit_hit_notice", "show_user_support_button",
+    "tips_enabled",
 )
 
 # Encrypted-at-rest columns we decrypt for export and re-encrypt on

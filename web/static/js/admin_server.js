@@ -2603,6 +2603,139 @@ if (logoResetBtn) {
 })();
 
 // Kick everything off. load() populates the bulk of the form;
+// ─── Tips management ──────────────────────────────────────────────────────────
+(function () {
+  const tipsList       = document.getElementById('tips-list');
+  const tipBodyInput   = document.getElementById('tip-body-input');
+  const tipAddBtn      = document.getElementById('tip-add-btn');
+  const tipsMsg        = document.getElementById('tips-msg');
+  const tipsExportBtn  = document.getElementById('tips-export-btn');
+  const tipsImportFile = document.getElementById('tips-import-file');
+  const tipsImportRepl = document.getElementById('tips-import-replace');
+  if (!tipsList) return;  // tips section not in DOM
+
+  function _setTipsMsg(text, isError) {
+    if (!tipsMsg) return;
+    tipsMsg.textContent = text;
+    tipsMsg.className = isError ? 'error small' : 'ok small';
+    tipsMsg.hidden = !text;
+  }
+
+  async function reloadTips() {
+    tipsList.innerHTML = '';
+    try {
+      const tips = await api.get('/server/tips');
+      if (!tips || tips.length === 0) {
+        const li = document.createElement('li');
+        li.className = 'muted small';
+        li.style.padding = '4px 0';
+        li.textContent = 'No tips yet.';
+        tipsList.appendChild(li);
+        return;
+      }
+      for (const t of tips) {
+        const li = document.createElement('li');
+        li.style.cssText = 'display:flex;align-items:flex-start;gap:8px;padding:4px 0;';
+        const span = document.createElement('span');
+        span.style.flex = '1';
+        span.textContent = t.body;
+        const del = document.createElement('button');
+        del.type = 'button';
+        del.className = 'btn btn-ghost';
+        del.style.cssText = 'padding:2px 8px;font-size:11px;flex-shrink:0;';
+        del.textContent = '✕';
+        del.title = 'Delete tip';
+        del.addEventListener('click', async () => {
+          del.disabled = true;
+          try {
+            await api.del(`/server/tips/${t.id}`);
+            _setTipsMsg('Tip deleted.', false);
+            await reloadTips();
+          } catch (ex) {
+            _setTipsMsg(ex.detail || 'Delete failed.', true);
+            del.disabled = false;
+          }
+        });
+        li.appendChild(span);
+        li.appendChild(del);
+        tipsList.appendChild(li);
+      }
+    } catch (ex) {
+      _setTipsMsg(ex.detail || 'Failed to load tips.', true);
+    }
+  }
+
+  if (tipAddBtn) {
+    tipAddBtn.addEventListener('click', async () => {
+      const body = tipBodyInput ? tipBodyInput.value.trim() : '';
+      if (!body) { _setTipsMsg('Enter a tip first.', true); return; }
+      tipAddBtn.disabled = true;
+      try {
+        await api.post('/server/tips', { body });
+        tipBodyInput.value = '';
+        _setTipsMsg('Tip added.', false);
+        await reloadTips();
+      } catch (ex) {
+        _setTipsMsg(ex.detail || 'Failed to add tip.', true);
+      } finally {
+        tipAddBtn.disabled = false;
+      }
+    });
+  }
+
+  if (tipsExportBtn) {
+    tipsExportBtn.addEventListener('click', async () => {
+      try {
+        // Fetch via raw fetch so we get the blob for download.
+        const r = await fetch('/api/v1/server/tips/export', { credentials: 'same-origin' });
+        if (!r.ok) throw new Error(`Export failed (${r.status})`);
+        const blob = await r.blob();
+        const url = URL.createObjectURL(blob);
+        const a = document.createElement('a');
+        a.href = url; a.download = 'vitriol-tips.json';
+        a.click();
+        URL.revokeObjectURL(url);
+      } catch (ex) {
+        _setTipsMsg(ex.message || 'Export failed.', true);
+      }
+    });
+  }
+
+  if (tipsImportFile) {
+    tipsImportFile.addEventListener('change', async () => {
+      const f = tipsImportFile.files && tipsImportFile.files[0];
+      if (!f) return;
+      try {
+        const text = await f.text();
+        const data = JSON.parse(text);
+        if (!data.tips || !Array.isArray(data.tips)) {
+          _setTipsMsg('Invalid file — expected {"tips": [...]}', true);
+          tipsImportFile.value = '';
+          return;
+        }
+        const replace = tipsImportRepl ? tipsImportRepl.checked : false;
+        const r = await api.post('/server/tips/import', { tips: data.tips, replace });
+        _setTipsMsg(r.message || 'Imported.', false);
+        await reloadTips();
+      } catch (ex) {
+        _setTipsMsg(ex.detail || ex.message || 'Import failed.', true);
+      } finally {
+        tipsImportFile.value = '';
+      }
+    });
+  }
+
+  // Load tips when the <details> is first opened (lazy).
+  const tipsDetails = tipsList.closest('details');
+  if (tipsDetails) {
+    tipsDetails.addEventListener('toggle', () => {
+      if (tipsDetails.open) reloadTips();
+    });
+  } else {
+    reloadTips();
+  }
+})();
+
 // refreshStorageSection + reloadDbProviders paint the new sections
 // that need post-load wiring (visibility, pills, table render).
 (async () => {

@@ -429,6 +429,17 @@ input:focus, select:focus, textarea:focus { outline: none; border-color: var(--p
   font-size: 12px;
 }
 
+/* Tip of the day — shown below the status bar on the main app page */
+.app-tip {
+  margin: 8px 0 0 0;
+  padding: 0;
+  text-align: center;
+  font-size: 12px;
+  color: var(--ink-faint);
+  font-style: italic;
+  letter-spacing: 0.02em;
+}
+
 /* ---------- Cards / admin ---------- */
 .card-grid { display: grid; grid-template-columns: repeat(auto-fit, minmax(320px, 1fr)); gap: 20px; }
 .card {
