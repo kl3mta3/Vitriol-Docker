@@ -282,6 +282,8 @@ async function convertRow(row) {
     setStatus(row, 'failed', ex.detail || 'Submit failed');
     row.querySelector('[data-go]').disabled = false;
     persistRow(row);
+    // Show limit-hit support modal on 429 (rate or daily limit exceeded)
+    if (ex.status === 429 && window.vitriolShowLimitModal) window.vitriolShowLimitModal();
   }
 }
 

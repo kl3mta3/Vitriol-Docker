@@ -142,6 +142,11 @@ class SelfUpdateRequest(BaseModel):
     border_style: Optional[str] = Field(default=None, max_length=32)
 
 
+class SupportRequest(BaseModel):
+    subject: Optional[str] = Field(default=None, max_length=200)
+    message: str = Field(min_length=1, max_length=2000)
+
+
 class CredentialResetRequest(BaseModel):
     new_username: Optional[str] = None
     new_email: Optional[EmailStr] = None
@@ -297,6 +302,12 @@ class ServerSettingsOut(BaseModel):
     # Site-wide theme defaults
     server_default_theme: Optional[str] = None
     server_allow_user_theme: bool = True
+    # Support contact
+    support_email: Optional[str] = None
+    support_discord_url: Optional[str] = None
+    support_discord_shared: bool = False
+    show_limit_hit_notice: bool = True
+    show_user_support_button: bool = False
 
 
 class ServerSettingsPatch(BaseModel):
@@ -379,6 +390,12 @@ class ServerSettingsPatch(BaseModel):
     server_border_style: Optional[str] = None
     server_default_theme: Optional[str] = None
     server_allow_user_theme: Optional[bool] = None
+    # Support contact
+    support_email: Optional[str] = None
+    support_discord_url: Optional[str] = None
+    support_discord_shared: Optional[bool] = None
+    show_limit_hit_notice: Optional[bool] = None
+    show_user_support_button: Optional[bool] = None
 
 
 class CustomRoleOut(BaseModel):

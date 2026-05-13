@@ -82,13 +82,13 @@
       <label id="border-style-row">
         <span>Border style</span>
         <select name="server_border_style" id="server-border-style-select">
-          <option value="vitriol">Vitriol — planetary glyphs (◆ corners)</option>
-          <option value="runes">Runes — Elder Futhark (ᛉ corners)</option>
-          <option value="arcane">Arcane — geometric sigils (✦ corners)</option>
-          <option value="circuit">Circuit — ticks &amp; dots (■ corners)</option>
-          <option value="minimal">Minimal — lines only, no glyphs</option>
-          <option value="vine">Vine — botanical bezier curves + leaves</option>
-          <option value="helix">Helix — DNA double-helix + rungs</option>
+          <option value="vitriol">Vitriol — Default</option>
+		  <option value="minimal">Minimal</option>
+          <option value="runes">Elder Runes</option>
+          <option value="arcane">Arcane</option>
+          <option value="circuit">Circuit</option>
+          <option value="vine">Vine</option>
+          <option value="helix">Helix</option>
         </select>
       </label>
 
@@ -101,13 +101,13 @@
       <label style="margin-bottom: 12px;">
         <span>Default theme</span>
         <select name="server_default_theme" id="server-default-theme-select">
-          <option value="">Default (no override)</option>
-          <option value="default">Default — alchemical purple</option>
-          <option value="crimson">Crimson — blood ritual</option>
-          <option value="verdant">Verdant — emerald &amp; brass</option>
-          <option value="cobalt">Cobalt — deep navy</option>
+          <option value="">Vitriol — Default</option>
+          <option value="default">Default</option>
+          <option value="crimson">Crimson</option>
+          <option value="verdant">Verdant</option>
+          <option value="cobalt">Cobalt</option>
           <option value="parchment">Parchment — light</option>
-          <option value="obsidian">Obsidian — minimalist dark</option>
+          <option value="obsidian">Obsidian</option>
         </select>
       </label>
       <label class="checkbox-row">
@@ -990,6 +990,44 @@
     </footer>
   </form>
 </dialog>
+
+<details name="server-settings"><summary>Support</summary>
+  <p class="muted small" style="margin-bottom: 16px;">
+    Contact info shown to users on limit-hit notices and the optional profile
+    support button. Leave blank to suppress those elements entirely.
+  </p>
+
+  <label>
+    <span>Support email</span>
+    <input type="email" name="support_email" placeholder="support@example.com" />
+  </label>
+  <label style="margin-top: 12px;">
+    <span>Discord invite URL</span>
+    <input type="url" name="support_discord_url" placeholder="https://discord.gg/…" />
+  </label>
+  <label class="checkbox-row" style="margin-top: 8px;">
+    <input type="checkbox" name="support_discord_shared" />
+    <span>Share Discord link with users
+      <em class="muted small">(adds a Join Discord button on limit notices and the support modal)</em>
+    </span>
+  </label>
+
+  <hr style="margin: 20px 0; border-color: var(--border-2);" />
+
+  <label class="checkbox-row" style="margin-bottom: 10px;">
+    <input type="checkbox" name="show_limit_hit_notice" />
+    <span>Show limit-hit notice
+      <em class="muted small">(popup when a user hits their rate or daily conversion limit)</em>
+    </span>
+  </label>
+  <label class="checkbox-row">
+    <input type="checkbox" name="show_user_support_button" />
+    <span>Show user support button
+      <em class="muted small">(Contact Support button on user profile — sends email to address above)</em>
+    </span>
+  </label>
+</details>
+
 {% endblock %}
 {% block scripts %}
 <script src="/static/js/admin_server.js?v={{ v }}"></script>

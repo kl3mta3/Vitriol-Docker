@@ -381,6 +381,17 @@ _ADDITIVE_COLUMNS: list[tuple[str, str, str]] = [
      "ALTER TABLE server_settings ADD COLUMN server_default_theme VARCHAR(32)"),
     ("server_settings", "server_allow_user_theme",
      "ALTER TABLE server_settings ADD COLUMN server_allow_user_theme BOOLEAN NOT NULL DEFAULT 1"),
+    # Support contact info + user-facing notice toggles
+    ("server_settings", "support_email",
+     "ALTER TABLE server_settings ADD COLUMN support_email VARCHAR(255)"),
+    ("server_settings", "support_discord_url",
+     "ALTER TABLE server_settings ADD COLUMN support_discord_url VARCHAR(512)"),
+    ("server_settings", "support_discord_shared",
+     "ALTER TABLE server_settings ADD COLUMN support_discord_shared BOOLEAN NOT NULL DEFAULT 0"),
+    ("server_settings", "show_limit_hit_notice",
+     "ALTER TABLE server_settings ADD COLUMN show_limit_hit_notice BOOLEAN NOT NULL DEFAULT 1"),
+    ("server_settings", "show_user_support_button",
+     "ALTER TABLE server_settings ADD COLUMN show_user_support_button BOOLEAN NOT NULL DEFAULT 0"),
 ]
 
 

@@ -690,6 +690,17 @@ class ServerSettings(Base):
     server_default_theme = Column(String(32), nullable=True, default=None)
     server_allow_user_theme = Column(Boolean, nullable=False, default=True, server_default="1")
 
+    # Support contact info surfaced to users on limit-hit notices and the
+    # optional profile "Contact support" button.
+    support_email = Column(String(255), nullable=True, default=None)
+    support_discord_url = Column(String(512), nullable=True, default=None)
+    # When True, discord link appears alongside the email in support contexts.
+    support_discord_shared = Column(Boolean, nullable=False, default=False, server_default="0")
+    # Show a popup when a user hits their rate/daily conversion limit.
+    show_limit_hit_notice = Column(Boolean, nullable=False, default=True, server_default="1")
+    # Show a "Contact support" button on the user profile page.
+    show_user_support_button = Column(Boolean, nullable=False, default=False, server_default="0")
+
     ssl_cert_pull_webhook_url = Column(String(512), nullable=True)
     ssl_cert_pull_webhook_secret_enc = Column(Text, nullable=True)
 

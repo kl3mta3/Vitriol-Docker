@@ -56,6 +56,7 @@ async function _send(path, opts) {
       catch (_e) { err = { detail: r.statusText || `HTTP ${r.status}` }; }
     }
     if (!err.detail) err.detail = `HTTP ${r.status} ${r.statusText}`;
+    err.status = r.status;   // always expose HTTP status to callers
     throw err;
   }
   return r.status === 204 ? null : r.json();

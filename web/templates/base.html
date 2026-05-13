@@ -82,7 +82,44 @@
     {% block content %}{% endblock %}
   </main>
 
-  <script>window.VITRIOL_CAPS = {{ caps|tojson }}; window.VITRIOL_VERSION = "{{ v }}"; window.VITRIOL_USER_ID = {{ user.id if user else 0 }};</script>
+  {#- Limit-hit dialog — shown by vitriolShowLimitModal() when a conversion
+      hits the rate or daily limit. Hidden when show_limit_hit_notice=false. -#}
+  {% if show_limit_hit_notice %}
+  <dialog id="limit-modal" class="manage-dialog">
+    <div class="stack">
+      <h2 class="display small">Conversion limit reached</h2>
+      <p>You have reached your conversion limit. Please try again later.</p>
+      {% if support_email %}
+      <p class="muted small">Need help? Contact support:
+        <a href="mailto:{{ support_email }}">{{ support_email }}</a>
+      </p>
+      {% endif %}
+      <footer class="dialog-actions">
+        <button type="button" class="btn btn-ghost" onclick="document.getElementById('limit-modal').close()">Close</button>
+        {% if support_discord_url and support_discord_shared %}
+        <a href="{{ support_discord_url }}" target="_blank" rel="noopener" class="btn btn-secondary">Join Discord</a>
+        {% endif %}
+      </footer>
+    </div>
+  </dialog>
+  {% endif %}
+
+  <script>
+    window.VITRIOL_CAPS = {{ caps|tojson }};
+    window.VITRIOL_VERSION = "{{ v }}";
+    window.VITRIOL_USER_ID = {{ user.id if user else 0 }};
+    window.VITRIOL_SUPPORT = {
+      email: {{ support_email | tojson }},
+      discordUrl: {{ (support_discord_url if support_discord_shared else None) | tojson }},
+      showLimitNotice: {{ 'true' if show_limit_hit_notice else 'false' }},
+      showSupportButton: {{ 'true' if show_user_support_button else 'false' }},
+    };
+    // Global helper — called by playlist.js when a 429 is returned.
+    window.vitriolShowLimitModal = function () {
+      const m = document.getElementById('limit-modal');
+      if (m) m.showModal();
+    };
+  </script>
   <script src="/static/js/border.js?v={{ v }}"></script>
   <script src="/static/js/api.js?v={{ v }}"></script>
   {% block scripts %}{% endblock %}

@@ -98,6 +98,33 @@
     </form>
   </dialog>
 
+  {% if show_user_support_button %}
+  <div class="card">
+    <h2 class="display small">Support</h2>
+    <p class="muted small">Need help? Get in touch with the system administrator.</p>
+    <div style="display: flex; gap: 10px; flex-wrap: wrap; margin-top: 8px;">
+      <button type="button" id="support-btn" class="btn btn-secondary">Contact support</button>
+      {% if support_discord_url and support_discord_shared %}
+      <a href="{{ support_discord_url }}" target="_blank" rel="noopener" class="btn btn-ghost">Join Discord</a>
+      {% endif %}
+    </div>
+    <p id="support-msg" class="ok" hidden></p>
+  </div>
+
+  <dialog id="support-modal" class="manage-dialog">
+    <form id="support-form" class="stack">
+      <h2 class="display small">Contact support</h2>
+      <label><span>Subject</span><input name="subject" maxlength="200" placeholder="Brief description of your issue" /></label>
+      <label><span>Message</span><textarea name="message" rows="5" maxlength="2000" required placeholder="Describe your issue or question…" style="resize:vertical;"></textarea></label>
+      <p id="support-modal-msg" class="error small" hidden></p>
+      <footer class="dialog-actions">
+        <button type="button" class="btn btn-ghost" data-close>Cancel</button>
+        <button type="submit" class="btn btn-primary">Send</button>
+      </footer>
+    </form>
+  </dialog>
+  {% endif %}
+
   <div class="card">
     <h2 class="display small">API keys</h2>
     <p class="muted small">For CLI / scripted access. Treat them like passwords.</p>

@@ -96,6 +96,9 @@ _SETTINGS_COLUMNS = (
     "server_show_border", "server_border_style",
     # Site-wide theme defaults
     "server_default_theme", "server_allow_user_theme",
+    # Support contact
+    "support_email", "support_discord_url", "support_discord_shared",
+    "show_limit_hit_notice", "show_user_support_button",
 )
 
 # Encrypted-at-rest columns we decrypt for export and re-encrypt on

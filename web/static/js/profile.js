@@ -176,6 +176,44 @@ if (reqBtn) reqBtn.addEventListener('click', async () => {
 
 refreshKeys();
 
+// ---------- Support modal ----------
+(function () {
+  const btn   = document.getElementById('support-btn');
+  const modal = document.getElementById('support-modal');
+  const form  = document.getElementById('support-form');
+  const topMsg = document.getElementById('support-msg');
+  if (!btn || !modal || !form) return;
+
+  modal.querySelectorAll('[data-close]').forEach(el =>
+    el.addEventListener('click', () => modal.close())
+  );
+
+  btn.addEventListener('click', () => {
+    form.reset();
+    document.getElementById('support-modal-msg').hidden = true;
+    modal.showModal();
+  });
+
+  form.addEventListener('submit', async (e) => {
+    e.preventDefault();
+    const modalMsg = document.getElementById('support-modal-msg');
+    modalMsg.hidden = true;
+    try {
+      const r = await api.post('/me/support-request', Object.fromEntries(new FormData(form)));
+      modal.close();
+      if (topMsg) {
+        topMsg.textContent = r.message || 'Message sent.';
+        topMsg.className = 'ok small';
+        topMsg.hidden = false;
+      }
+      form.reset();
+    } catch (ex) {
+      modalMsg.textContent = ex.detail || 'Failed to send message.';
+      modalMsg.hidden = false;
+    }
+  });
+})();
+
 // ---------- Theme picker ----------
 (function () {
   const picker = document.getElementById('theme-picker');

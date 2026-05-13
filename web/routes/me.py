@@ -11,10 +11,10 @@ from ..auth import email as email_svc
 from ..auth.password import hash_password, verify_password
 from ..auth import discord as discord_svc
 from ..deps import get_current_user, get_db
-from ..models import APIKey, ApprovalRequest, ApprovalStatus, Role, TokenPurpose, User
+from ..models import APIKey, ApprovalRequest, ApprovalStatus, Role, ServerSettings, TokenPurpose, User
 from ..schemas import (
     APIKeyCreateRequest, APIKeyCreateResponse, APIKeyOut, MessageResponse,
-    PasswordChangeRequest, SelfUpdateRequest, UserOut,
+    PasswordChangeRequest, SelfUpdateRequest, SupportRequest, UserOut,
 )
 from ..services import audit
 
@@ -138,3 +138,37 @@ async def request_access(user: User = Depends(get_current_user), db: Session = D
     await notify_all(db, f":eye: Viewer **{user.username}** requested access upgrade.")
     audit.log(db, user.id, "request_access", target_user_id=user.id)
     return MessageResponse(message="Request submitted.")
+
+
+@router.post("/support-request", response_model=MessageResponse)
+async def support_request(
+    req: SupportRequest,
+    user: User = Depends(get_current_user),
+    db: Session = Depends(get_db),
+):
+    s = db.query(ServerSettings).get(1)
+    if not s or not getattr(s, "show_user_support_button", False):
+        raise HTTPException(status_code=403, detail="Support requests are not enabled.")
+    support_email = getattr(s, "support_email", None)
+    if not support_email:
+        raise HTTPException(status_code=503, detail="No support email configured.")
+
+    from html import escape
+    subject = (req.subject or "Support Request").strip()
+    display_name = f"{user.first_name or ''} {user.last_name or ''}".strip() or user.username
+    plain = (
+        f"Support request from {display_name} ({user.username})\n"
+        f"Email: {user.email or 'not provided'}\n\n"
+        f"Subject: {subject}\n\n"
+        f"{req.message}"
+    )
+    html_body = (
+        f"<p><strong>From:</strong> {escape(display_name)} "
+        f"(<code>{escape(user.username)}</code>)</p>"
+        f"<p><strong>Email:</strong> {escape(user.email or 'not provided')}</p>"
+        f"<p><strong>Subject:</strong> {escape(subject)}</p>"
+        f"<hr/><p style='white-space:pre-wrap'>{escape(req.message)}</p>"
+    )
+    await email_svc._send(db, support_email, f"[Support] {subject}", plain, html_body)
+    audit.log(db, user.id, "support_request", target_user_id=user.id)
+    return MessageResponse(message="Your message has been sent.")

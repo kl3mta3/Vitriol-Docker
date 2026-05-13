@@ -117,6 +117,11 @@ def _to_out(s: ServerSettings) -> ServerSettingsOut:
         server_border_style=str(getattr(s, "server_border_style", None) or "vitriol"),
         server_default_theme=getattr(s, "server_default_theme", None) or None,
         server_allow_user_theme=bool(getattr(s, "server_allow_user_theme", True)),
+        support_email=getattr(s, "support_email", None) or None,
+        support_discord_url=getattr(s, "support_discord_url", None) or None,
+        support_discord_shared=bool(getattr(s, "support_discord_shared", False)),
+        show_limit_hit_notice=bool(getattr(s, "show_limit_hit_notice", True)),
+        show_user_support_button=bool(getattr(s, "show_user_support_button", False)),
     )
 
 
@@ -208,6 +213,9 @@ def patch_server_settings(
         "server_show_border", "server_border_style",
         # Site-wide theme defaults
         "server_default_theme", "server_allow_user_theme",
+        # Support contact
+        "support_email", "support_discord_url", "support_discord_shared",
+        "show_limit_hit_notice", "show_user_support_button",
     }
     for f in plain_fields:
         v = getattr(req, f)
