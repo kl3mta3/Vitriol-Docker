@@ -7,8 +7,8 @@
     <form id="profile-form" class="stack">
       <label><span>Username</span><input name="username" value="{{ user.username }}" /></label>
       <div class="grid-2">
-        <label><span>First name <em class="muted small">(optional)</em></span><input name="first_name" type="text" maxlength="128" autocomplete="given-name" value="{{ user.first_name or '' }}" /></label>
-        <label><span>Last name <em class="muted small">(optional)</em></span><input name="last_name" type="text" maxlength="128" autocomplete="family-name" value="{{ user.last_name or '' }}" /></label>
+        <label><span>First name</span><input name="first_name" type="text" maxlength="128" autocomplete="given-name" value="{{ user.first_name or '' }}" /></label>
+        <label><span>Last name</span><input name="last_name" type="text" maxlength="128" autocomplete="family-name" value="{{ user.last_name or '' }}" /></label>
       </div>
       <label><span>Email</span><input name="email" type="email" value="{{ user.email or '' }}" /></label>
       <button class="btn btn-primary" type="submit">Save</button>
@@ -51,13 +51,13 @@
               data-current="{{ user.border_style or '' }}"
               data-server="{{ server_border_style or 'vitriol' }}">
         <option value="">Server default</option>
-        <option value="vitriol">Vitriol — planetary glyphs (◆ corners)</option>
-        <option value="runes">Runes — Elder Futhark (ᛉ corners)</option>
-        <option value="arcane">Arcane — geometric sigils (✦ corners)</option>
-        <option value="circuit">Circuit — ticks &amp; dots (■ corners)</option>
-        <option value="minimal">Minimal — lines only, no glyphs</option>
-        <option value="vine">Vine — botanical bezier curves + leaves</option>
-        <option value="helix">Helix — DNA double-helix + rungs</option>
+        <option value="vitriol">Vitriol — Default</option>
+		<option value="minimal">Minimal</option>
+        <option value="runes">Elder Runes</option>
+        <option value="arcane">Arcane</option>
+        <option value="circuit">Circuit</option>
+        <option value="vine">Vines</option>
+        <option value="helix">Helix</option>
       </select>
     </label>
     {% endif %}
