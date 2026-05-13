@@ -341,14 +341,14 @@
 
       <h3 class="display small" style="margin-top:18px;">Fair Queue Burst Weights</h3>
       <p class="muted small">
-        Defines how many jobs a user can burst into available conversion slots on their turn.
-        Higher weight = faster processing for that role without starving others.
-        (Super Admin 5, Admin 3, User 1 recommended).
+        How many jobs a role can burst into available slots per turn before the queue rotates to the next user.
+        Only the <em>ratio</em> matters — Super Admin 5 / Admin 3 / User 1 means a super admin gets 5× the throughput of a regular user.
+        Range 1–20.
       </p>
       <div class="grid-2">
-        <label><span>Super admin weight</span><input name="queue_weight_super_admin" type="number" min="1" /></label>
-        <label><span>Admin weight</span><input name="queue_weight_admin" type="number" min="1" /></label>
-        <label><span>User weight</span><input name="queue_weight_user" type="number" min="1" /></label>
+        <label><span>Super admin weight</span><input name="queue_weight_super_admin" type="number" min="1" max="20" /></label>
+        <label><span>Admin weight</span><input name="queue_weight_admin" type="number" min="1" max="20" /></label>
+        <label><span>User weight</span><input name="queue_weight_user" type="number" min="1" max="20" /></label>
       </div>
 
       <p class="muted small" style="margin: 12px 0 4px;">

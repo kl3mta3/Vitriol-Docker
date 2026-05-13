@@ -110,6 +110,9 @@ def _to_out(s: ServerSettings) -> ServerSettingsOut:
         s3_last_test_ok=s.s3_last_test_ok,
         max_concurrent_conversions=int(s.max_concurrent_conversions or 3),
         streaming_safety_divisor=int(s.streaming_safety_divisor or 4),
+        queue_weight_super_admin=int(getattr(s, "queue_weight_super_admin", None) or 5),
+        queue_weight_admin=int(getattr(s, "queue_weight_admin", None) or 3),
+        queue_weight_user=int(getattr(s, "queue_weight_user", None) or 1),
     )
 
 
@@ -196,6 +199,7 @@ def patch_server_settings(
         # historical out-of-range values (defensive — the column
         # default is in the safe range).
         "max_concurrent_conversions", "streaming_safety_divisor",
+        "queue_weight_super_admin", "queue_weight_admin", "queue_weight_user",
     }
     for f in plain_fields:
         v = getattr(req, f)
@@ -270,6 +274,10 @@ def patch_server_settings(
         s.max_concurrent_conversions = max(1, min(16, int(s.max_concurrent_conversions)))
     if s.streaming_safety_divisor is not None:
         s.streaming_safety_divisor = max(2, min(8, int(s.streaming_safety_divisor)))
+    for _wf in ("queue_weight_super_admin", "queue_weight_admin", "queue_weight_user"):
+        v = getattr(s, _wf, None)
+        if v is not None:
+            setattr(s, _wf, max(1, min(20, int(v))))
     # Likewise constrain storage_backend to known values.
     if s.storage_backend not in ("local", "s3"):
         s.storage_backend = "local"
