@@ -408,8 +408,11 @@
       return;
     }
 
-    const w = window.innerWidth;
-    const h = window.innerHeight;
+    // clientWidth/Height excludes the scrollbar on Windows/Linux.
+    // innerWidth includes it, which would paint the right/bottom frame
+    // lines behind the scrollbar track and clip them visually.
+    const w = document.documentElement.clientWidth;
+    const h = document.documentElement.clientHeight;
 
     if (w < 360 || h < 360) {
       svg.innerHTML = "";
