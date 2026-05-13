@@ -357,6 +357,17 @@ _ADDITIVE_COLUMNS: list[tuple[str, str, str]] = [
      "ALTER TABLE custom_roles ADD COLUMN queue_weight INTEGER"),
     ("users", "queue_weight_override",
      "ALTER TABLE users ADD COLUMN queue_weight_override INTEGER"),
+    # Missing custom_roles columns that were added but missed in earlier bootstraps
+    ("custom_roles", "max_file_size_bytes",
+     "ALTER TABLE custom_roles ADD COLUMN max_file_size_bytes INTEGER"),
+    ("custom_roles", "max_output_size_bytes",
+     "ALTER TABLE custom_roles ADD COLUMN max_output_size_bytes INTEGER"),
+    ("custom_roles", "output_retention_json",
+     "ALTER TABLE custom_roles ADD COLUMN output_retention_json TEXT"),
+    ("custom_roles", "can_set_user_file_size_cap",
+     "ALTER TABLE custom_roles ADD COLUMN can_set_user_file_size_cap BOOLEAN NOT NULL DEFAULT 0"),
+    ("custom_roles", "can_set_user_retention",
+     "ALTER TABLE custom_roles ADD COLUMN can_set_user_retention BOOLEAN NOT NULL DEFAULT 0"),
 ]
 
 
