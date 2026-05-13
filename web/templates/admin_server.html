@@ -68,8 +68,29 @@
         <button type="button" id="logo-reset-btn" class="btn btn-ghost" hidden>Reset to default</button>
       </div>
       <p id="logo-msg" class="muted small" style="margin-top: 6px;" hidden></p>
+
+      <hr style="margin: 20px 0; border-color: var(--border-2);" />
+
+      <p class="muted small" style="margin-bottom: 8px;">
+        <strong>Alchemy border.</strong> Controls the decorative SVG border shown around the app.
+        When disabled server-wide, users cannot re-enable it from their profile.
+      </p>
+      <label class="checkbox-row" style="margin-bottom: 12px;">
+        <input type="checkbox" name="server_show_border" id="server-show-border-toggle" />
+        <span>Show border site-wide <em class="muted small">(uncheck to disable for all users)</em></span>
+      </label>
+      <label id="border-style-row">
+        <span>Border style</span>
+        <select name="server_border_style" id="server-border-style-select">
+          <option value="vitriol">Vitriol — planetary glyphs (◆ corners)</option>
+          <option value="runes">Runes — Elder Futhark (ᛉ corners)</option>
+          <option value="arcane">Arcane — geometric sigils (✦ corners)</option>
+          <option value="circuit">Circuit — ticks &amp; dots (■ corners)</option>
+          <option value="minimal">Minimal — lines only, no glyphs</option>
+        </select>
+      </label>
     </details>
-	
+
 <details name="server-settings"><summary>Sign-up &amp; Sign-in</summary>
      
         <label class="checkbox-row"><input type="checkbox" name="allow_signup" /> <span>Allow self sign-up</span></label>

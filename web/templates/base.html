@@ -1,12 +1,13 @@
 <!DOCTYPE html>
-{#- <html> carries two preference attributes:
-      - data-theme       : visual palette (set when user picked a non-default)
-      - data-show-border : "on"/"off" — toggles the alchemy SVG border.
-                           border.js reads this on every render and on
-                           MutationObserver attribute-change.
+{#- <html> carries several preference attributes read by border.js:
+      - data-theme        : visual palette (set when user picked a non-default)
+      - data-show-border  : "on"/"off" — toggles the alchemy SVG border.
+                            When the server has disabled the border, always "off"
+                            regardless of user preference.
+      - data-border-style : which glyph/line style to render (default "vitriol")
     Anonymous pages (signin/signup/reset/forgot — no `user` in context)
     default to "on" so the brand visual stays present pre-login. -#}
-<html lang="en"{% if user and user.theme and user.theme != 'default' %} data-theme="{{ user.theme }}"{% endif %} data-show-border="{% if user and user.show_border is sameas false %}off{% else %}on{% endif %}">
+<html lang="en"{% if user and user.theme and user.theme != 'default' %} data-theme="{{ user.theme }}"{% endif %} data-show-border="{% if not server_show_border %}off{% elif user and user.show_border is sameas false %}off{% else %}on{% endif %}" data-border-style="{{ server_border_style or 'vitriol' }}">
 <head>
   <meta charset="UTF-8" />
   <meta name="viewport" content="width=device-width, initial-scale=1.0" />

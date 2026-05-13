@@ -672,6 +672,13 @@ class ServerSettings(Base):
     # rename doesn't invalidate the column. Extension determines
     # Content-Type when serving via /api/v1/server/branding/logo.
     brand_logo_filename = Column(String(255), nullable=True)
+    # Server-level border controls. server_show_border=False forces the
+    # border off for every user regardless of their personal preference.
+    # server_border_style selects which style is rendered site-wide;
+    # users cannot override the style, only their own on/off toggle
+    # (which is still respected when server_show_border=True).
+    server_show_border = Column(Boolean, nullable=False, default=True, server_default="1")
+    server_border_style = Column(String(32), nullable=False, default="vitriol", server_default=text("'vitriol'"))
 
     ssl_cert_pull_webhook_url = Column(String(512), nullable=True)
     ssl_cert_pull_webhook_secret_enc = Column(Text, nullable=True)

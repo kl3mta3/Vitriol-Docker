@@ -1,197 +1,68 @@
 /* Vitriol website — inscribed alchemical border.
  *
- * Renders a fixed-position SVG that wraps the entire viewport with the
- * same composition the desktop app's BorderFrame paints around its
- * central widget:
+ * Renders a fixed-position SVG that wraps the entire viewport.
+ * The active style is read from `data-border-style` on <html>:
  *
- *   - Two thin concentric rectangles, ~14 px gap between them.
- *   - 7 alchemical planetary glyphs (Sun/Moon/Mercury/Venus/Mars/Jupiter/Saturn)
- *     marching evenly around the perimeter, in clockwise order.
- *   - Filled diamond glyphs at each of the four corners as visual anchors.
+ *   vitriol  — planetary glyphs (☉☽☿♀♂♃♄) + ◆ corners  [default, unchanged]
+ *   runes    — Elder Futhark runes (ᚠᚢᚦᚨᚱᚲᚷ) + ᛉ corners
+ *   arcane   — geometric sigils (⊕⊗✦⊙⋆✧⊛) + ✦ corners
+ *   circuit  — SVG tick marks + filled dots at glyph positions, ■ corners
+ *   minimal  — two concentric rectangles only, no glyphs
  *
- * All in a single hue (purple #a78bfa) at four opacities, matching the
- * QSS BorderFrame palette exactly so the website and app feel like one
- * product. The border re-renders on resize (debounced) so it stays
- * proportional at any viewport size.
+ * All styles share the same two-rectangle frame geometry (OUTER_INSET,
+ * LINE_GAP) and opacity constants so they feel like the same product.
  *
  * Also handles:
  *   - Reveal-on-scroll (.reveal -> .reveal.in via IntersectionObserver)
- *   - Mobile menu toggle (if/when added; currently nav links collapse via CSS)
  */
 
 (function () {
   "use strict";
 
-  // --- Constants — match BorderFrame.py 1:1 ---------------------------------
+  // --- Glyph style table ----------------------------------------------------
 
-  const PLANETARY_GLYPHS = ["☉", "☽", "☿", "♀", "♂", "♃", "♄"];
-  const CORNER_GLYPH = "◆";
-  // Default fallback hue — exactly the value the original const had
-  // before the theme system existed. Used when --purple-soft isn't
-  // defined on :root (very-early boot, malformed CSS) so the border
-  // never renders invisible.
+  const GLYPH_STYLES = {
+    vitriol: { glyphs: ["☉", "☽", "☿", "♀", "♂", "♃", "♄"], corner: "◆" },
+    runes:   { glyphs: ["ᚠ", "ᚢ", "ᚦ", "ᚨ", "ᚱ", "ᚲ", "ᚷ"], corner: "ᛉ" },
+    arcane:  { glyphs: ["⊕", "⊗", "✦", "⊙", "⋆", "✧", "⊛"], corner: "✦" },
+    // circuit and minimal handled specially — no glyph array needed
+  };
+
+  // Default fallback hue — used before CSS custom properties are readable.
   const FALLBACK_HUE = "#a78bfa";
 
-  // Read the active theme's accent color from CSS custom properties.
-  // Each theme defines --purple-soft to its own palette (crimson red,
-  // verdant green, parchment violet, obsidian off-white, etc.), so
-  // calling this at every render makes the alchemy border re-color
-  // automatically when the operator switches themes.
   function currentHue() {
     try {
       const v = getComputedStyle(document.documentElement)
-        .getPropertyValue('--purple-soft').trim();
+        .getPropertyValue("--purple-soft").trim();
       return v || FALLBACK_HUE;
     } catch (_) {
       return FALLBACK_HUE;
     }
   }
 
-  // Layout (px). Tuned for a viewport-scale border.
-  const OUTER_INSET = 12;     // outer rectangle inset from viewport edge
-  const LINE_GAP = 18;        // gap between outer and inner rectangles
-  const CORNER_CLEARANCE = 32;// distance from corner to first glyph
-  const TARGET_SPACING = 56;  // desired pixel spacing between glyphs
-  const GLYPH_FONT_PX = 14;
-  const CORNER_FONT_PX = 16;
+  // --- Layout constants (match BorderFrame.py 1:1) --------------------------
 
-  // Opacity matches BorderFrame.py 30 / 50 / 55 / 70 percent.
-  const OUTER_ALPHA = 0.30;
-  const INNER_ALPHA = 0.50;
-  const GLYPH_ALPHA = 0.55;
+  const OUTER_INSET      = 12;   // outer rectangle inset from viewport edge
+  const LINE_GAP         = 18;   // gap between outer and inner rectangles
+  const CORNER_CLEARANCE = 32;   // distance from corner to first glyph
+  const TARGET_SPACING   = 56;   // desired pixel spacing between glyphs
+  const GLYPH_FONT_PX    = 14;
+  const CORNER_FONT_PX   = 16;
+
+  const OUTER_ALPHA  = 0.30;
+  const INNER_ALPHA  = 0.50;
+  const GLYPH_ALPHA  = 0.55;
   const CORNER_ALPHA = 0.70;
 
-  // --- DOM helpers ---------------------------------------------------------
+  // --- DOM helpers ----------------------------------------------------------
 
   const SVGNS = "http://www.w3.org/2000/svg";
 
   function svgEl(name, attrs) {
     const el = document.createElementNS(SVGNS, name);
-    if (attrs) {
-      for (const k in attrs) el.setAttribute(k, attrs[k]);
-    }
+    if (attrs) for (const k in attrs) el.setAttribute(k, attrs[k]);
     return el;
-  }
-
-  // --- Border rendering ----------------------------------------------------
-
-  function renderBorder() {
-    const svg = document.getElementById("alchemy-border");
-    if (!svg) return;
-
-    // Per-user opt-out — read `data-show-border` on <html>. Default
-    // (missing attribute or value="on") renders. value="off" wipes
-    // the SVG and stops. The MutationObserver below picks up changes
-    // to this attribute so the flip is live, no reload needed.
-    const showBorder = document.documentElement.getAttribute("data-show-border");
-    if (showBorder === "off") {
-      svg.innerHTML = "";
-      return;
-    }
-
-    const w = window.innerWidth;
-    const h = window.innerHeight;
-
-    // Skip ridiculously narrow viewports — the border would be cramped.
-    if (w < 360 || h < 360) {
-      svg.innerHTML = "";
-      return;
-    }
-
-    // Reset SVG to current viewport dimensions.
-    svg.setAttribute("viewBox", `0 0 ${w} ${h}`);
-    svg.setAttribute("width", w);
-    svg.setAttribute("height", h);
-    svg.innerHTML = "";
-
-    // Read the theme accent once per render, then pass it down to
-    // every stroke/fill so a single re-render re-skins the whole
-    // border in the new color.
-    const hue = currentHue();
-
-    const outer = {
-      x: OUTER_INSET, y: OUTER_INSET,
-      w: w - 2 * OUTER_INSET,
-      h: h - 2 * OUTER_INSET,
-    };
-    const inner = {
-      x: outer.x + LINE_GAP, y: outer.y + LINE_GAP,
-      w: outer.w - 2 * LINE_GAP,
-      h: outer.h - 2 * LINE_GAP,
-    };
-
-    // --- Two concentric rectangles ---
-    svg.appendChild(svgEl("rect", {
-      x: outer.x, y: outer.y, width: outer.w, height: outer.h,
-      fill: "none", stroke: hue,
-      "stroke-opacity": OUTER_ALPHA, "stroke-width": 1,
-    }));
-    svg.appendChild(svgEl("rect", {
-      x: inner.x, y: inner.y, width: inner.w, height: inner.h,
-      fill: "none", stroke: hue,
-      "stroke-opacity": INNER_ALPHA, "stroke-width": 1,
-    }));
-
-    // --- Glyph row, all four edges, clockwise ---
-    const topYMid = (outer.y + inner.y) / 2;
-    const botYMid = ((outer.y + outer.h) + (inner.y + inner.h)) / 2;
-    const leftXMid = (outer.x + inner.x) / 2;
-    const rightXMid = ((outer.x + outer.w) + (inner.x + inner.w)) / 2;
-
-    let glyphIndex = 0;
-
-    // Top: left -> right
-    let usable = outer.w - 2 * CORNER_CLEARANCE;
-    let n = Math.max(1, Math.round(usable / TARGET_SPACING));
-    let spacing = usable / n;
-    for (let i = 0; i < n; i++) {
-      const x = outer.x + CORNER_CLEARANCE + spacing * (i + 0.5);
-      drawGlyph(svg, PLANETARY_GLYPHS[glyphIndex % 7], x, topYMid,
-                GLYPH_FONT_PX, GLYPH_ALPHA, hue);
-      glyphIndex++;
-    }
-    // Right: top -> bottom
-    usable = outer.h - 2 * CORNER_CLEARANCE;
-    n = Math.max(1, Math.round(usable / TARGET_SPACING));
-    spacing = usable / n;
-    for (let i = 0; i < n; i++) {
-      const y = outer.y + CORNER_CLEARANCE + spacing * (i + 0.5);
-      drawGlyph(svg, PLANETARY_GLYPHS[glyphIndex % 7], rightXMid, y,
-                GLYPH_FONT_PX, GLYPH_ALPHA, hue);
-      glyphIndex++;
-    }
-    // Bottom: right -> left (so the sequence reads clockwise around the page)
-    usable = outer.w - 2 * CORNER_CLEARANCE;
-    n = Math.max(1, Math.round(usable / TARGET_SPACING));
-    spacing = usable / n;
-    for (let i = 0; i < n; i++) {
-      const x = outer.x + outer.w - CORNER_CLEARANCE - spacing * (i + 0.5);
-      drawGlyph(svg, PLANETARY_GLYPHS[glyphIndex % 7], x, botYMid,
-                GLYPH_FONT_PX, GLYPH_ALPHA, hue);
-      glyphIndex++;
-    }
-    // Left: bottom -> top
-    usable = outer.h - 2 * CORNER_CLEARANCE;
-    n = Math.max(1, Math.round(usable / TARGET_SPACING));
-    spacing = usable / n;
-    for (let i = 0; i < n; i++) {
-      const y = outer.y + outer.h - CORNER_CLEARANCE - spacing * (i + 0.5);
-      drawGlyph(svg, PLANETARY_GLYPHS[glyphIndex % 7], leftXMid, y,
-                GLYPH_FONT_PX, GLYPH_ALPHA, hue);
-      glyphIndex++;
-    }
-
-    // --- Corner diamonds ---
-    const gap = LINE_GAP / 2;
-    const corners = [
-      [outer.x + gap, outer.y + gap],
-      [outer.x + outer.w - gap, outer.y + gap],
-      [outer.x + outer.w - gap, outer.y + outer.h - gap],
-      [outer.x + gap, outer.y + outer.h - gap],
-    ];
-    for (const [cx, cy] of corners) {
-      drawGlyph(svg, CORNER_GLYPH, cx, cy, CORNER_FONT_PX, CORNER_ALPHA, hue);
-    }
   }
 
   function drawGlyph(svg, ch, cx, cy, fontPx, alpha, hue) {
@@ -208,9 +79,174 @@
     svg.appendChild(t);
   }
 
-  // --- Debounced resize ----------------------------------------------------
-  // requestAnimationFrame coalesces multiple resize events into one paint —
-  // smoother than a setTimeout debounce when the user drags the window.
+  // --- Shared frame geometry ------------------------------------------------
+
+  function buildFrame(w, h) {
+    const outer = { x: OUTER_INSET, y: OUTER_INSET,
+                    w: w - 2 * OUTER_INSET, h: h - 2 * OUTER_INSET };
+    const inner = { x: outer.x + LINE_GAP, y: outer.y + LINE_GAP,
+                    w: outer.w - 2 * LINE_GAP, h: outer.h - 2 * LINE_GAP };
+    return { outer, inner };
+  }
+
+  function drawRects(svg, outer, inner, hue) {
+    svg.appendChild(svgEl("rect", {
+      x: outer.x, y: outer.y, width: outer.w, height: outer.h,
+      fill: "none", stroke: hue,
+      "stroke-opacity": OUTER_ALPHA, "stroke-width": 1,
+    }));
+    svg.appendChild(svgEl("rect", {
+      x: inner.x, y: inner.y, width: inner.w, height: inner.h,
+      fill: "none", stroke: hue,
+      "stroke-opacity": INNER_ALPHA, "stroke-width": 1,
+    }));
+  }
+
+  function cornerPositions(outer) {
+    const gap = LINE_GAP / 2;
+    return [
+      [outer.x + gap,           outer.y + gap],
+      [outer.x + outer.w - gap, outer.y + gap],
+      [outer.x + outer.w - gap, outer.y + outer.h - gap],
+      [outer.x + gap,           outer.y + outer.h - gap],
+    ];
+  }
+
+  // Walk all four edges clockwise, calling cb(cx, cy, index) for each slot.
+  function walkEdgeSlots(outer, cb) {
+    const topY    = (outer.y + (outer.y + LINE_GAP)) / 2;
+    const botY    = ((outer.y + outer.h) + (outer.y + outer.h - LINE_GAP)) / 2;
+    const leftX   = (outer.x + (outer.x + LINE_GAP)) / 2;
+    const rightX  = ((outer.x + outer.w) + (outer.x + outer.w - LINE_GAP)) / 2;
+    let idx = 0;
+
+    function edge(usableLen, getPoint) {
+      const n = Math.max(1, Math.round(usableLen / TARGET_SPACING));
+      const spacing = usableLen / n;
+      for (let i = 0; i < n; i++) {
+        const [cx, cy] = getPoint(i, spacing);
+        cb(cx, cy, idx++);
+      }
+    }
+
+    // Top: left → right
+    edge(outer.w - 2 * CORNER_CLEARANCE, (i, sp) =>
+      [outer.x + CORNER_CLEARANCE + sp * (i + 0.5), topY]);
+    // Right: top → bottom
+    edge(outer.h - 2 * CORNER_CLEARANCE, (i, sp) =>
+      [rightX, outer.y + CORNER_CLEARANCE + sp * (i + 0.5)]);
+    // Bottom: right → left (clockwise)
+    edge(outer.w - 2 * CORNER_CLEARANCE, (i, sp) =>
+      [outer.x + outer.w - CORNER_CLEARANCE - sp * (i + 0.5), botY]);
+    // Left: bottom → top
+    edge(outer.h - 2 * CORNER_CLEARANCE, (i, sp) =>
+      [leftX, outer.y + outer.h - CORNER_CLEARANCE - sp * (i + 0.5)]);
+  }
+
+  // --- Style renderers ------------------------------------------------------
+
+  // Shared by vitriol / runes / arcane — just different glyph arrays.
+  function renderGlyphStyle(svg, outer, inner, hue, styleDef) {
+    drawRects(svg, outer, inner, hue);
+
+    walkEdgeSlots(outer, (cx, cy, idx) => {
+      const ch = styleDef.glyphs[idx % styleDef.glyphs.length];
+      drawGlyph(svg, ch, cx, cy, GLYPH_FONT_PX, GLYPH_ALPHA, hue);
+    });
+
+    for (const [cx, cy] of cornerPositions(outer)) {
+      drawGlyph(svg, styleDef.corner, cx, cy, CORNER_FONT_PX, CORNER_ALPHA, hue);
+    }
+  }
+
+  function renderCircuit(svg, outer, inner, hue) {
+    drawRects(svg, outer, inner, hue);
+
+    // Each glyph slot → a short tick mark (line) perpendicular to the edge,
+    // plus a small filled circle at its midpoint.
+    const TICK_HALF = 5;
+    const DOT_R     = 2;
+
+    walkEdgeSlots(outer, (cx, cy) => {
+      // Determine orientation: horizontal slot (top/bottom) or vertical (left/right)
+      const midX = outer.x + outer.w / 2;
+      const midY = outer.y + outer.h / 2;
+      const isHorizontal = Math.abs(cy - midY) > Math.abs(cx - midX);
+
+      if (isHorizontal) {
+        // top or bottom edge → vertical tick
+        svg.appendChild(svgEl("line", {
+          x1: cx, y1: cy - TICK_HALF, x2: cx, y2: cy + TICK_HALF,
+          stroke: hue, "stroke-opacity": GLYPH_ALPHA, "stroke-width": 1,
+        }));
+      } else {
+        // left or right edge → horizontal tick
+        svg.appendChild(svgEl("line", {
+          x1: cx - TICK_HALF, y1: cy, x2: cx + TICK_HALF, y2: cy,
+          stroke: hue, "stroke-opacity": GLYPH_ALPHA, "stroke-width": 1,
+        }));
+      }
+      svg.appendChild(svgEl("circle", {
+        cx, cy, r: DOT_R,
+        fill: hue, "fill-opacity": GLYPH_ALPHA,
+      }));
+    });
+
+    // Small filled squares at corners
+    const SQ = 5;
+    for (const [cx, cy] of cornerPositions(outer)) {
+      svg.appendChild(svgEl("rect", {
+        x: cx - SQ / 2, y: cy - SQ / 2, width: SQ, height: SQ,
+        fill: hue, "fill-opacity": CORNER_ALPHA,
+      }));
+    }
+  }
+
+  function renderMinimal(svg, outer, inner, hue) {
+    drawRects(svg, outer, inner, hue);
+    // No glyphs — just the two rectangles.
+  }
+
+  // --- Main render ----------------------------------------------------------
+
+  function renderBorder() {
+    const svg = document.getElementById("alchemy-border");
+    if (!svg) return;
+
+    const showBorder = document.documentElement.getAttribute("data-show-border");
+    if (showBorder === "off") {
+      svg.innerHTML = "";
+      return;
+    }
+
+    const w = window.innerWidth;
+    const h = window.innerHeight;
+
+    if (w < 360 || h < 360) {
+      svg.innerHTML = "";
+      return;
+    }
+
+    svg.setAttribute("viewBox", `0 0 ${w} ${h}`);
+    svg.setAttribute("width", w);
+    svg.setAttribute("height", h);
+    svg.innerHTML = "";
+
+    const hue = currentHue();
+    const { outer, inner } = buildFrame(w, h);
+    const style = document.documentElement.getAttribute("data-border-style") || "vitriol";
+
+    if (style === "circuit") {
+      renderCircuit(svg, outer, inner, hue);
+    } else if (style === "minimal") {
+      renderMinimal(svg, outer, inner, hue);
+    } else {
+      // vitriol, runes, arcane — or any unknown value falls back to vitriol
+      renderGlyphStyle(svg, outer, inner, hue, GLYPH_STYLES[style] || GLYPH_STYLES.vitriol);
+    }
+  }
+
+  // --- Debounced resize -----------------------------------------------------
 
   let resizeRaf = 0;
   function onResize() {
@@ -221,15 +257,11 @@
     });
   }
 
-  // --- Reveal-on-scroll ----------------------------------------------------
-  // Adds .in to .reveal elements when they enter the viewport. CSS handles
-  // the actual transition. IntersectionObserver is the modern, low-overhead
-  // way to do this — no scroll listener needed.
+  // --- Reveal-on-scroll -----------------------------------------------------
 
   function setupReveal() {
     const els = document.querySelectorAll(".reveal");
     if (!els.length || !("IntersectionObserver" in window)) {
-      // Fallback: just show everything immediately.
       els.forEach((el) => el.classList.add("in"));
       return;
     }
@@ -244,23 +276,16 @@
     els.forEach((el) => io.observe(el));
   }
 
-  // --- Init ---------------------------------------------------------------
+  // --- Init -----------------------------------------------------------------
 
-  // Re-render whenever the theme changes (operator clicks a swatch on
-  // the profile page, which toggles `data-theme` on <html>). The
-  // MutationObserver listens directly so we don't need profile.js to
-  // know about us — anyone who flips the attribute triggers a repaint.
   function watchThemeChanges() {
     try {
       const obs = new MutationObserver(() => renderBorder());
       obs.observe(document.documentElement, {
         attributes: true,
-        attributeFilter: ["data-theme", "data-show-border", "class"],
+        attributeFilter: ["data-theme", "data-show-border", "data-border-style", "class"],
       });
-    } catch (_) {
-      // Older browsers without MutationObserver — they'll just keep
-      // whatever color the initial render produced. Not a regression.
-    }
+    } catch (_) { /* older browsers — static render, no live updates */ }
   }
 
   function init() {

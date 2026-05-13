@@ -368,6 +368,11 @@ _ADDITIVE_COLUMNS: list[tuple[str, str, str]] = [
      "ALTER TABLE custom_roles ADD COLUMN can_set_user_file_size_cap BOOLEAN NOT NULL DEFAULT 0"),
     ("custom_roles", "can_set_user_retention",
      "ALTER TABLE custom_roles ADD COLUMN can_set_user_retention BOOLEAN NOT NULL DEFAULT 0"),
+    # Server-level border control: master toggle + style selector
+    ("server_settings", "server_show_border",
+     "ALTER TABLE server_settings ADD COLUMN server_show_border BOOLEAN NOT NULL DEFAULT 1"),
+    ("server_settings", "server_border_style",
+     "ALTER TABLE server_settings ADD COLUMN server_border_style VARCHAR(32) NOT NULL DEFAULT 'vitriol'"),
 ]
 
 

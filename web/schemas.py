@@ -289,6 +289,9 @@ class ServerSettingsOut(BaseModel):
     # live for streaming_safety_divisor once the runtime hook is wired).
     max_concurrent_conversions: int = 3
     streaming_safety_divisor: int = 4
+    # Server-level border control
+    server_show_border: bool = True
+    server_border_style: str = "vitriol"
 
 
 class ServerSettingsPatch(BaseModel):
@@ -367,6 +370,8 @@ class ServerSettingsPatch(BaseModel):
     s3_force_path_style: Optional[bool] = None
     max_concurrent_conversions: Optional[int] = None
     streaming_safety_divisor: Optional[int] = None
+    server_show_border: Optional[bool] = None
+    server_border_style: Optional[str] = None
 
 
 class CustomRoleOut(BaseModel):

@@ -2557,6 +2557,35 @@ if (logoResetBtn) {
   });
 }
 
+// ============================================================
+//   Border controls — live preview wiring.
+// ============================================================
+//
+// The style select and the show/hide toggle both update the <html>
+// data attributes immediately so the operator sees the effect before
+// saving. On page reload the server-provided values are authoritative.
+
+(function initBorderControls() {
+  const styleSelect = document.getElementById('server-border-style-select');
+  const showToggle  = document.getElementById('server-show-border-toggle');
+
+  if (styleSelect) {
+    styleSelect.addEventListener('change', () => {
+      document.documentElement.setAttribute('data-border-style', styleSelect.value);
+      // Also keep the show-border attribute in sync with the current toggle
+      // so changing style while hidden doesn't accidentally reveal the border.
+      const showing = showToggle ? showToggle.checked : true;
+      document.documentElement.setAttribute('data-show-border', showing ? 'on' : 'off');
+    });
+  }
+
+  if (showToggle) {
+    showToggle.addEventListener('change', () => {
+      document.documentElement.setAttribute('data-show-border', showToggle.checked ? 'on' : 'off');
+    });
+  }
+})();
+
 // Kick everything off. load() populates the bulk of the form;
 // refreshStorageSection + reloadDbProviders paint the new sections
 // that need post-load wiring (visibility, pills, table render).

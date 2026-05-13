@@ -113,6 +113,8 @@ def _to_out(s: ServerSettings) -> ServerSettingsOut:
         queue_weight_super_admin=int(getattr(s, "queue_weight_super_admin", None) or 5),
         queue_weight_admin=int(getattr(s, "queue_weight_admin", None) or 3),
         queue_weight_user=int(getattr(s, "queue_weight_user", None) or 1),
+        server_show_border=bool(getattr(s, "server_show_border", True)),
+        server_border_style=str(getattr(s, "server_border_style", None) or "vitriol"),
     )
 
 
@@ -200,6 +202,8 @@ def patch_server_settings(
         # default is in the safe range).
         "max_concurrent_conversions", "streaming_safety_divisor",
         "queue_weight_super_admin", "queue_weight_admin", "queue_weight_user",
+        # Server-level border control
+        "server_show_border", "server_border_style",
     }
     for f in plain_fields:
         v = getattr(req, f)

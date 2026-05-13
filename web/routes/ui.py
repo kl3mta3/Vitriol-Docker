@@ -53,6 +53,10 @@ def _common_ctx(request: Request, user: Optional[User], db: Session) -> dict:
         # customized them (NULL columns or no row yet).
         "brand_title": (getattr(s, "brand_title", None) if s else None) or "VITRIOL",
         "brand_link": (getattr(s, "brand_link", None) if s else None) or "https://vitriol.rocks",
+        # Server-level border control — injected into every page so the
+        # MutationObserver in border.js picks up the right initial state.
+        "server_show_border": bool(getattr(s, "server_show_border", True)) if s else True,
+        "server_border_style": str(getattr(s, "server_border_style", None) or "vitriol") if s else "vitriol",
         "show_users_tab": user is not None and has_capability(user, CAN_VIEW_USERS_TAB),
         "show_server_tab": user is not None and has_capability(user, CAN_VIEW_SERVER_TAB),
         "show_files_tab": user is not None and has_capability(user, CAN_VIEW_OWN_FILES),

@@ -92,6 +92,8 @@ _SETTINGS_COLUMNS = (
     # Performance / queue.
     "max_concurrent_conversions", "streaming_safety_divisor",
     "queue_weight_super_admin", "queue_weight_admin", "queue_weight_user",
+    # Server-level border control
+    "server_show_border", "server_border_style",
 )
 
 # Encrypted-at-rest columns we decrypt for export and re-encrypt on
