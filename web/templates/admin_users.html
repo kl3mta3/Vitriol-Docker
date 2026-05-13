@@ -127,6 +127,7 @@
         <label class="checkbox-row"><input type="checkbox" name="self_compile_enabled" /> <span>Self-compile (.py / .exe)</span></label>
         <label><span>Daily conversion limit (blank = base default)</span><input name="daily_conversion_limit" type="number" min="0" /></label>
         <label><span>Rate limit / minute (blank = base default)</span><input name="rate_limit_per_minute" type="number" min="0" /></label>
+        <label><span>Queue burst weight (blank = base default)</span><input name="queue_weight" type="number" min="1" /></label>
       </div>
       <div class="grid-2" style="margin-top: 8px;">
         <label>
@@ -301,6 +302,7 @@
         <label class="checkbox-row"><input type="checkbox" name="self_compile_enabled" /> <span>Self-compile (.py / .exe)</span></label>
         <label><span>Daily conversion limit (blank = role default)</span><input name="daily_conversion_limit" type="number" min="0" /></label>
         <label><span>Rate limit / minute (blank = role default)</span><input name="rate_limit_per_minute" type="number" min="0" /></label>
+        <label><span>Queue burst weight override (blank = inherit)</span><input name="queue_weight_override" type="number" min="1" /></label>
       </div>
       {# Per-user max upload size override — requires the actor to have
          the set_user_file_size_cap capability. JS hides this row when

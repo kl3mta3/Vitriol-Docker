@@ -305,6 +305,7 @@ function openManage(u) {
   f.self_compile_enabled.checked = !!u.self_compile_enabled;
   f.daily_conversion_limit.value = u.daily_conversion_limit ?? '';
   f.rate_limit_per_minute.value = u.rate_limit_per_minute ?? '';
+  f.queue_weight_override.value = u.queue_weight_override ?? '';
 
   // Per-user max-upload-size override: only show this row when the
   // calling admin holds the `set_user_file_size_cap` capability. The
@@ -512,6 +513,8 @@ manageForm.addEventListener('submit', async (e) => {
       ? null : Number(manageForm.daily_conversion_limit.value),
     rate_limit_per_minute: manageForm.rate_limit_per_minute.value === ''
       ? null : Number(manageForm.rate_limit_per_minute.value),
+    queue_weight_override: manageForm.queue_weight_override.value === ''
+      ? null : Number(manageForm.queue_weight_override.value),
     // Convert MB → bytes on save; empty or 0 → null = inherit from
     // role/server default. Only meaningful when the actor has the
     // capability (the row is hidden otherwise — and even if the field
@@ -554,6 +557,8 @@ manageForm.addEventListener('submit', async (e) => {
     patch.daily_conversion_limit = formValues.daily_conversion_limit;
   if (formValues.rate_limit_per_minute !== (u.rate_limit_per_minute ?? null))
     patch.rate_limit_per_minute = formValues.rate_limit_per_minute;
+  if (formValues.queue_weight_override !== (u.queue_weight_override ?? null))
+    patch.queue_weight_override = formValues.queue_weight_override;
   // Only ship the file-size field if the actor has the capability AND
   // the value actually changed. Without the capability the backend
   // would 403 — easier to skip the field entirely.
@@ -739,6 +744,7 @@ function openRoleForm(cr) {
   }
   f.daily_conversion_limit.value = cr && cr.daily_conversion_limit != null ? cr.daily_conversion_limit : '';
   f.rate_limit_per_minute.value = cr && cr.rate_limit_per_minute != null ? cr.rate_limit_per_minute : '';
+  f.queue_weight.value = cr && cr.queue_weight != null ? cr.queue_weight : '';
   // Role-level upload cap + sibling output/storage caps, stored as
   // bytes server-side, edited as MB. Same blank-or-zero-=-inherit
   // semantics as the per-user fields on the manage-user dialog.
@@ -806,6 +812,7 @@ roleForm.addEventListener('submit', async (e) => {
     self_compile_enabled: roleForm.self_compile_enabled.checked,
     daily_conversion_limit: roleForm.daily_conversion_limit.value === '' ? null : Number(roleForm.daily_conversion_limit.value),
     rate_limit_per_minute: roleForm.rate_limit_per_minute.value === '' ? null : Number(roleForm.rate_limit_per_minute.value),
+    queue_weight: roleForm.queue_weight.value === '' ? null : Number(roleForm.queue_weight.value),
     can_view_users_tab: roleForm.can_view_users_tab.checked,
     can_create_user: roleForm.can_create_user.checked,
     can_suspend_user: roleForm.can_suspend_user.checked,

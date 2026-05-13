@@ -27,7 +27,8 @@ from ..db import SessionLocal
 from ..models import Job, JobStatus
 
 _settings = get_settings()
-_executor = ThreadPoolExecutor(max_workers=_settings.max_concurrent_conversions, thread_name_prefix="vit-convert")
+_max_workers = _settings.max_concurrent_conversions
+_executor = ThreadPoolExecutor(max_workers=_max_workers, thread_name_prefix="vit-convert")
 _tokens: dict[int, CancellationToken] = {}
 _subscribers: dict[int, set[tuple[asyncio.Queue, asyncio.AbstractEventLoop]]] = {}
 _subscribers_lock = threading.Lock()
@@ -92,11 +93,91 @@ def unsubscribe(job_id: int, q: asyncio.Queue) -> None:
             _subscribers.pop(job_id, None)
 
 
+# -------------------------------------------------- per-user fair queue
+#
+# Instead of feeding jobs straight into the ThreadPoolExecutor (FIFO,
+# no fairness), we queue them into per-user buckets and round-robin
+# across users so one heavy uploader can't starve everyone else.
+#
+# Weighted round-robin: When it's a user's turn, the dispatcher pops
+# up to `weight` jobs from their queue and submits them. This gives
+# admins (e.g., weight 5) priority to burst into available slots, while
+# regular users (weight 1) still get guaranteed throughput.
+#
+# The dispatcher is a daemon thread that wakes whenever a new job
+# arrives. It picks the next user in rotation, submits up to W jobs,
+# and advances. A semaphore gates how many jobs are in-flight at once.
+
+from collections import deque
+
+_user_queues: dict[int, deque] = {}        # user_id → deque of job_ids
+_user_weights: dict[int, int] = {}         # user_id → effective weight
+_queue_lock = threading.Lock()
+_queue_event = threading.Event()           # wakes the dispatcher
+_slot_semaphore = threading.Semaphore(_max_workers)
+_rr_index = 0                              # current position in rotation
+
+
+def _dispatcher() -> None:
+    """Background thread — weighted round-robin across users.
+    Blocks on the semaphore when all conversion slots are busy."""
+    global _rr_index
+    while True:
+        # Wait until there's at least one queued job.
+        _queue_event.wait()
+
+        jobs_to_submit = []
+        with _queue_lock:
+            _user_order_live = [uid for uid, dq in _user_queues.items() if dq]
+            if not _user_order_live:
+                _queue_event.clear()
+                continue  # nothing left — go back to waiting
+            _rr_index = _rr_index % len(_user_order_live)
+            uid = _user_order_live[_rr_index]
+            weight = _user_weights.get(uid, 1)
+
+            for _ in range(weight):
+                if not _user_queues[uid]:
+                    break
+                jobs_to_submit.append(_user_queues[uid].popleft())
+            
+            if not _user_queues[uid]:
+                del _user_queues[uid]
+                _user_weights.pop(uid, None)
+            _rr_index = (_rr_index + 1) % max(1, len(_user_order_live))
+
+        # Block until conversion slots are free and submit.
+        for job_id in jobs_to_submit:
+            _slot_semaphore.acquire()
+            _executor.submit(_run_fair, job_id)
+
+
+def _run_fair(job_id: int) -> None:
+    """Wrapper that releases a semaphore slot after _run completes,
+    so the dispatcher can feed the next job."""
+    try:
+        _run(job_id)
+    finally:
+        _slot_semaphore.release()
+
+
+# Start the dispatcher as a daemon thread — it dies with the process.
+_dispatcher_thread = threading.Thread(target=_dispatcher, daemon=True,
+                                       name="vit-fair-dispatch")
+_dispatcher_thread.start()
+
+
 # ----------------------------------------------------------- run a job
 
-def submit(job_id: int) -> None:
-    """Schedule a job for execution. Job row must already be in `queued` state."""
-    _executor.submit(_run, job_id)
+def submit(job_id: int, user_id: int = 0, weight: int = 1) -> None:
+    """Schedule a job for execution. Job row must already be in `queued` state.
+
+    Jobs are dispatched using a weighted round-robin across users.
+    """
+    with _queue_lock:
+        _user_queues.setdefault(user_id, deque()).append(job_id)
+        _user_weights[user_id] = weight
+    _queue_event.set()  # wake the dispatcher
 
 
 def cancel(job_id: int) -> bool:

@@ -11,7 +11,7 @@
 // playlist-mutating events we re-snapshot every row so a stale tab
 // state can never get out of sync with what's on screen.
 
-const IDB_NAME = 'vitriol-playlist';
+const IDB_NAME = `vitriol-playlist-${window.VITRIOL_USER_ID || 0}`;
 const IDB_VERSION = 1;
 const ROWS_STORE = 'rows';   // {id, filename, srcExt, dstExt, jobId, hasPassword}
 const BLOBS_STORE = 'blobs'; // raw File objects keyed by row id

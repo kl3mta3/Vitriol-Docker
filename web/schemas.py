@@ -72,6 +72,7 @@ class UserOut(BaseModel):
     # under server_settings.output_retention_json:
     #   {"max_files", "max_age", "age_unit", "delete_on_download"}.
     output_retention: Optional[dict] = None
+    queue_weight_override: Optional[int] = None
     theme: str = "default"
     show_border: bool = True
     custom_role_id: Optional[int] = None
@@ -122,6 +123,7 @@ class UserUpdateRequest(BaseModel):
     # the override. Only honored when the actor has the
     # `set_user_retention` capability; otherwise silently dropped.
     output_retention: Optional[dict] = None
+    queue_weight_override: Optional[int] = None
 
 
 class SuspendRequest(BaseModel):
@@ -202,6 +204,9 @@ class ServerSettingsOut(BaseModel):
     default_user_rate_limit: int
     default_admin_daily_limit: int
     default_admin_rate_limit: int
+    queue_weight_super_admin: int
+    queue_weight_admin: int
+    queue_weight_user: int
     disabled_input_formats_json: str
     disabled_output_formats_json: str
     disabled_admin_input_formats_json: str = "[]"
@@ -297,6 +302,9 @@ class ServerSettingsPatch(BaseModel):
     default_user_rate_limit: Optional[int] = None
     default_admin_daily_limit: Optional[int] = None
     default_admin_rate_limit: Optional[int] = None
+    queue_weight_super_admin: Optional[int] = None
+    queue_weight_admin: Optional[int] = None
+    queue_weight_user: Optional[int] = None
     disabled_input_formats: Optional[List[str]] = None
     disabled_output_formats: Optional[List[str]] = None
     disabled_admin_input_formats: Optional[List[str]] = None
@@ -396,6 +404,7 @@ class CustomRoleOut(BaseModel):
     # server default for the base role. Per-user overrides on
     # individual rows further override this.
     output_retention: Optional[dict] = None
+    queue_weight: Optional[int] = None
     created_at: datetime
     user_count: int = 0
 
@@ -427,6 +436,7 @@ class CustomRoleCreateRequest(BaseModel):
     max_output_size_bytes: Optional[int] = None
     max_storage_bytes: Optional[int] = None
     output_retention: Optional[dict] = None
+    queue_weight: Optional[int] = None
 
 
 class CustomRoleUpdateRequest(BaseModel):
@@ -456,6 +466,7 @@ class CustomRoleUpdateRequest(BaseModel):
     max_output_size_bytes: Optional[int] = None
     max_storage_bytes: Optional[int] = None
     output_retention: Optional[dict] = None
+    queue_weight: Optional[int] = None
 
 
 class MessageResponse(BaseModel):

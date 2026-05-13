@@ -337,6 +337,19 @@
         <label><span>Default admin — daily limit</span><input name="default_admin_daily_limit" type="number" /></label>
         <label><span>Default admin — rate / min</span><input name="default_admin_rate_limit" type="number" /></label>
       </div>
+
+      <h3 class="display small" style="margin-top:18px;">Fair Queue Burst Weights</h3>
+      <p class="muted small">
+        Defines how many jobs a user can burst into available conversion slots on their turn.
+        Higher weight = faster processing for that role without starving others.
+        (Super Admin 5, Admin 3, User 1 recommended).
+      </p>
+      <div class="grid-2">
+        <label><span>Super admin weight</span><input name="queue_weight_super_admin" type="number" min="1" /></label>
+        <label><span>Admin weight</span><input name="queue_weight_admin" type="number" min="1" /></label>
+        <label><span>User weight</span><input name="queue_weight_user" type="number" min="1" /></label>
+      </div>
+
       <p class="muted small" style="margin: 12px 0 4px;">
         Output-side caps. Stone-mode cross-format conversions can balloon
         a small input into a much larger output — these stop a 5 MB

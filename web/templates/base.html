@@ -71,7 +71,7 @@
     {% block content %}{% endblock %}
   </main>
 
-  <script>window.VITRIOL_CAPS = {{ caps|tojson }}; window.VITRIOL_VERSION = "{{ v }}";</script>
+  <script>window.VITRIOL_CAPS = {{ caps|tojson }}; window.VITRIOL_VERSION = "{{ v }}"; window.VITRIOL_USER_ID = {{ user.id if user else 0 }};</script>
   <script src="/static/js/border.js?v={{ v }}"></script>
   <script src="/static/js/api.js?v={{ v }}"></script>
   {% block scripts %}{% endblock %}

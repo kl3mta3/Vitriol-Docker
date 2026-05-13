@@ -225,7 +225,23 @@ async def submit_conversion(
     db.add(job)
     db.commit()
     db.refresh(job)
-    conv_svc.submit(job.id)
+    weight = user.queue_weight_override
+    if weight is None and user.custom_role and user.custom_role.queue_weight is not None:
+        weight = user.custom_role.queue_weight
+    if weight is None:
+        s: Optional[ServerSettings] = db.query(ServerSettings).get(1)
+        if s:
+            if user.role.value == "super_admin":
+                weight = s.queue_weight_super_admin
+            elif user.role.value == "admin":
+                weight = s.queue_weight_admin
+            else:
+                weight = s.queue_weight_user
+        else:
+            weight = 1
+    weight = max(1, weight)
+
+    conv_svc.submit(job.id, user_id=user.id, weight=weight)
     audit.log(db, user.id, "convert_submit", target_user_id=user.id, metadata={
         "job_id": job.id, "src_ext": src_ext, "dst_ext": dst_ext_actual, "stone": job.stone,
     })

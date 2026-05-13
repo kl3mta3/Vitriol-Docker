@@ -131,6 +131,11 @@ class User(Base):
     # Editing this field requires the `set_user_retention` capability.
     output_retention_json = Column(Text, nullable=True)
 
+    # Per-user queue weight override for the fair conversion queue.
+    # Determines how many jobs the user can burst per round-robin turn.
+    # NULL = inherit the default for their role from ServerSettings.
+    queue_weight_override = Column(Integer, nullable=True)
+
     # User-facing theme preference. One of THEMES (web/static/css/theme.css).
     theme = Column(String(32), nullable=False, default="default")
     # Per-user toggle for the alchemy SVG border around the viewport.
@@ -337,6 +342,11 @@ class CustomRole(Base):
     # overrides on individual user rows further override this.
     output_retention_json = Column(Text, nullable=True)
 
+    # Role-level queue weight override. Defines how many jobs users
+    # with this custom role can burst per turn in the fair queue.
+    # Null = inherit from the base role's server setting.
+    queue_weight = Column(Integer, nullable=True)
+
     # Admin-tier capabilities (only meaningful when base_role == admin).
     can_create_user = Column(Boolean, nullable=False, default=False)
     can_suspend_user = Column(Boolean, nullable=False, default=False)
@@ -529,6 +539,12 @@ class ServerSettings(Base):
     default_user_rate_limit = Column(Integer, nullable=False, default=30)
     default_admin_daily_limit = Column(Integer, nullable=False, default=500)
     default_admin_rate_limit = Column(Integer, nullable=False, default=120)
+
+    # Base queue weights for the fair round-robin conversion queue.
+    # Defines how many jobs the user can burst per turn based on their role.
+    queue_weight_super_admin = Column(Integer, nullable=False, default=5, server_default="5")
+    queue_weight_admin = Column(Integer, nullable=False, default=3, server_default="3")
+    queue_weight_user = Column(Integer, nullable=False, default=1, server_default="1")
 
     # Format-disable tiers. The original two are *globally* off — nobody,
     # including the super admin, can use those formats. The two pairs
