@@ -346,6 +346,17 @@ _ADDITIVE_COLUMNS: list[tuple[str, str, str]] = [
     # users see the same visual they had before the column existed.
     ("users", "show_border",
      "ALTER TABLE users ADD COLUMN show_border BOOLEAN NOT NULL DEFAULT 1"),
+    # Queue weights
+    ("server_settings", "queue_weight_super_admin",
+     "ALTER TABLE server_settings ADD COLUMN queue_weight_super_admin INTEGER NOT NULL DEFAULT 5"),
+    ("server_settings", "queue_weight_admin",
+     "ALTER TABLE server_settings ADD COLUMN queue_weight_admin INTEGER NOT NULL DEFAULT 3"),
+    ("server_settings", "queue_weight_user",
+     "ALTER TABLE server_settings ADD COLUMN queue_weight_user INTEGER NOT NULL DEFAULT 1"),
+    ("custom_roles", "queue_weight",
+     "ALTER TABLE custom_roles ADD COLUMN queue_weight INTEGER"),
+    ("users", "queue_weight_override",
+     "ALTER TABLE users ADD COLUMN queue_weight_override INTEGER"),
 ]
 
 
