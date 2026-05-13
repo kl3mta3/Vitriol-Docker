@@ -7,7 +7,7 @@ from datetime import datetime
 from pathlib import Path
 from typing import List, Optional
 
-from fastapi import APIRouter, Depends, File, Form, HTTPException, UploadFile
+from fastapi import APIRouter, Depends, File, Form, HTTPException, Query, UploadFile
 from fastapi.responses import FileResponse, StreamingResponse
 from pydantic import BaseModel
 from sqlalchemy.orm import Session
@@ -263,6 +263,7 @@ def cancel_job(job_id: int, user: User = Depends(get_current_user), db: Session 
 
 class _ZipRequest(BaseModel):
     ids: List[int]
+    delete_ids: List[int] = []
 
 
 @router.post("/jobs/download-zip")
@@ -319,21 +320,40 @@ def download_zip(req: _ZipRequest, user: User = Depends(get_current_user), db: S
                     entry.write(chunk)
     buf.seek(0)
     audit.log(db, user.id, "convert_download_zip", metadata={"count": len(available)})
-    return StreamingResponse(
+
+    # Post-zip cleanup for rows the user opted into "delete on download".
+    cleanup_jobs = [j for j in available if j.id in set(req.delete_ids) and j.user_id == user.id]
+    response = StreamingResponse(
         buf,
         media_type="application/zip",
         headers={"Content-Disposition": 'attachment; filename="vitriol-conversions.zip"'},
     )
+    if cleanup_jobs:
+        from starlette.background import BackgroundTask
+        async def _zip_cleanup():
+            for j in cleanup_jobs:
+                _post_download_delete(j.dst_path, j.id, j.user_id)
+        response.background = BackgroundTask(_zip_cleanup)
+    return response
 
 
 @router.get("/jobs/{job_id}/result")
-def download_result(job_id: int, user: User = Depends(get_current_user), db: Session = Depends(get_db)):
+def download_result(
+    job_id: int,
+    delete: int = Query(0, description="When 1 the output file is deleted after streaming (owner only)."),
+    user: User = Depends(get_current_user),
+    db: Session = Depends(get_db),
+):
     """Stream a converted output file.
 
     Owner can always download their own. Anyone else needs the
     `download_others_files` capability. If the file's owner role has
     `delete_on_download=true` configured in retention, the file is
     removed from disk after the response finishes streaming.
+
+    Callers may also pass ``?delete=1`` to explicitly request deletion
+    after download — this is the per-item user-facing "Delete on
+    Download" checkbox. Only the job owner can trigger this path.
     """
     job: Optional[Job] = db.query(Job).get(job_id)
     if job is None:
@@ -352,6 +372,11 @@ def download_result(job_id: int, user: User = Depends(get_current_user), db: Ses
     # retention config (not the downloader's — admins reading a user's
     # file still trigger that user's delete-on-download policy).
     cleanup_after = _should_delete_on_download(db, job)
+    # Per-item user opt-in: ?delete=1 from the playlist checkbox.
+    # Only the job owner can request this — admins downloading someone
+    # else's file don't get to delete it via this path.
+    if delete and job.user_id == user.id:
+        cleanup_after = True
 
     response = backend.stream_response(job.dst_path, job.dst_filename)
     if cleanup_after:

@@ -75,6 +75,7 @@ async function idbClear() {
 async function persistRow(row) {
   if (!row.dataset.id) return;
   const dstSel = row.querySelector('[data-dst-ext]');
+  const dodCb = row.querySelector('[data-dod]');
   const meta = {
     filename: row._file ? row._file.name : (row.querySelector('[data-filename]').textContent || ''),
     srcExt:   row._srcExt,
@@ -82,6 +83,7 @@ async function persistRow(row) {
     jobId:    row._jobId || null,
     hasPassword: !!row._password,
     statusKind: (row.querySelector('[data-status]')?.className || '').replace('status-glyph ', '').trim() || 'idle',
+    deleteOnDownload: dodCb ? dodCb.checked : false,
   };
   try {
     await idbPutRow(row.dataset.id, meta, row._file && !meta.jobId ? row._file : null);
@@ -162,6 +164,7 @@ function addFile(file, opts) {
   // opts.id  → reuse an existing IDB key (used during restoreFromIdb)
   // opts.dstExt → seed dst-ext dropdown to the saved selection
   // opts.jobId → row was already submitted before we navigated away
+  // opts.deleteOnDownload → restore the Delete-on-DL checkbox state
   opts = opts || {};
   const row = tpl.content.firstElementChild.cloneNode(true);
   row.dataset.id = opts.id || _uuid();
@@ -182,6 +185,14 @@ function addFile(file, opts) {
     const sel = row.querySelector('[data-dst-ext]');
     if (sel) sel.addEventListener('change', () => persistRow(row));
   }
+
+  // Restore Delete-on-Download checkbox state from IDB.
+  const dodCb = row.querySelector('[data-dod]');
+  if (dodCb) {
+    if (opts.deleteOnDownload) dodCb.checked = true;
+    dodCb.addEventListener('change', () => persistRow(row));
+  }
+
   bindRow(row);
   const lock = row.querySelector('[data-lock]');
   if (lock) lock.hidden = !stoneToggle.checked;
@@ -274,9 +285,42 @@ async function convertRow(row) {
   }
 }
 
+function _resetRowToFresh(row) {
+  // Restore the row to its pre-conversion "fresh" state. Used after a
+  // delete-on-download completes — the file is gone, so the row should
+  // look like a newly-dropped file ready for another transmutation.
+  row._jobId = null;
+  row.querySelector('[data-bar]').style.width = '0%';
+  setStatus(row, 'idle', 'Ready');
+  row.classList.remove('row-deleted');
+
+  // Remove the Re-transmute button if present.
+  const rt = row.querySelector('[data-retransmute]');
+  if (rt) rt.remove();
+
+  // Replace whatever the current [data-go] button is (Download) with
+  // a fresh Transmute button.
+  const dl = row.querySelector('[data-go]');
+  const reset = dl.cloneNode(true);
+  reset.textContent = 'Transmute';
+  reset.disabled = false;
+  reset.addEventListener('click', () => convertRow(row));
+  dl.parentNode.replaceChild(reset, dl);
+
+  // Re-show the Delete-on-DL checkbox (it was hidden by .row-deleted).
+  // Uncheck it since the prior cycle is complete.
+  const dodCb = row.querySelector('[data-dod]');
+  if (dodCb) dodCb.checked = false;
+
+  persistRow(row);
+}
+
 function flipToDone(row, jobId) {
   setStatus(row, 'done', 'Done');
   row.querySelector('[data-bar]').style.width = '100%';
+
+  const dodCb = row.querySelector('[data-dod]');
+  const deleteOnDownload = dodCb && dodCb.checked;
 
   const go = row.querySelector('[data-go]');
   go.textContent = 'Download';
@@ -285,7 +329,19 @@ function flipToDone(row, jobId) {
   // the download navigation. addEventListener doesn't replace the old
   // listener, so clone-and-replace the node to drop it cleanly.
   const fresh = go.cloneNode(true);
-  fresh.addEventListener('click', () => { location.href = `/api/v1/jobs/${jobId}/result`; });
+  fresh.addEventListener('click', () => {
+    // Build the download URL — append ?delete=1 when the user opted in.
+    const deleteFlag = deleteOnDownload ? '?delete=1' : '';
+    location.href = `/api/v1/jobs/${jobId}/result${deleteFlag}`;
+
+    if (deleteOnDownload) {
+      // The server will delete the file after streaming. Reset this row
+      // to "fresh" so the user can re-transmute but can't re-download
+      // a file that no longer exists. Small delay so the browser's
+      // download navigation fires first.
+      setTimeout(() => _resetRowToFresh(row), 600);
+    }
+  });
   go.parentNode.replaceChild(fresh, go);
 
   // Re-transmute: convert this row again with whatever the current
@@ -432,12 +488,19 @@ document.getElementById('download-selected').addEventListener('click', async () 
   // without a job_id (never converted) and rows still running / failed
   // are silently skipped — the same set the server would accept anyway.
   const ids = [];
+  const delete_ids = [];
+  const dodRows = [];   // rows that had Delete-on-DL checked
   for (const row of playlist.children) {
     if (!row.querySelector('.row-check').checked) continue;
     if (!row._jobId) continue;
     const glyph = row.querySelector('[data-status]');
     if (!glyph || !glyph.classList.contains('done')) continue;
     ids.push(row._jobId);
+    const dodCb = row.querySelector('[data-dod]');
+    if (dodCb && dodCb.checked) {
+      delete_ids.push(row._jobId);
+      dodRows.push(row);
+    }
   }
   if (!ids.length) {
     statusText.textContent = 'No completed conversions selected.';
@@ -452,7 +515,7 @@ document.getElementById('download-selected').addEventListener('click', async () 
       method: 'POST',
       credentials: 'same-origin',
       headers: { 'Content-Type': 'application/json' },
-      body: JSON.stringify({ ids }),
+      body: JSON.stringify({ ids, delete_ids }),
     });
     if (!r.ok) {
       let msg = `Download failed (${r.status})`;
@@ -471,6 +534,9 @@ document.getElementById('download-selected').addEventListener('click', async () 
     a.remove();
     URL.revokeObjectURL(url);
     statusText.textContent = `Downloaded ${ids.length} file${ids.length === 1 ? '' : 's'} as zip.`;
+
+    // Reset rows whose files were deleted on the server.
+    for (const row of dodRows) _resetRowToFresh(row);
   } catch (ex) {
     statusText.textContent = ex.message || 'Download failed';
   } finally {
@@ -595,6 +661,7 @@ async function restoreFromIdb() {
       srcExt: meta.srcExt,
       dstExt: meta.dstExt,
       jobId: meta.jobId || null,
+      deleteOnDownload: meta.deleteOnDownload || false,
     });
   }
 }

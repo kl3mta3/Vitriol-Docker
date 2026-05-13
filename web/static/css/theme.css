@@ -369,6 +369,31 @@ input:focus, select:focus, textarea:focus { outline: none; border-color: var(--p
 .progress { height: 4px; background: var(--border); border-radius: 2px; margin-top: 6px; overflow: hidden; }
 .bar { display: block; height: 100%; width: 0%; background: linear-gradient(90deg, var(--purple), var(--blue)); transition: width 0.2s; }
 
+/* Delete-on-Download per-row checkbox. Compact inline label that stays
+   muted until checked, then shifts to a red tint so the user knows the
+   file will be removed. */
+.row-dod {
+  display: inline-flex; align-items: center; gap: 4px;
+  font-size: 10px; color: var(--ink-faint);
+  cursor: pointer; white-space: nowrap; user-select: none;
+  padding: 2px 6px;
+  border: 1px solid transparent;
+  border-radius: var(--radius);
+  transition: color 0.15s, border-color 0.15s;
+}
+.row-dod input { margin: 0; cursor: pointer; }
+.row-dod:hover { color: var(--ink-muted); }
+.row-dod:has(input:checked) {
+  color: var(--red-hot);
+  border-color: rgba(231, 76, 60, 0.3);
+  background: rgba(231, 76, 60, 0.06);
+}
+/* When the file has been deleted after download, dim the row slightly
+   and hide the download / re-transmute controls. The row stays visible
+   so the user can re-transmute from the original source file. */
+.row.row-deleted .row-dod { display: none; }
+.row.row-deleted .status-glyph.done { color: var(--ink-faint); }
+
 @keyframes spin { to { transform: rotate(360deg); } }
 
 .bulk-actions { display: flex; gap: 8px; flex-wrap: wrap; align-items: center; }
