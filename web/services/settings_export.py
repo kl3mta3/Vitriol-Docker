@@ -58,28 +58,40 @@ KDF = "pbkdf2-sha256-200000"
 # ---------------------------------------------------------------------
 
 # ServerSettings columns we DO export. Excludes auto-generated state
-# (last_test_*, updated_at), the singleton id, and the legacy oidc_*
-# fields (superseded by oidc_providers table).
+# (last_test_*, updated_at, storage_uris_backfilled), the singleton id,
+# and the legacy top-level oidc_* fields (superseded by oidc_providers
+# table). S3 secret exported separately via _SETTINGS_SECRETS.
 _SETTINGS_COLUMNS = (
     "bind_host", "bind_port",
     "global_rate_limit_per_minute", "max_file_size_bytes",
+    "max_output_size_bytes", "max_storage_bytes",
     "default_user_daily_limit", "default_user_rate_limit",
     "default_admin_daily_limit", "default_admin_rate_limit",
     "disabled_input_formats_json", "disabled_output_formats_json",
     "disabled_admin_input_formats_json", "disabled_admin_output_formats_json",
     "disabled_user_input_formats_json", "disabled_user_output_formats_json",
     "allow_signup", "signup_default_role", "signup_default_custom_role_id",
-    "require_email_verification",
-    "smtp_host", "smtp_port", "smtp_user", "smtp_from", "smtp_use_tls",
+    "require_email_verification", "require_name_at_signup",
+    "password_reset_via_email", "password_signin_enabled",
+    "smtp_enabled", "smtp_host", "smtp_port", "smtp_user", "smtp_from", "smtp_use_tls",
     "discord_webhook_url",
-    "oauth_google_client_id", "oauth_github_client_id",
+    "oauth_google_enabled", "oauth_google_show_on_signup", "oauth_google_client_id",
+    "oauth_github_enabled", "oauth_github_show_on_signup", "oauth_github_client_id",
     "public_base_url", "allowed_origin",
+    "brand_title", "brand_link",
     "ssl_cert_pull_webhook_url", "ssl_cert_pull_mode", "ssl_cert_pull_script",
     "ssl_cert_pull_auto_days", "ssl_cert_pull_webhook_method",
     "ssl_cert_pull_webhook_header_name",
     "ssl_cert_pull_response_cert_field", "ssl_cert_pull_response_key_field",
     "super_admin_can_self_compile", "admin_can_self_compile",
     "output_retention_json",
+    # Storage backend (non-secret S3 fields; secret via _SETTINGS_SECRETS).
+    "storage_backend",
+    "s3_endpoint_url", "s3_bucket", "s3_region", "s3_access_key",
+    "s3_path_prefix", "s3_force_path_style",
+    # Performance / queue.
+    "max_concurrent_conversions", "streaming_safety_divisor",
+    "queue_weight_super_admin", "queue_weight_admin", "queue_weight_user",
 )
 
 # Encrypted-at-rest columns we decrypt for export and re-encrypt on
@@ -90,6 +102,7 @@ _SETTINGS_SECRETS = {
     "oauth_github_client_secret_enc": "oauth_github_client_secret",
     "ssl_cert_pull_webhook_secret_enc": "ssl_cert_pull_webhook_secret",
     "ssl_cert_pull_webhook_header_value_enc": "ssl_cert_pull_webhook_header_value",
+    "s3_secret_key_enc": "s3_secret_key",
 }
 
 
@@ -155,6 +168,7 @@ def collect(db: Session) -> dict:
             "can_view_others_files": r.can_view_others_files,
             "can_download_others_files": r.can_download_others_files,
             "can_delete_others_files": r.can_delete_others_files,
+            "queue_weight": r.queue_weight,
         })
 
     return {
@@ -231,6 +245,7 @@ def apply(db: Session, settings: dict) -> dict:
             "can_restart_server", "can_view_users_tab", "can_reset_other_creds",
             "can_view_own_files", "can_view_others_files",
             "can_download_others_files", "can_delete_others_files",
+            "queue_weight",
         ):
             if k in entry:
                 setattr(row, k, entry[k])
