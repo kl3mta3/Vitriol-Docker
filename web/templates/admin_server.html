@@ -581,6 +581,40 @@
       <p id="secret-key-msg" class="muted small" hidden></p>
     </details>
 
+    <details name="server-settings"><summary>Support</summary>
+      <p class="muted small" style="margin-bottom: 16px;">
+        Contact info shown to users on limit-hit notices and the optional profile
+        support button. Leave blank to suppress those elements entirely.
+      </p>
+      <label>
+        <span>Support email</span>
+        <input type="email" name="support_email" placeholder="support@example.com" />
+      </label>
+      <label style="margin-top: 12px;">
+        <span>Discord invite URL</span>
+        <input type="url" name="support_discord_url" placeholder="https://discord.gg/…" />
+      </label>
+      <label class="checkbox-row" style="margin-top: 8px;">
+        <input type="checkbox" name="support_discord_shared" />
+        <span>Share Discord link with users
+          <em class="muted small">(adds a Join Discord button on limit notices and the support modal)</em>
+        </span>
+      </label>
+      <hr style="margin: 20px 0; border-color: var(--border-2);" />
+      <label class="checkbox-row" style="margin-bottom: 10px;">
+        <input type="checkbox" name="show_limit_hit_notice" />
+        <span>Show limit-hit notice
+          <em class="muted small">(popup when a user hits their rate or daily conversion limit)</em>
+        </span>
+      </label>
+      <label class="checkbox-row">
+        <input type="checkbox" name="show_user_support_button" />
+        <span>Show user support button
+          <em class="muted small">(Contact Support button on user profile — sends email to address above)</em>
+        </span>
+      </label>
+    </details>
+
     <div class="form-actions">
       <button type="submit" class="btn btn-primary">Save settings</button>
       <span style="flex: 1;"></span>
@@ -990,43 +1024,6 @@
     </footer>
   </form>
 </dialog>
-
-<details name="server-settings"><summary>Support</summary>
-  <p class="muted small" style="margin-bottom: 16px;">
-    Contact info shown to users on limit-hit notices and the optional profile
-    support button. Leave blank to suppress those elements entirely.
-  </p>
-
-  <label>
-    <span>Support email</span>
-    <input type="email" name="support_email" placeholder="support@example.com" />
-  </label>
-  <label style="margin-top: 12px;">
-    <span>Discord invite URL</span>
-    <input type="url" name="support_discord_url" placeholder="https://discord.gg/…" />
-  </label>
-  <label class="checkbox-row" style="margin-top: 8px;">
-    <input type="checkbox" name="support_discord_shared" />
-    <span>Share Discord link with users
-      <em class="muted small">(adds a Join Discord button on limit notices and the support modal)</em>
-    </span>
-  </label>
-
-  <hr style="margin: 20px 0; border-color: var(--border-2);" />
-
-  <label class="checkbox-row" style="margin-bottom: 10px;">
-    <input type="checkbox" name="show_limit_hit_notice" />
-    <span>Show limit-hit notice
-      <em class="muted small">(popup when a user hits their rate or daily conversion limit)</em>
-    </span>
-  </label>
-  <label class="checkbox-row">
-    <input type="checkbox" name="show_user_support_button" />
-    <span>Show user support button
-      <em class="muted small">(Contact Support button on user profile — sends email to address above)</em>
-    </span>
-  </label>
-</details>
 
 {% endblock %}
 {% block scripts %}
