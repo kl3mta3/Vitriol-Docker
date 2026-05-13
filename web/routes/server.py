@@ -482,7 +482,7 @@ async def test_email(
     msg = MIMEMultipart("alternative")
     msg["From"] = s.smtp_from
     msg["To"] = to
-    msg["Subject"] = "Vitriol — SMTP test"
+    msg["Subject"] = f"{bn} — SMTP test"
     msg.attach(MIMEText(plain, "plain", "utf-8"))
     msg.attach(MIMEText(html, "html", "utf-8"))
     from datetime import datetime as _dt
@@ -539,7 +539,7 @@ async def test_email_preview(
     ``kind`` must be one of ``verification``, ``reset``, or ``approval``.
     ``to`` is optional — falls back to the actor's own email address.
     """
-    from ..auth.email import _button_html, _html_email, _send, public_url
+    from ..auth.email import _button_html, _html_email, _send, _brand, public_url
     from html import escape as _esc
 
     s = db.query(ServerSettings).get(1)
@@ -552,6 +552,7 @@ async def test_email_preview(
     if kind not in ("verification", "reset", "approval"):
         raise HTTPException(status_code=400, detail="kind must be verification, reset, or approval.")
 
+    bn = _brand(db)
     preview_link = public_url(db, {
         "verification": "verify?token=PREVIEW_NOT_VALID",
         "reset": "reset?token=PREVIEW_NOT_VALID",
@@ -559,37 +560,39 @@ async def test_email_preview(
     }[kind])
 
     if kind == "verification":
-        subject = "[Preview] Verify your Vitriol account"
+        subject = f"[Preview] Verify your {bn} account"
         plain = (
             f"Hello {actor.username},\n\n"
-            f"Verify your Vitriol account by visiting:\n{preview_link}\n\n"
+            f"Verify your {bn} account by visiting:\n{preview_link}\n\n"
             "This link expires in 24 hours."
         )
         html = _html_email(
             title=subject,
             greeting=f"Hello, {actor.username}!",
-            paragraphs=["Click the button below to verify your Vitriol account."],
+            paragraphs=[f"Click the button below to verify your {bn} account."],
             button_html=_button_html("Verify my account", preview_link),
             footer="This link expires in 24 hours. If you didn't create an account, you can safely ignore this email.",
+            brand=bn,
         )
     elif kind == "reset":
-        subject = "[Preview] Reset your Vitriol password"
+        subject = f"[Preview] Reset your {bn} password"
         plain = (
             f"Hello {actor.username},\n\n"
-            f"Reset your Vitriol password by visiting:\n{preview_link}\n\n"
+            f"Reset your {bn} password by visiting:\n{preview_link}\n\n"
             "This link expires in 2 hours. If you didn't request this, ignore this email."
         )
         html = _html_email(
             title=subject,
             greeting=f"Hello, {actor.username}!",
-            paragraphs=["We received a request to reset your Vitriol password. Click the button below to choose a new one."],
+            paragraphs=[f"We received a request to reset your {bn} password. Click the button below to choose a new one."],
             button_html=_button_html("Reset my password", preview_link),
-            footer="This link expires in 2 hours. If you didn't request a password reset, you can safely ignore this email — your password has not been changed.",
+            footer=f"This link expires in 2 hours. If you didn't request a password reset, you can safely ignore this email — your password has not been changed.",
+            brand=bn,
         )
     else:  # approval
-        subject = "[Preview] Vitriol — new user awaiting approval"
+        subject = f"[Preview] {bn} — new user awaiting approval"
         plain = (
-            f"A new user has signed up and is awaiting approval.\n\n"
+            f"A new user has signed up on {bn} and is awaiting approval.\n\n"
             f"Username: {actor.username}\n"
             f"Email: {actor.email}\n\n"
             f"Approve or deny here: {preview_link}\n"
@@ -608,8 +611,9 @@ async def test_email_preview(
         html = _html_email(
             title=subject,
             greeting="New user awaiting approval",
-            paragraphs=["A new account has been created and is waiting for your review."],
+            paragraphs=[f"A new account has been created on {bn} and is waiting for your review."],
             button_html=details_table + _button_html("Review in admin panel", preview_link),
+            brand=bn,
         )
 
     ok = await _send(db, to, subject, plain, html)
