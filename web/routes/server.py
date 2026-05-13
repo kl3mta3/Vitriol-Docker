@@ -444,19 +444,21 @@ async def test_email(
 
     relay = f"{s.smtp_host}:{s.smtp_port or 587}"
     auth = s.smtp_user or "(no auth)"
+    bn = getattr(s, "brand_title", None) or "VITRIOL"
     plain = (
-        "If you can read this, SMTP is wired up correctly.\n\n"
-        f"Sent by Vitriol via {relay} as {auth}.\n"
+        f"If you can read this, SMTP is wired up correctly.\n\n"
+        f"Sent by {bn} via {relay} as {auth}.\n"
     )
     html = _html_email(
-        title="Vitriol — SMTP test",
+        title=f"{bn} — SMTP test",
         greeting="SMTP is working!",
         paragraphs=[
-            "This is a test message sent from your Vitriol server to verify that outgoing email is configured correctly.",
+            f"This is a test message sent from your {bn} server to verify that outgoing email is configured correctly.",
             f"Relay: {relay}    Auth: {auth}",
         ],
-        button_html=_button_html("Open Vitriol", str(s.public_base_url or "/")),
+        button_html=_button_html(f"Open {bn}", str(s.public_base_url or "/")),
         footer="You can safely ignore this email — it was triggered by the SMTP test button in Server settings.",
+        brand=bn,
     )
 
     from email.mime.multipart import MIMEMultipart

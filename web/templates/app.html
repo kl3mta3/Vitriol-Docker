@@ -1,11 +1,11 @@
 {% extends "base.html" %}
-{% block title %}Vitriol{% endblock %}
+{% block title %}{{ brand_title }}{% endblock %}
 {% block content %}
 <section class="app-shell">
   <header class="app-top">
     <div class="app-title">
-      <img class="brand-glyph" src="/static/img/logo.svg" alt="" width="36" height="36" />
-      <h1 class="display">Vitriol</h1>
+      <img class="brand-glyph" src="/api/v1/server/branding/logo?v={{ version }}" alt="" width="36" height="36" />
+      <h1 class="display">{{ brand_title }}</h1>
     </div>
     <div class="toggles">
       <label class="toggle stone" title="Cross-format byte-preserving conversion">

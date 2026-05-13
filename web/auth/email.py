@@ -51,9 +51,10 @@ def _button_html(label: str, url: str) -> str:
 </p>"""
 
 
-def _html_email(title: str, greeting: str, paragraphs: list[str], button_html: str, footer: str = "") -> str:
+def _html_email(title: str, greeting: str, paragraphs: list[str], button_html: str, footer: str = "", brand: str = "VITRIOL") -> str:
     """Full HTML email shell with inline CSS."""
     safe_title = escape(title)
+    safe_brand = escape(brand)
     para_html = "".join(
         f'<p style="margin:0 0 16px 0;font-family:Arial,sans-serif;font-size:15px;'
         f'line-height:1.6;color:#333333;">{escape(p)}</p>'
@@ -80,7 +81,7 @@ def _html_email(title: str, greeting: str, paragraphs: list[str], button_html: s
       <!-- header bar -->
       <tr><td style="background:{_BRAND_COLOR};padding:24px 32px;">
         <span style="font-family:Arial,sans-serif;font-size:22px;font-weight:700;
-                     color:#ffffff;letter-spacing:0.05em;">VITRIOL</span>
+                     color:#ffffff;letter-spacing:0.05em;">{safe_brand}</span>
       </td></tr>
       <!-- body -->
       <tr><td style="padding:32px 32px 24px 32px;">
@@ -225,51 +226,61 @@ def public_url(db: Session, path: str) -> str:
     return base.rstrip("/") + "/" + path.lstrip("/")
 
 
+def _brand(db: Session) -> str:
+    s = _settings_row(db)
+    return (getattr(s, "brand_title", None) or "VITRIOL") if s else "VITRIOL"
+
+
 async def send_verification_email(db: Session, user: User, raw_token: str) -> bool:
     # Points at the public-facing /verify HTML page (handled by ui.py)
     # rather than the bare /api/v1/auth/verify JSON endpoint, so a
     # browser click renders a real success page instead of `{"message":...}`.
     link = public_url(db, f"verify?token={raw_token}")
+    bn = _brand(db)
     plain = (
         f"Hello {user.username},\n\n"
-        f"Verify your Vitriol account by visiting:\n{link}\n\n"
+        f"Verify your {bn} account by visiting:\n{link}\n\n"
         "This link expires in 24 hours."
     )
     html = _html_email(
-        title="Verify your Vitriol account",
+        title=f"Verify your {bn} account",
         greeting=f"Hello, {user.username}!",
-        paragraphs=["Click the button below to verify your Vitriol account."],
+        paragraphs=[f"Click the button below to verify your {bn} account."],
         button_html=_button_html("Verify my account", link),
         footer="This link expires in 24 hours. If you didn't create an account, you can safely ignore this email.",
+        brand=bn,
     )
-    return await _send(db, user.email, "Verify your Vitriol account", plain, html)
+    return await _send(db, user.email, f"Verify your {bn} account", plain, html)
 
 
 async def send_password_reset_email(db: Session, user: User, raw_token: str) -> bool:
     link = public_url(db, f"reset?token={raw_token}")
+    bn = _brand(db)
     plain = (
         f"Hello {user.username},\n\n"
-        f"Reset your Vitriol password by visiting:\n{link}\n\n"
+        f"Reset your {bn} password by visiting:\n{link}\n\n"
         "This link expires in 2 hours. If you didn't request this, ignore this email."
     )
     html = _html_email(
-        title="Reset your Vitriol password",
+        title=f"Reset your {bn} password",
         greeting=f"Hello, {user.username}!",
-        paragraphs=["We received a request to reset your Vitriol password. Click the button below to choose a new one."],
+        paragraphs=[f"We received a request to reset your {bn} password. Click the button below to choose a new one."],
         button_html=_button_html("Reset my password", link),
-        footer="This link expires in 2 hours. If you didn't request a password reset, you can safely ignore this email — your password has not been changed.",
+        footer=f"This link expires in 2 hours. If you didn't request a password reset, you can safely ignore this email — your password has not been changed.",
+        brand=bn,
     )
-    return await _send(db, user.email, "Reset your Vitriol password", plain, html)
+    return await _send(db, user.email, f"Reset your {bn} password", plain, html)
 
 
 async def send_pending_approval_notification(db: Session, pending_user: User, recipients: list[str]) -> int:
     sent = 0
     admin_url = public_url(db, "admin/users")
+    bn = _brand(db)
     name_parts = [pending_user.first_name or "", pending_user.last_name or ""]
     display_name = " ".join(p for p in name_parts if p).strip() or None
     name_line = f"Name: {display_name}\n" if display_name else ""
     plain = (
-        f"A new user has signed up and is awaiting approval.\n\n"
+        f"A new user has signed up on {bn} and is awaiting approval.\n\n"
         f"Username: {pending_user.username}\n"
         f"{name_line}"
         f"Email: {pending_user.email}\n\n"
@@ -300,14 +311,15 @@ async def send_pending_approval_notification(db: Session, pending_user: User, re
         f'{detail_rows}</table>'
     )
     html = _html_email(
-        title="Vitriol — new user awaiting approval",
+        title=f"{bn} — new user awaiting approval",
         greeting="New user awaiting approval",
         paragraphs=["A new account has been created and is waiting for your review."],
         button_html=details_table + _button_html("Review in admin panel", admin_url),
+        brand=bn,
     )
     for to in recipients:
         if not to:
             continue
-        if await _send(db, to, "Vitriol — new user awaiting approval", plain, html):
+        if await _send(db, to, f"{bn} — new user awaiting approval", plain, html):
             sent += 1
     return sent
