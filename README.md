@@ -56,11 +56,13 @@ You get:
 - A web UI styled to match the desktop app (Cinzel display font, alchemical border, drop-zone playlist).
 - User accounts with five roles — Super Admin / Admin / User / Pending / Viewer.
 - Per-user and per-role rate limits + daily conversion quotas.
-- Email + Discord notifications.
+- Notification fan-out — Discord, Slack, ntfy, Gotify, Telegram, Bluesky, generic webhook, bash script.
 - Google, GitHub, and generic OpenID Connect SSO (Authentik, Keycloak, Auth0, Okta, Zitadel — any OIDC-compliant IdP).
 - An HTTP API with API keys for CLI and scripting.
-- Per-user theme picker — six built-in themes (default purple, crimson, verdant, cobalt, parchment, obsidian).
-- A single Docker image with a SQLite volume by default (Postgres swap is one env var).
+- Per-user theme picker — six built-in themes (default purple, crimson, verdant, cobalt, parchment, obsidian). Operator sets the server default; users can override in their profile.
+- Operator-configurable app tips shown randomly on the conversion page — seeded with defaults, fully editable, bulk import/export.
+- Branded HTML emails — logo, accent color, and border style all follow your server's configured theme automatically.
+- A single Docker image with a SQLite volume by default; swap to Postgres/MySQL/MariaDB/MSSQL via the DB Providers UI or one env var.
 
 ## Quick start
 
