@@ -485,6 +485,44 @@ def ensure_super_admin(db: Session) -> Optional[User]:
     return user
 
 
+_DEFAULT_TIPS = [
+    "Calculating optimal sadness codec.",
+    "Transcoding your expectations.",
+    "Hiding things in plain byte.",
+    "Eating through the metadata.",
+    "We GIF a damn about conversions.",
+    "Fast conversions, MP4 real.",
+    "Taking your files from RAW to ready.",
+    "What's up, DOCx?",
+    "What can we say? It is a GIFt.",
+    "We love to TXT.",
+    "Going from PNG to pro.",
+    "Things are RAR-ely this easy.",
+    "MOV over, We're making WAVs.",
+    "EXE-cellent!",
+    "XLSX marks the spot.",
+    "FLAC it.",
+    "Your EXE still calls us to say hello.",
+    "Dude, I got some freaking file conversions at work today. Hell Yeah!",
+    "What's a pirate's favorite format? It be RARrrrrrrr!",
+]
+
+
+def seed_default_tips(db: Session) -> None:
+    """Populate the tips table with the built-in defaults on first boot.
+
+    Does nothing if any tips already exist, so operator edits are never
+    overwritten on subsequent restarts.
+    """
+    from ..models import Tip
+    if db.query(Tip).count() > 0:
+        return
+    for body in _DEFAULT_TIPS:
+        db.add(Tip(body=body))
+    db.commit()
+    _log.info("Seeded %d default tips.", len(_DEFAULT_TIPS))
+
+
 def apply_recovery_config(db: Session) -> None:
     """If /data/server_config.json contains recovery blocks, apply and
     erase them. Two supported blocks:

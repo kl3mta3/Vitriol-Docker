@@ -28,7 +28,7 @@ from .routes import setup as setup_routes
 from .routes import tips as tips_routes
 from .routes import ui as ui_routes
 from .routes import users as users_routes
-from .services.bootstrap import apply_recovery_config, ensure_schema, ensure_server_settings, ensure_super_admin, migrate_legacy_discord, migrate_legacy_oidc, super_admin_exists
+from .services.bootstrap import apply_recovery_config, ensure_schema, ensure_server_settings, ensure_super_admin, migrate_legacy_discord, migrate_legacy_oidc, seed_default_tips, super_admin_exists
 
 logging.basicConfig(level=logging.INFO, format="%(asctime)s %(levelname)s %(name)s: %(message)s")
 _log = logging.getLogger("vitriol")
@@ -56,6 +56,7 @@ async def lifespan(app: FastAPI):
         ensure_super_admin(db)
         migrate_legacy_oidc(db)
         migrate_legacy_discord(db)
+        seed_default_tips(db)
         # The legacy Host-header lock has been retired (see note in
         # create_app). Wipe any value left over from older deploys so the
         # /admin/server form shows it empty and stops looking like an
