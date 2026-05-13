@@ -155,6 +155,12 @@ class User(Base):
     # so role-based queries (e.g. "all admins") keep working.
     custom_role_id = Column(Integer, ForeignKey("custom_roles.id", ondelete="SET NULL"), nullable=True)
 
+    # Elevates an admin to "sudo" — full user-management rights over other
+    # admins (create, delete, ban, reset creds, assign custom roles).
+    # Deliberately does NOT grant server-settings access. Only the super
+    # admin can toggle this flag. Ignored on non-admin rows.
+    is_sudo_admin = Column(Boolean, nullable=False, default=False, server_default="0")
+
     created_at = Column(DateTime, nullable=False, default=datetime.utcnow)
     updated_at = Column(DateTime, nullable=False, default=datetime.utcnow, onupdate=datetime.utcnow)
     created_by_user_id = Column(Integer, ForeignKey("users.id"), nullable=True)

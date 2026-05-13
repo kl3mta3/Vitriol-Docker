@@ -97,6 +97,10 @@
       <li><a href="#storage">Storage (local / S3)</a></li>
       <li><a href="#performance">Performance</a></li>
       <li><a href="#db-providers">Database providers</a></li>
+      <li><a href="#appearance">Appearance &amp; branding</a></li>
+      <li><a href="#themes">Themes</a></li>
+      <li><a href="#tips">App tips</a></li>
+      <li><a href="#support">Support contact</a></li>
       <li><a href="#self-compile">Self-compile defaults</a></li>
       <li><a href="#export-import">Export / import settings</a></li>
       <li><a href="#roles">Roles &amp; permissions</a></li>
@@ -809,6 +813,163 @@ User:        20 files, 24 hours      — strictest tier</pre>
       (<code>Base.metadata.sorted_tables</code>) and temporarily disables
       <code>session_replication_role</code> on PostgreSQL so partial-batch FK checks don't
       reject mid-copy. SQLite doesn't enforce FKs by default, so it's a no-op there.
+    </div>
+  </details>
+
+  <!-- ============================================== Appearance & branding -->
+  <details id="appearance">
+    <summary>Appearance &amp; branding</summary>
+    <p>Customise how Vitriol looks to your users — logo, title, link, and the decorative border around the main card.</p>
+
+    <table>
+      <tr><th>Field</th><th>What it does</th><th>Example</th></tr>
+      <tr>
+        <td class="field-name">Logo</td>
+        <td>Upload a PNG, JPG, GIF, or SVG (max 2 MB). Replaces the default Vitriol logo in the top-left corner and in outgoing emails. Leave empty to keep the default.</td>
+        <td>your-logo.png</td>
+      </tr>
+      <tr>
+        <td class="field-name">Brand title</td>
+        <td>Text shown in the browser tab and as the site title. Defaults to <em>Vitriol</em> when left blank.</td>
+        <td><span class="placeholder">Acme Converter</span></td>
+      </tr>
+      <tr>
+        <td class="field-name">Brand link</td>
+        <td>The URL the logo links to. Defaults to <code>/</code> (the root of the app). Set to your corporate homepage if you want the logo to navigate away.</td>
+        <td><span class="placeholder">https://acme.example</span></td>
+      </tr>
+      <tr>
+        <td class="field-name">Show border</td>
+        <td>Toggles the decorative accent border drawn around the converter card on the main page.</td>
+        <td>on / off</td>
+      </tr>
+      <tr>
+        <td class="field-name">Border style</td>
+        <td>Picks the animation / look of the border when <em>Show border</em> is on. Options: <strong>Shimmer</strong>, <strong>Flow</strong>, <strong>Pulse</strong>, <strong>Static</strong>.</td>
+        <td>Shimmer</td>
+      </tr>
+    </table>
+
+    <div class="callout">
+      Logo and brand title are also used in outgoing email — the logo appears in the header
+      of every email Vitriol sends, and the brand title appears in the subject and footer.
+      Set both before enabling SMTP for a fully on-brand experience.
+    </div>
+  </details>
+
+  <!-- ============================================== Themes -->
+  <details id="themes">
+    <summary>Themes</summary>
+    <p>Vitriol ships six built-in colour themes and lets you control which one is the default and whether users can switch on their own.</p>
+
+    <table>
+      <tr><th>Theme name</th><th>Character</th></tr>
+      <tr><td class="field-name">Default</td><td>Dark purple — the classic Vitriol look.</td></tr>
+      <tr><td class="field-name">Crimson</td><td>Deep reds and dark backgrounds.</td></tr>
+      <tr><td class="field-name">Verdant</td><td>Forest greens on a dark base.</td></tr>
+      <tr><td class="field-name">Cobalt</td><td>Bright blue highlights, dark background.</td></tr>
+      <tr><td class="field-name">Parchment</td><td>Warm light-mode tones.</td></tr>
+      <tr><td class="field-name">Obsidian</td><td>Near-black with silver accents — very low brightness.</td></tr>
+    </table>
+
+    <table style="margin-top:12px;">
+      <tr><th>Setting</th><th>What it does</th></tr>
+      <tr>
+        <td class="field-name">Server default theme</td>
+        <td>The theme every new visitor and any user who hasn't picked their own will see. Changing this does not override a user's saved personal preference.</td>
+      </tr>
+      <tr>
+        <td class="field-name">Allow user theme selection</td>
+        <td>When <strong>on</strong> (default), users see a theme picker in their profile settings. When <strong>off</strong>, the server default is forced for everyone regardless of saved preference.</td>
+      </tr>
+    </table>
+
+    <div class="callout">
+      If you change the server default theme and want it to apply to all existing users
+      immediately, turn <strong>Allow user theme selection off</strong> then back on.
+      That doesn't erase per-user preferences — it just means the server default wins
+      while the toggle is off.
+    </div>
+  </details>
+
+  <!-- ============================================== App tips -->
+  <details id="tips">
+    <summary>App tips</summary>
+    <p>
+      App tips are short one-liner messages that cycle in the progress area while a
+      conversion is running — a light way to add personality or announce things to users.
+    </p>
+
+    <table>
+      <tr><th>Setting</th><th>What it does</th></tr>
+      <tr>
+        <td class="field-name">Tips enabled</td>
+        <td>Master switch. When off, no tip is shown during conversion regardless of how many tips are saved.</td>
+      </tr>
+    </table>
+
+    <h4>Managing tips</h4>
+    <ul>
+      <li><strong>Add tip</strong> — type up to 500 characters and click Add (or press Enter).</li>
+      <li><strong>Edit tip</strong> — click any tip's text to switch it into inline-edit mode. Confirm with <kbd>Ctrl+Enter</kbd> or the Save button; cancel with <kbd>Esc</kbd> or Cancel.</li>
+      <li><strong>Delete tip</strong> — click the × next to a tip. Instant, no confirmation.</li>
+      <li><strong>Clear all</strong> — removes every tip at once. A confirm dialog appears before deletion.</li>
+    </ul>
+
+    <h4>Import / export</h4>
+    <p>
+      Tips are included in the full <strong>Export settings</strong> payload (see
+      <a href="#export-import">Export / import settings</a> below). They're stored in the
+      <code>tips</code> array within the export JSON. On import, the incoming tips replace
+      the existing set.
+    </p>
+
+    <h4>Default tips</h4>
+    <p>
+      On first boot (when the tips table is empty), Vitriol seeds 19 built-in tips automatically.
+      If you clear all tips and restart the container, the defaults are re-seeded.
+      This means you always have something to start from — just delete any you don't want,
+      and add your own.
+    </p>
+  </details>
+
+  <!-- ============================================== Support contact -->
+  <details id="support">
+    <summary>Support contact</summary>
+    <p>Controls how and where users can reach out when something goes wrong or they need help.</p>
+
+    <table>
+      <tr><th>Field</th><th>What it does</th><th>Example</th></tr>
+      <tr>
+        <td class="field-name">Support email</td>
+        <td>Email address shown on the support panel and in error pages. Leave blank to hide the email contact option.</td>
+        <td><span class="placeholder">help@yourdomain.com</span></td>
+      </tr>
+      <tr>
+        <td class="field-name">Support Discord URL</td>
+        <td>Invite link or channel URL for your Discord server. Shown as a "Join our Discord" button if set.</td>
+        <td><span class="placeholder">https://discord.gg/yourserver</span></td>
+      </tr>
+      <tr>
+        <td class="field-name">Discord link visible to</td>
+        <td><strong>All users</strong> — anyone logged in can see the Discord button. <strong>Admins only</strong> — the button is hidden from regular users, useful for an internal ops channel.</td>
+        <td>All users / Admins only</td>
+      </tr>
+      <tr>
+        <td class="field-name">Show limit-hit notice</td>
+        <td>When a user hits their daily conversion cap, show a banner nudging them to contact support. Useful if you want users to ask for a limit increase rather than silently fail.</td>
+        <td>on / off</td>
+      </tr>
+      <tr>
+        <td class="field-name">Show support button</td>
+        <td>Adds a persistent "Contact support" button in the user-facing UI. If both support email and Discord URL are unset, the button is hidden regardless of this toggle.</td>
+        <td>on / off</td>
+      </tr>
+    </table>
+
+    <div class="callout">
+      None of these fields are required. If you leave everything blank the support section
+      simply doesn't appear to users — no broken links, no empty mailto: addresses.
     </div>
   </details>
 

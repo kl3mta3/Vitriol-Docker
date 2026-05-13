@@ -11,11 +11,12 @@ const manageDialog = document.getElementById('manage-dialog');
 const manageForm = document.getElementById('manage-form');
 
 const isSuperAdmin = !!window.VITRIOL_IS_SUPERADMIN;
+const isSudoAdmin  = !!window.VITRIOL_IS_SUDO_ADMIN;
 const actorId = window.VITRIOL_ACTOR_ID;
 
 const state = {
   users: [],
-  customRoles: [],      // populated for super admin only
+  customRoles: [],      // populated for super admin and sudo admin
   search: '',
   sortKey: 'username',
   sortDir: 'asc',
@@ -227,7 +228,7 @@ function canManage(u) {
   // The server already filters super admins out of an admin's list, but
   // belt-and-suspenders here in case the API ever changes.
   if (u.role === 'super_admin' && !isSuperAdmin) return false;
-  if (u.role === 'admin' && !isSuperAdmin && u.id !== actorId) return false;
+  if (u.role === 'admin' && !isSuperAdmin && !isSudoAdmin && u.id !== actorId) return false;
   return true;
 }
 
@@ -245,9 +246,9 @@ function openPending(u) {
     u.email_verified_at ? new Date(u.email_verified_at).toLocaleString() : 'no';
   document.getElementById('pending-created').textContent =
     u.created_at ? new Date(u.created_at).toLocaleString() : '';
-  // Hide the Admin role option unless the actor is super admin.
+  // Hide the Admin role option unless the actor is super admin or sudo admin.
   const adminOpt = pendingForm.role.querySelector('option[data-superadmin-only]');
-  if (adminOpt) adminOpt.hidden = !isSuperAdmin;
+  if (adminOpt) adminOpt.hidden = !isSuperAdmin && !isSudoAdmin;
   pendingForm.role.value = 'user';
   hide(document.getElementById('pending-msg'));
   pendingDialog.showModal();
@@ -360,29 +361,41 @@ function openManage(u) {
 
   // Show/hide the Admin role option based on actor.
   const adminOption = f.role.querySelector('option[value="builtin:admin"]');
-  if (adminOption) adminOption.hidden = !isSuperAdmin;
+  if (adminOption) adminOption.hidden = !isSuperAdmin && !isSudoAdmin;
 
   // What can this actor actually do?
-  const adminEditingAdmin = !isSuperAdmin && u.role === 'admin' && u.id !== actorId;
+  // Sudo admins have full edit rights over other admins; only plain
+  // non-sudo admins are restricted to suspend/unsuspend only.
+  const adminEditingAdmin = !isSuperAdmin && !isSudoAdmin && u.role === 'admin' && u.id !== actorId;
   const editingSelf = u.id === actorId;
 
-  // Admin → other admin: only suspend/unsuspend allowed.
+  // Admin → other admin (non-sudo): only suspend/unsuspend allowed.
   const note = document.getElementById('manage-readonly-note');
   if (adminEditingAdmin) {
-    note.textContent = 'You can suspend or unsuspend this admin. Other changes require the super admin.';
+    note.textContent = 'You can suspend or unsuspend this admin. Other changes require the super admin or a sudo admin.';
     note.hidden = false;
   } else {
     note.hidden = true;
   }
   setReadOnly(f, adminEditingAdmin);
 
-  // Hide Delete for self-edit and for admin-on-admin.
+  // Hide Delete for self-edit and for non-sudo admin-on-admin.
   const delBtn = document.getElementById('manage-delete');
   delBtn.hidden = editingSelf || adminEditingAdmin || u.role === 'super_admin';
 
-  // Status section — disable ban/suspend buttons that don't apply.
+  // Status section — ban button: hide for self and for admin targets
+  // unless the actor is super admin or sudo admin.
   const banBtn = manageDialog.querySelector('[data-status-action="ban"]');
-  banBtn.hidden = (u.role === 'admin' && !isSuperAdmin) || editingSelf;
+  banBtn.hidden = (u.role === 'admin' && !isSuperAdmin && !isSudoAdmin) || editingSelf;
+
+  // Sudo admin toggle row — only visible to super admins, and only when
+  // editing an admin-role user (not self, not super_admin).
+  const sudoRow = document.getElementById('manage-sudo-row');
+  if (sudoRow) {
+    const showSudo = isSuperAdmin && u.role === 'admin' && u.id !== actorId;
+    sudoRow.hidden = !showSudo;
+    if (f.is_sudo_admin) f.is_sudo_admin.checked = !!u.is_sudo_admin;
+  }
 
   document.getElementById('manage-status-current').textContent =
     `Current: ${u.status}${u.suspended_until ? ' until ' + new Date(u.suspended_until).toLocaleString() : ''}`;
@@ -430,8 +443,8 @@ function rebuildManageRoleSelect(u) {
     if (val === 'admin') opt.dataset.superadminOnly = '';
     sel.appendChild(opt);
   }
-  // Custom roles (super admin only).
-  if (isSuperAdmin && state.customRoles.length) {
+  // Custom roles — available to super admin and sudo admin.
+  if ((isSuperAdmin || isSudoAdmin) && state.customRoles.length) {
     const sep = document.createElement('option');
     sep.disabled = true;
     sep.textContent = '— custom roles —';
@@ -605,6 +618,13 @@ manageForm.addEventListener('submit', async (e) => {
     }
   }
 
+  // Sudo admin toggle — super admin only; only ships when the row is visible.
+  const sudoRow = document.getElementById('manage-sudo-row');
+  if (isSuperAdmin && sudoRow && !sudoRow.hidden && manageForm.is_sudo_admin) {
+    const newSudo = manageForm.is_sudo_admin.checked;
+    if (newSudo !== !!u.is_sudo_admin) patch.is_sudo_admin = newSudo;
+  }
+
   // Username and password go through reset-credentials.
   const resetReq = {};
   if (formValues.username && formValues.username !== u.username) resetReq.new_username = formValues.username;
@@ -671,7 +691,7 @@ if (rolesBtn) rolesBtn.addEventListener('click', async () => {
 });
 
 async function loadRoles() {
-  if (!isSuperAdmin) return;
+  if (!isSuperAdmin && !isSudoAdmin) return;
   try {
     const data = await api.get('/roles');
     if (!Array.isArray(data)) return;

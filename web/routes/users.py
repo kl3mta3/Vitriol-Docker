@@ -9,7 +9,7 @@ from sqlalchemy.orm import Session
 
 from ..auth.password import hash_password
 from ..auth.permissions import (
-    has_capability, is_super_admin, is_admin_or_above,
+    has_capability, is_super_admin, is_sudo_admin, is_super_or_sudo, is_admin_or_above,
     CAN_CREATE_ADMIN, CAN_DELETE_ADMIN, CAN_GRANT_STONE, CAN_GRANT_SELF_COMPILE,
     CAN_RESET_OTHER_CREDS, CAN_SET_USER_FILE_SIZE_CAP, CAN_SET_USER_RETENTION,
 )
@@ -26,10 +26,16 @@ router = APIRouter(prefix="/users", tags=["users"])
 
 
 def _ensure_can_modify(actor: User, target: User, allow_admin_modify_admin: bool = False) -> None:
-    """Common rule set for actions targeting another user."""
+    """Common rule set for actions targeting another user.
+
+    Super admins can modify anyone.
+    Sudo admins can modify other admins but never the super admin.
+    Regular admins can modify non-admins (and, with allow_admin_modify_admin,
+    perform the narrow suspend/unsuspend actions on fellow admins).
+    """
     if target.role == Role.super_admin and not is_super_admin(actor):
         raise HTTPException(status_code=403, detail="Only the super admin can modify the super admin.")
-    if target.role == Role.admin and not is_super_admin(actor) and not allow_admin_modify_admin:
+    if target.role == Role.admin and not is_super_or_sudo(actor) and not allow_admin_modify_admin:
         if actor.id != target.id:
             raise HTTPException(status_code=403, detail="Admins cannot modify other admins.")
 
@@ -125,14 +131,19 @@ def update_user(user_id: int, req: UserUpdateRequest, actor: User = Depends(requ
         if target.role == Role.super_admin:
             raise HTTPException(status_code=400, detail="Cannot demote the super admin.")
         if (new_role == Role.admin or target.role == Role.admin) and not has_capability(actor, CAN_CREATE_ADMIN):
-            raise HTTPException(status_code=403, detail="Only the super admin can change admin roles.")
+            raise HTTPException(status_code=403, detail="Only a super admin or sudo admin can change admin roles.")
         target.role = new_role
+        # Clear sudo flag when demoting away from admin — the flag has no
+        # effect on non-admins but keeping it set would be confusing if the
+        # user is later re-promoted.
+        if new_role != Role.admin:
+            target.is_sudo_admin = False
     if req.custom_role_id is not None:
         # 0 (or any falsy) clears the assignment; positive ints look up
-        # the role and assign it (only super admins can manage custom
-        # roles on users).
-        if not is_super_admin(actor):
-            raise HTTPException(status_code=403, detail="Only the super admin can assign custom roles.")
+        # the role and assign it. Super admins and sudo admins can assign
+        # any custom role; regular admins cannot.
+        if not is_super_or_sudo(actor):
+            raise HTTPException(status_code=403, detail="Only a super admin or sudo admin can assign custom roles.")
         from ..models import CustomRole as _CR
         if req.custom_role_id == 0:
             target.custom_role_id = None
@@ -224,6 +235,18 @@ def update_user(user_id: int, req: UserUpdateRequest, actor: User = Depends(requ
         else:
             target.output_retention_json = None
 
+    if req.is_sudo_admin is not None:
+        # Only the super admin can grant or revoke sudo status.
+        # Sudo flag only makes sense on admin-role users — silently ignore
+        # the request for other roles to avoid confusing state.
+        if not is_super_admin(actor):
+            raise HTTPException(status_code=403, detail="Only the super admin can set sudo admin status.")
+        if target.role == Role.admin:
+            target.is_sudo_admin = req.is_sudo_admin
+        # Non-admin targets: ignore silently (the flag has no effect there
+        # anyway, but don't error — the caller may be changing a role and
+        # setting sudo in the same PATCH).
+
     db.commit()
     db.refresh(target)
     audit.log(db, actor.id, "user_update", target_user_id=target.id)
@@ -294,8 +317,8 @@ def ban(user_id: int, actor: User = Depends(require_admin), db: Session = Depend
         raise HTTPException(status_code=404, detail="User not found")
     if target.role == Role.super_admin:
         raise HTTPException(status_code=400, detail="The super admin cannot be banned.")
-    if target.role == Role.admin and not is_super_admin(actor):
-        raise HTTPException(status_code=403, detail="Only the super admin can ban an admin.")
+    if target.role == Role.admin and not is_super_or_sudo(actor):
+        raise HTTPException(status_code=403, detail="Only a super admin or sudo admin can ban an admin.")
     target.status = Status.banned
     db.commit()
     db.refresh(target)
@@ -308,8 +331,8 @@ def unban(user_id: int, actor: User = Depends(require_admin), db: Session = Depe
     target: Optional[User] = db.query(User).get(user_id)
     if target is None:
         raise HTTPException(status_code=404, detail="User not found")
-    if target.role == Role.admin and not is_super_admin(actor):
-        raise HTTPException(status_code=403, detail="Only the super admin can unban an admin.")
+    if target.role == Role.admin and not is_super_or_sudo(actor):
+        raise HTTPException(status_code=403, detail="Only a super admin or sudo admin can unban an admin.")
     if target.status != Status.banned:
         raise HTTPException(status_code=400, detail="User is not banned.")
     target.status = Status.active
@@ -344,8 +367,8 @@ async def approve_pending(
         raise HTTPException(status_code=400, detail=f"Unknown role: {requested!r}")
     if new_role not in (Role.viewer, Role.user, Role.admin):
         raise HTTPException(status_code=400, detail=f"Cannot approve into {new_role.value!r}.")
-    if new_role == Role.admin and not is_super_admin(actor):
-        raise HTTPException(status_code=403, detail="Only the super admin can approve into admin.")
+    if new_role == Role.admin and not is_super_or_sudo(actor):
+        raise HTTPException(status_code=403, detail="Only a super admin or sudo admin can approve into admin.")
     target.role = new_role
     ar = (
         db.query(ApprovalRequest)
@@ -421,9 +444,9 @@ def reset_credentials(
     if target is None:
         raise HTTPException(status_code=404, detail="User not found")
     if target.role == Role.super_admin and not is_super_admin(actor):
-        raise HTTPException(status_code=403, detail="Only the super admin can reset their own creds.")
-    if target.role == Role.admin and not is_super_admin(actor):
-        raise HTTPException(status_code=403, detail="Only the super admin can reset another admin.")
+        raise HTTPException(status_code=403, detail="Only the super admin can reset the super admin's creds.")
+    if target.role == Role.admin and not is_super_or_sudo(actor):
+        raise HTTPException(status_code=403, detail="Only a super admin or sudo admin can reset another admin's credentials.")
     if target.role in (Role.user, Role.pending, Role.viewer) and not has_capability(actor, CAN_RESET_OTHER_CREDS):
         raise HTTPException(status_code=403, detail="Cannot reset other users' credentials.")
     if req.new_username:

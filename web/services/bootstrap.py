@@ -394,6 +394,10 @@ _ADDITIVE_COLUMNS: list[tuple[str, str, str]] = [
      "ALTER TABLE server_settings ADD COLUMN show_user_support_button BOOLEAN NOT NULL DEFAULT 0"),
     ("server_settings", "tips_enabled",
      "ALTER TABLE server_settings ADD COLUMN tips_enabled BOOLEAN NOT NULL DEFAULT 1"),
+    # Sudo-admin flag — elevates an admin to full user-management rights
+    # over other admins without granting server-settings access.
+    ("users", "is_sudo_admin",
+     "ALTER TABLE users ADD COLUMN is_sudo_admin BOOLEAN NOT NULL DEFAULT 0"),
 ]
 
 

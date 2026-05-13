@@ -236,7 +236,7 @@
         <select name="role">
           <option value="viewer">Viewer — read-only access</option>
           <option value="user" selected>User — can run conversions</option>
-          <option value="admin" data-superadmin-only>Admin — can manage users (super admin only)</option>
+          <option value="admin" data-superadmin-only>Admin — can manage users (super admin / sudo admin only)</option>
         </select>
       </label>
       <p id="pending-msg" class="ok small" hidden></p>
@@ -297,6 +297,14 @@
 
     <details>
       <summary>Capabilities &amp; limits</summary>
+      {# Sudo-admin toggle — only super admins can see or set this.
+         Only meaningful on admin-role users; JS shows/hides the row. #}
+      <div id="manage-sudo-row" hidden style="margin-bottom:10px;">
+        <label class="checkbox-row">
+          <input type="checkbox" name="is_sudo_admin" />
+          <span>Sudo admin <span class="muted small">— full user-management rights over other admins (no server settings access)</span></span>
+        </label>
+      </div>
       <div class="grid-2">
         <label class="checkbox-row"><input type="checkbox" name="stone_enabled" /> <span>Philosopher's Stone mode</span></label>
         <label class="checkbox-row"><input type="checkbox" name="self_compile_enabled" /> <span>Self-compile (.py / .exe)</span></label>
@@ -379,6 +387,7 @@
 {% block scripts %}
 <script>
   window.VITRIOL_IS_SUPERADMIN = {{ 'true' if user.role.value == 'super_admin' else 'false' }};
+  window.VITRIOL_IS_SUDO_ADMIN  = {{ 'true' if (user.role.value == 'admin' and user.is_sudo_admin) else 'false' }};
   window.VITRIOL_ACTOR_ID = {{ user.id }};
 </script>
 <script src="/static/js/admin_users.js?v={{ v }}"></script>

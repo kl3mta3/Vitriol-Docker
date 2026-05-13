@@ -78,6 +78,7 @@ class UserOut(BaseModel):
     border_style: Optional[str] = None
     custom_role_id: Optional[int] = None
     custom_role_name: Optional[str] = None
+    is_sudo_admin: bool = False
     # Surfaced as a boolean rather than the hash itself so the UI can
     # decide whether to show "Change password" or "Set password" without
     # ever seeing the actual credential material.
@@ -125,6 +126,8 @@ class UserUpdateRequest(BaseModel):
     # `set_user_retention` capability; otherwise silently dropped.
     output_retention: Optional[dict] = None
     queue_weight_override: Optional[int] = None
+    # Only the super admin can toggle this; patched via PATCH /users/{id}.
+    is_sudo_admin: Optional[bool] = None
 
 
 class SuspendRequest(BaseModel):

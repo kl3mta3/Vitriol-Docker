@@ -180,9 +180,27 @@ def _has_capability_via_custom_role(user: "User", cap: str) -> bool:
     return flag_on and (cap in base_caps)
 
 
+# Extra capabilities granted to an admin with is_sudo_admin=True.
+# These are user-management powers that normally require super admin.
+# Server-settings access is deliberately excluded — sudo never reaches
+# CAN_VIEW_SERVER_TAB or CAN_EDIT_SERVER_SETTINGS.
+_SUDO_EXTRA_CAPS: set[str] = {
+    CAN_CREATE_ADMIN,
+    CAN_DELETE_ADMIN,
+    CAN_BAN_ADMIN,
+    CAN_RESET_ANY_CREDS,
+}
+
+
 def has_capability(user: "User", cap: str) -> bool:
     if user is None or user.status != Status.active:
         return False
+    # Sudo admins gain a handful of admin-lifecycle caps that pure admins
+    # don't have.  Server-settings caps are never granted this way.
+    if (user.role == Role.admin
+            and getattr(user, "is_sudo_admin", False)
+            and cap in _SUDO_EXTRA_CAPS):
+        return True
     if user.custom_role is not None:
         if _has_capability_via_custom_role(user, cap):
             return True
@@ -206,6 +224,18 @@ def role_capabilities(role: Role) -> set[str]:
 
 def is_super_admin(user: "User") -> bool:
     return user is not None and user.role == Role.super_admin
+
+
+def is_sudo_admin(user: "User") -> bool:
+    """True when the user is an admin with the sudo-admin flag set."""
+    return (user is not None
+            and user.role == Role.admin
+            and bool(getattr(user, "is_sudo_admin", False)))
+
+
+def is_super_or_sudo(user: "User") -> bool:
+    """Convenience: super admin OR sudo admin — for user-mgmt guards."""
+    return is_super_admin(user) or is_sudo_admin(user)
 
 
 def is_admin_or_above(user: "User") -> bool:

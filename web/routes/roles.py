@@ -15,7 +15,7 @@ from fastapi import APIRouter, Depends, HTTPException
 from sqlalchemy import func
 from sqlalchemy.orm import Session
 
-from ..deps import get_db, require_super_admin
+from ..deps import get_db, require_admin, require_super_admin
 from ..models import CustomRole, Role, ServerSettings, User
 from ..schemas import (
     CustomRoleCreateRequest, CustomRoleOut, CustomRoleUpdateRequest, MessageResponse,
@@ -121,7 +121,13 @@ def _enforce_admin_only_flags(payload, base: Role) -> None:
 
 
 @router.get("", response_model=List[CustomRoleOut])
-def list_roles(actor: User = Depends(require_super_admin), db: Session = Depends(get_db)):
+def list_roles(actor: User = Depends(require_admin), db: Session = Depends(get_db)):
+    """List all custom roles.
+
+    Open to all admins so the custom-role dropdown in the user-management
+    UI is populated for admins too (they need to see admin-base roles in
+    order to assign them when they have sudo privileges).
+    """
     rows = (
         db.query(CustomRole, func.count(User.id).label("uc"))
         .outerjoin(User, User.custom_role_id == CustomRole.id)
