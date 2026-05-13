@@ -51,8 +51,14 @@ def _button_html(label: str, url: str) -> str:
 </p>"""
 
 
-def _html_email(title: str, greeting: str, paragraphs: list[str], button_html: str, footer: str = "", brand: str = "VITRIOL") -> str:
-    """Full HTML email shell with inline CSS."""
+def _html_email(title: str, greeting: str, paragraphs: list[str], button_html: str, footer: str = "", brand: str = "VITRIOL", logo_url: Optional[str] = None) -> str:
+    """Full HTML email shell with inline CSS.
+
+    ``logo_url`` should be an absolute URL to the operator logo (e.g.
+    ``https://example.com/api/v1/server/branding/logo``).  When provided it
+    is shown as a small image in the header bar beside the brand name.  Omit
+    or pass ``None`` to show the brand name only.
+    """
     safe_title = escape(title)
     safe_brand = escape(brand)
     para_html = "".join(
@@ -65,6 +71,25 @@ def _html_email(title: str, greeting: str, paragraphs: list[str], button_html: s
         f'color:#888888;border-top:1px solid #eeeeee;padding-top:16px;">{escape(footer)}</p>'
         if footer else ""
     )
+    # Header content: logo (when available) + brand name side-by-side.
+    if logo_url:
+        safe_logo = escape(logo_url, quote=True)
+        header_content = (
+            f'<table role="presentation" cellspacing="0" cellpadding="0" border="0">'
+            f'<tr>'
+            f'<td style="vertical-align:middle;padding-right:12px;">'
+            f'<img src="{safe_logo}" alt="" width="36" height="36" '
+            f'style="display:block;border-radius:4px;" /></td>'
+            f'<td style="vertical-align:middle;">'
+            f'<span style="font-family:Arial,sans-serif;font-size:22px;font-weight:700;'
+            f'color:#ffffff;letter-spacing:0.05em;">{safe_brand}</span>'
+            f'</td></tr></table>'
+        )
+    else:
+        header_content = (
+            f'<span style="font-family:Arial,sans-serif;font-size:22px;font-weight:700;'
+            f'color:#ffffff;letter-spacing:0.05em;">{safe_brand}</span>'
+        )
     return f"""\
 <!DOCTYPE html>
 <html lang="en">
@@ -80,8 +105,7 @@ def _html_email(title: str, greeting: str, paragraphs: list[str], button_html: s
                               box-shadow:0 2px 8px rgba(0,0,0,0.08);">
       <!-- header bar -->
       <tr><td style="background:{_BRAND_COLOR};padding:24px 32px;">
-        <span style="font-family:Arial,sans-serif;font-size:22px;font-weight:700;
-                     color:#ffffff;letter-spacing:0.05em;">{safe_brand}</span>
+        {header_content}
       </td></tr>
       <!-- body -->
       <tr><td style="padding:32px 32px 24px 32px;">
@@ -237,6 +261,7 @@ async def send_verification_email(db: Session, user: User, raw_token: str) -> bo
     # browser click renders a real success page instead of `{"message":...}`.
     link = public_url(db, f"verify?token={raw_token}")
     bn = _brand(db)
+    logo = public_url(db, "api/v1/server/branding/logo")
     plain = (
         f"Hello {user.username},\n\n"
         f"Verify your {bn} account by visiting:\n{link}\n\n"
@@ -249,6 +274,7 @@ async def send_verification_email(db: Session, user: User, raw_token: str) -> bo
         button_html=_button_html("Verify my account", link),
         footer="This link expires in 24 hours. If you didn't create an account, you can safely ignore this email.",
         brand=bn,
+        logo_url=logo,
     )
     return await _send(db, user.email, f"Verify your {bn} account", plain, html)
 
@@ -256,6 +282,7 @@ async def send_verification_email(db: Session, user: User, raw_token: str) -> bo
 async def send_password_reset_email(db: Session, user: User, raw_token: str) -> bool:
     link = public_url(db, f"reset?token={raw_token}")
     bn = _brand(db)
+    logo = public_url(db, "api/v1/server/branding/logo")
     plain = (
         f"Hello {user.username},\n\n"
         f"Reset your {bn} password by visiting:\n{link}\n\n"
@@ -268,6 +295,7 @@ async def send_password_reset_email(db: Session, user: User, raw_token: str) -> 
         button_html=_button_html("Reset my password", link),
         footer=f"This link expires in 2 hours. If you didn't request a password reset, you can safely ignore this email — your password has not been changed.",
         brand=bn,
+        logo_url=logo,
     )
     return await _send(db, user.email, f"Reset your {bn} password", plain, html)
 
@@ -310,12 +338,14 @@ async def send_pending_approval_notification(db: Session, pending_user: User, re
         f'style="margin:0 0 24px 0;border-left:3px solid {_BRAND_COLOR};padding-left:12px;">'
         f'{detail_rows}</table>'
     )
+    logo = public_url(db, "api/v1/server/branding/logo")
     html = _html_email(
         title=f"{bn} — new user awaiting approval",
         greeting="New user awaiting approval",
         paragraphs=["A new account has been created and is waiting for your review."],
         button_html=details_table + _button_html("Review in admin panel", admin_url),
         brand=bn,
+        logo_url=logo,
     )
     for to in recipients:
         if not to:

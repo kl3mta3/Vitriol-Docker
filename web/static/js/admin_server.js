@@ -2486,13 +2486,16 @@ function _setLogoMsg(text, isError) {
 function _bustLogoCache() {
   // The GET endpoint sets Cache-Control: public, max-age=60 — to make
   // a new upload visible immediately, append a fresh cache-bust query
-  // param to both the preview img on this page and the nav-logo img
-  // up top. Other pages will pick up the new logo on next navigation.
+  // param to all logo images on this page: the settings preview, the
+  // nav brand logo, the app-title glyph, and the dropzone watermark.
+  // Other pages will pick up the new logo on next navigation.
+  const ts = Date.now();
   if (logoPreview) {
-    logoPreview.src = `/api/v1/server/branding/logo?_=${Date.now()}`;
+    logoPreview.src = `/api/v1/server/branding/logo?_=${ts}`;
   }
-  const navLogo = document.querySelector('.nav-logo');
-  if (navLogo) navLogo.src = `/api/v1/server/branding/logo?_=${Date.now()}`;
+  document.querySelectorAll('.nav-logo, .brand-glyph, .dz-watermark').forEach(img => {
+    img.src = `/api/v1/server/branding/logo?_=${ts}`;
+  });
 }
 
 function paintLogoResetVisibility(s) {

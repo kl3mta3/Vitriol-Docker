@@ -465,6 +465,7 @@ async def test_email(
         f"If you can read this, SMTP is wired up correctly.\n\n"
         f"Sent by {bn} via {relay} as {auth}.\n"
     )
+    from ..auth.email import public_url as _pub_url
     html = _html_email(
         title=f"{bn} — SMTP test",
         greeting="SMTP is working!",
@@ -475,6 +476,7 @@ async def test_email(
         button_html=_button_html(f"Open {bn}", str(s.public_base_url or "/")),
         footer="You can safely ignore this email — it was triggered by the SMTP test button in Server settings.",
         brand=bn,
+        logo_url=_pub_url(db, "api/v1/server/branding/logo"),
     )
 
     from email.mime.multipart import MIMEMultipart
@@ -553,6 +555,7 @@ async def test_email_preview(
         raise HTTPException(status_code=400, detail="kind must be verification, reset, or approval.")
 
     bn = _brand(db)
+    logo = public_url(db, "api/v1/server/branding/logo")
     preview_link = public_url(db, {
         "verification": "verify?token=PREVIEW_NOT_VALID",
         "reset": "reset?token=PREVIEW_NOT_VALID",
@@ -573,6 +576,7 @@ async def test_email_preview(
             button_html=_button_html("Verify my account", preview_link),
             footer="This link expires in 24 hours. If you didn't create an account, you can safely ignore this email.",
             brand=bn,
+            logo_url=logo,
         )
     elif kind == "reset":
         subject = f"[Preview] Reset your {bn} password"
@@ -588,6 +592,7 @@ async def test_email_preview(
             button_html=_button_html("Reset my password", preview_link),
             footer=f"This link expires in 2 hours. If you didn't request a password reset, you can safely ignore this email — your password has not been changed.",
             brand=bn,
+            logo_url=logo,
         )
     else:  # approval
         subject = f"[Preview] {bn} — new user awaiting approval"
@@ -614,6 +619,7 @@ async def test_email_preview(
             paragraphs=[f"A new account has been created on {bn} and is waiting for your review."],
             button_html=details_table + _button_html("Review in admin panel", preview_link),
             brand=bn,
+            logo_url=logo,
         )
 
     ok = await _send(db, to, subject, plain, html)
