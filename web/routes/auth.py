@@ -788,6 +788,7 @@ async def _sso_callback_inner(
                     role=default_role,
                     status=Status.active,
                     email_verified_at=datetime.utcnow() if email else None,
+                    custom_role_id=settings_for_signup.signup_default_custom_role_id if settings_for_signup else None,
                 )
                 db.add(user)
                 db.commit()
