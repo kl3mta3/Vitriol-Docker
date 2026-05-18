@@ -27,7 +27,7 @@
 ![License](https://img.shields.io/badge/license-ELv2-orange?style=flat-square)
 ![Repo size](https://img.shields.io/github/repo-size/kl3mta3/Vitriol-Docker?style=flat-square)
 ![Last commit](https://img.shields.io/github/last-commit/kl3mta3/Vitriol-Docker?style=flat-square)
-<!-- ![Stars](https://img.shields.io/github/stars/kl3mta3/Vitriol-Docker?style=flat-square) -->
+![Stars](https://img.shields.io/github/stars/kl3mta3/Vitriol-Docker?style=flat-square)
 
 <p></P>
 
