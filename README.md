@@ -137,7 +137,7 @@ python -m web.cli.vitriol_cli jobs
 
 API keys are issued from the Profile tab in the web UI and shown exactly once.
 
-## Roles (BARC)
+## Roles (RBAC)
 
 | Capability | Super Admin | Admin | User | Pending | Viewer |
 |---|---|---|---|---|---|
