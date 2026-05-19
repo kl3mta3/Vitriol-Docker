@@ -1,8 +1,8 @@
 """Pydantic request/response schemas for the API."""
 from __future__ import annotations
 from datetime import datetime
-from typing import Optional, List
-from pydantic import BaseModel, EmailStr, Field, ConfigDict
+from typing import Any, Optional, List
+from pydantic import BaseModel, EmailStr, Field, ConfigDict, model_validator
 
 
 # ---------------------------------------------------------------- auth
@@ -85,6 +85,24 @@ class UserOut(BaseModel):
     has_password: bool = False
     created_at: datetime
     last_login_at: Optional[datetime]
+
+    @model_validator(mode='wrap')
+    @classmethod
+    def _effective_stone_caps(cls, values: Any, handler: Any) -> 'UserOut':
+        """Make stone_enabled / self_compile_enabled reflect the *effective*
+        permission — i.e. the per-user column OR the custom role's default.
+        Without this, users assigned to a role with stone_enabled=True would
+        show those features as off in the admin UI and in their own profile
+        (the checkboxes read from this serialised value), even though
+        has_capability() would correctly grant them at conversion time."""
+        result = handler(values)
+        cr = getattr(values, 'custom_role', None)
+        if cr is not None:
+            if cr.stone_enabled and not result.stone_enabled:
+                result.stone_enabled = True
+            if cr.self_compile_enabled and result.stone_enabled and not result.self_compile_enabled:
+                result.self_compile_enabled = True
+        return result
 
 
 class UserCreateRequest(BaseModel):
