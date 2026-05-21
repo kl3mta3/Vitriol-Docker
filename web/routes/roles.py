@@ -70,6 +70,7 @@ def _to_out(cr: CustomRole, user_count: int) -> CustomRoleOut:
         can_delete_others_files=cr.can_delete_others_files,
         can_set_user_file_size_cap=cr.can_set_user_file_size_cap,
         can_set_user_retention=cr.can_set_user_retention,
+        can_self_delete=cr.can_self_delete,
         max_file_size_bytes=cr.max_file_size_bytes,
         max_output_size_bytes=cr.max_output_size_bytes,
         max_storage_bytes=cr.max_storage_bytes,
@@ -175,6 +176,7 @@ def create_role(
         can_delete_others_files=req.can_delete_others_files,
         can_set_user_file_size_cap=req.can_set_user_file_size_cap,
         can_set_user_retention=req.can_set_user_retention,
+        can_self_delete=req.can_self_delete,
         created_by_user_id=actor.id,
     )
     db.add(cr)
@@ -212,6 +214,7 @@ def update_role(
         "can_view_own_files", "can_view_others_files",
         "can_download_others_files", "can_delete_others_files",
         "can_set_user_file_size_cap", "can_set_user_retention",
+        "can_self_delete",
     )
     for f in bool_fields:
         v = getattr(req, f)

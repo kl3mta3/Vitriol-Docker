@@ -144,6 +144,31 @@
     <p id="request-msg" class="ok" hidden></p>
   </div>
   {% endif %}
+
+  {% if allow_self_delete %}
+  <div class="card" style="border-color: var(--red);">
+    <h2 class="display small" style="color: var(--red);">Danger zone</h2>
+    <p class="muted small">Permanently delete your account and all associated data. This cannot be undone.</p>
+    <button type="button" id="delete-account-btn" class="btn btn-danger" style="margin-top: 8px;">Delete my account</button>
+    <p id="delete-account-msg" class="error small" hidden></p>
+  </div>
+
+  <dialog id="delete-account-modal" class="manage-dialog">
+    <form id="delete-account-form" class="stack">
+      <h2 class="display small" style="color: var(--red);">Delete account</h2>
+      <p class="muted small">This will permanently delete your account, all your converted files, and your API keys. There is no undo.</p>
+      <label>
+        <span>Type <strong>delete my account</strong> to confirm</span>
+        <input name="confirm_phrase" type="text" autocomplete="off" placeholder="delete my account" required />
+      </label>
+      <p id="delete-account-modal-msg" class="error small" hidden></p>
+      <footer class="dialog-actions">
+        <button type="button" class="btn btn-ghost" data-close>Cancel</button>
+        <button type="submit" class="btn btn-danger">Delete permanently</button>
+      </footer>
+    </form>
+  </dialog>
+  {% endif %}
 </section>
 {% endblock %}
 {% block scripts %}

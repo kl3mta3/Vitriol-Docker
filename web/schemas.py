@@ -330,6 +330,7 @@ class ServerSettingsOut(BaseModel):
     show_limit_hit_notice: bool = True
     show_user_support_button: bool = False
     tips_enabled: bool = True
+    allow_self_delete: bool = True
 
 
 class ServerSettingsPatch(BaseModel):
@@ -419,6 +420,7 @@ class ServerSettingsPatch(BaseModel):
     show_limit_hit_notice: Optional[bool] = None
     show_user_support_button: Optional[bool] = None
     tips_enabled: Optional[bool] = None
+    allow_self_delete: Optional[bool] = None
 
 
 class TipOut(BaseModel):
@@ -466,6 +468,7 @@ class CustomRoleOut(BaseModel):
     can_delete_others_files: bool = False
     can_set_user_file_size_cap: bool = False
     can_set_user_retention: bool = False
+    can_self_delete: bool = True
     # Role-level upload cap. Null means inherit from server default.
     # Per-user overrides on individual rows further override this.
     max_file_size_bytes: Optional[int] = None
@@ -504,6 +507,7 @@ class CustomRoleCreateRequest(BaseModel):
     can_delete_others_files: bool = False
     can_set_user_file_size_cap: bool = False
     can_set_user_retention: bool = False
+    can_self_delete: bool = True
     max_file_size_bytes: Optional[int] = None
     max_output_size_bytes: Optional[int] = None
     max_storage_bytes: Optional[int] = None
@@ -534,6 +538,7 @@ class CustomRoleUpdateRequest(BaseModel):
     can_delete_others_files: Optional[bool] = None
     can_set_user_file_size_cap: Optional[bool] = None
     can_set_user_retention: Optional[bool] = None
+    can_self_delete: Optional[bool] = None
     max_file_size_bytes: Optional[int] = None
     max_output_size_bytes: Optional[int] = None
     max_storage_bytes: Optional[int] = None

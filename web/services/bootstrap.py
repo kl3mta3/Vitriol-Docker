@@ -398,6 +398,11 @@ _ADDITIVE_COLUMNS: list[tuple[str, str, str]] = [
     # over other admins without granting server-settings access.
     ("users", "is_sudo_admin",
      "ALTER TABLE users ADD COLUMN is_sudo_admin BOOLEAN NOT NULL DEFAULT 0"),
+    # Self-delete feature — server-wide master toggle and per-role flag.
+    ("server_settings", "allow_self_delete",
+     "ALTER TABLE server_settings ADD COLUMN allow_self_delete BOOLEAN NOT NULL DEFAULT 1"),
+    ("custom_roles", "can_self_delete",
+     "ALTER TABLE custom_roles ADD COLUMN can_self_delete BOOLEAN NOT NULL DEFAULT 1"),
 ]
 
 

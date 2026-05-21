@@ -170,15 +170,18 @@
     </details>
 
     <details>
-      <summary>Files-tab access <span class="muted small">(works at any base)</span></summary>
-    
+      <summary>Files-tab access &amp; account permissions <span class="muted small">(works at any base)</span></summary>
+
         <label class="checkbox-row"><input type="checkbox" name="can_view_own_files" /> <span>View own Files tab</span></label>
         <label class="checkbox-row"><input type="checkbox" name="can_view_others_files" /> <span>See other users' files (admin base)</span></label>
         <label class="checkbox-row"><input type="checkbox" name="can_download_others_files" /> <span>Download other users' files (admin base)</span></label>
         <label class="checkbox-row"><input type="checkbox" name="can_delete_others_files" /> <span>Delete other users' files (admin base)</span></label>
      
+        <label class="checkbox-row" style="margin-top:8px;"><input type="checkbox" name="can_self_delete" /> <span>Allow account self-deletion <em class="muted small">(user can delete their own account from their profile)</em></span></label>
+
       <p class="muted small">
         "View own Files tab" works at any base ceiling (it's the Files-tab gate). The three "other users' files" caps require base=Admin.
+        Uncheck "Allow account self-deletion" to prevent users in this role from deleting their own accounts even when the server-wide toggle is on.
       </p>
     </details>
 

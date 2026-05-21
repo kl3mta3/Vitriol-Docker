@@ -123,6 +123,7 @@ def _to_out(s: ServerSettings) -> ServerSettingsOut:
         show_limit_hit_notice=bool(getattr(s, "show_limit_hit_notice", True)),
         show_user_support_button=bool(getattr(s, "show_user_support_button", False)),
         tips_enabled=bool(getattr(s, "tips_enabled", True)),
+        allow_self_delete=bool(getattr(s, "allow_self_delete", True)),
     )
 
 
@@ -217,7 +218,7 @@ def patch_server_settings(
         # Support contact
         "support_email", "support_discord_url", "support_discord_shared",
         "show_limit_hit_notice", "show_user_support_button",
-        "tips_enabled",
+        "tips_enabled", "allow_self_delete",
     }
     for f in plain_fields:
         # Use model_fields_set rather than `v is not None` so that a field

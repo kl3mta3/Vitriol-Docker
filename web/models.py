@@ -377,6 +377,12 @@ class CustomRole(Base):
     can_view_others_files = Column(Boolean, nullable=False, default=False, server_default="0")
     can_download_others_files = Column(Boolean, nullable=False, default=False, server_default="0")
     can_delete_others_files = Column(Boolean, nullable=False, default=False, server_default="0")
+    # When True (default), users assigned this role are allowed to delete
+    # their own account from the profile page. Set to False to prevent
+    # e.g. demo or managed accounts from self-deleting. The server-wide
+    # allow_self_delete toggle on ServerSettings is the master switch —
+    # if that's off, nobody can self-delete regardless of this flag.
+    can_self_delete = Column(Boolean, nullable=False, default=True, server_default="1")
     # When True, members of this role can change other users'
     # `max_file_size_bytes` per-user override (the third tier of the
     # file-size cap). Admin-tier capability — only meaningful when
@@ -739,6 +745,12 @@ class ServerSettings(Base):
 
     super_admin_can_self_compile = Column(Boolean, nullable=False, default=True)
     admin_can_self_compile = Column(Boolean, nullable=False, default=True)
+    # Master toggle for the user self-delete feature. When False, the
+    # Danger Zone card on the profile page is hidden for everyone and
+    # DELETE /me is rejected. Default True (opt-out); operators who want
+    # to prevent all users from self-deleting flip this off. Can also
+    # be restricted per custom role via CustomRole.can_self_delete.
+    allow_self_delete = Column(Boolean, nullable=False, default=True, server_default="1")
 
     # Per-role retention policy for converted output files. JSON shape:
     #   { "<role>": {"max_files": int, "max_age": int, "age_unit": str,

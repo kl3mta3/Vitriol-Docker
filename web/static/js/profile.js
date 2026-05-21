@@ -176,6 +176,45 @@ if (reqBtn) reqBtn.addEventListener('click', async () => {
 
 refreshKeys();
 
+// ---------- Delete account ----------
+(function () {
+  const btn   = document.getElementById('delete-account-btn');
+  const modal = document.getElementById('delete-account-modal');
+  const form  = document.getElementById('delete-account-form');
+  const topMsg = document.getElementById('delete-account-msg');
+  if (!btn || !modal || !form) return;
+
+  modal.querySelectorAll('[data-close]').forEach(el =>
+    el.addEventListener('click', () => modal.close())
+  );
+
+  btn.addEventListener('click', () => {
+    form.reset();
+    document.getElementById('delete-account-modal-msg').hidden = true;
+    modal.showModal();
+  });
+
+  form.addEventListener('submit', async (e) => {
+    e.preventDefault();
+    const modalMsg = document.getElementById('delete-account-modal-msg');
+    modalMsg.hidden = true;
+    const phrase = (form.confirm_phrase.value || '').trim().toLowerCase();
+    if (phrase !== 'delete my account') {
+      modalMsg.textContent = 'Please type "delete my account" exactly to confirm.';
+      modalMsg.hidden = false;
+      return;
+    }
+    try {
+      await api.del('/me');
+      // Account gone — redirect to sign-in.
+      window.location.href = '/signin';
+    } catch (ex) {
+      modalMsg.textContent = ex.detail || 'Failed to delete account.';
+      modalMsg.hidden = false;
+    }
+  });
+})();
+
 // ---------- Support modal ----------
 (function () {
   const btn   = document.getElementById('support-btn');

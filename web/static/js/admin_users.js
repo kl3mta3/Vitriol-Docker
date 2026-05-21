@@ -759,6 +759,8 @@ function openRoleForm(cr) {
     'can_set_user_file_size_cap',
     // Per-user retention edit permission — also admin-tier.
     'can_set_user_retention',
+    // Account self-deletion permission — works at any base.
+    'can_self_delete',
   ]) {
     if (f[flag]) f[flag].checked = !!(cr && cr[flag]);
   }
@@ -848,6 +850,7 @@ roleForm.addEventListener('submit', async (e) => {
     can_delete_others_files: roleForm.can_delete_others_files ? roleForm.can_delete_others_files.checked : false,
     can_set_user_file_size_cap: roleForm.can_set_user_file_size_cap ? roleForm.can_set_user_file_size_cap.checked : false,
     can_set_user_retention: roleForm.can_set_user_retention ? roleForm.can_set_user_retention.checked : false,
+    can_self_delete: roleForm.can_self_delete ? roleForm.can_self_delete.checked : true,
     max_file_size_bytes: (() => {
       const el = roleForm.max_file_size_mb;
       if (!el || el.value === '') return null;

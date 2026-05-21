@@ -65,6 +65,9 @@ def _common_ctx(request: Request, user: Optional[User], db: Session) -> dict:
         "support_discord_shared": bool(getattr(s, "support_discord_shared", False)) if s else False,
         "show_limit_hit_notice": bool(getattr(s, "show_limit_hit_notice", True)) if s else True,
         "show_user_support_button": bool(getattr(s, "show_user_support_button", False)) if s else False,
+        # Self-delete: server master switch AND custom-role flag (if any).
+        # Super admins are excluded — they can't delete themselves regardless.
+        "allow_self_delete": _can_self_delete(user, s),
         "show_users_tab": user is not None and has_capability(user, CAN_VIEW_USERS_TAB),
         "show_server_tab": user is not None and has_capability(user, CAN_VIEW_SERVER_TAB),
         "show_files_tab": user is not None and has_capability(user, CAN_VIEW_OWN_FILES),
@@ -78,6 +81,20 @@ def _common_ctx(request: Request, user: Optional[User], db: Session) -> dict:
         # None when tips are disabled or the table is empty.
         "tip_text": _pick_tip(db, s),
     }
+
+
+def _can_self_delete(user, s: Optional[ServerSettings]) -> bool:
+    """True when this user is allowed to delete their own account."""
+    if user is None:
+        return False
+    if user.role == Role.super_admin:
+        return False  # super admin can never self-delete
+    if s is None or not bool(getattr(s, "allow_self_delete", True)):
+        return False  # server master switch is off
+    cr = getattr(user, "custom_role", None)
+    if cr is not None and not bool(getattr(cr, "can_self_delete", True)):
+        return False  # role disallows it
+    return True
 
 
 def _pick_tip(db: Session, s: Optional[ServerSettings]) -> Optional[str]:

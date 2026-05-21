@@ -26,6 +26,31 @@ def me(user: User = Depends(get_current_user)):
     return user
 
 
+@router.delete("", response_model=MessageResponse)
+def delete_me(user: User = Depends(get_current_user), db: Session = Depends(get_db)):
+    """Allow a user to permanently delete their own account.
+
+    Gated by two toggles:
+      1. ServerSettings.allow_self_delete (master switch — default on).
+      2. CustomRole.can_self_delete (per-role, only checked when the user
+         has a custom role — default on).
+    Super admins can never self-delete.
+    """
+    if user.role == Role.super_admin:
+        raise HTTPException(status_code=403, detail="The super admin account cannot be self-deleted.")
+    s: Optional[ServerSettings] = db.query(ServerSettings).get(1)
+    if s is None or not bool(getattr(s, "allow_self_delete", True)):
+        raise HTTPException(status_code=403, detail="Account self-deletion is disabled on this server.")
+    cr = getattr(user, "custom_role", None)
+    if cr is not None and not bool(getattr(cr, "can_self_delete", True)):
+        raise HTTPException(status_code=403, detail="Your role does not permit account self-deletion.")
+    uid = user.id
+    db.delete(user)
+    db.commit()
+    audit.log(db, None, "self_delete", target_user_id=uid)
+    return MessageResponse(message="Account deleted.")
+
+
 VALID_THEMES = {"default", "crimson", "verdant", "cobalt", "parchment", "obsidian"}
 VALID_BORDER_STYLES = {"", "vitriol", "runes", "arcane", "circuit", "minimal", "vine", "helix"}
 
