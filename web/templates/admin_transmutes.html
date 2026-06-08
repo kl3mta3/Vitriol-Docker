@@ -11,26 +11,25 @@
      are visible at a glance. Refreshes when the window dropdown changes
      and on the same 2s tick as the active list. #}
   <div class="transmutes-stats">
-    <div class="stat-block">
-      <span class="stat-label" id="stats-window-label">Daily transmutes</span>
-      <span class="stat-value" id="stats-total">—</span>
+    <div class="stat-headline">
+      <h2 class="display small">
+        <span id="stats-window-label">Daily transmutes</span>
+        <span class="stat-value" id="stats-total">—</span>
+      </h2>
       <span class="stat-sub muted small">
         <span id="stats-stone">0</span> w/ stone ·
         <span id="stats-non-stone">0</span> plain
       </span>
     </div>
-    <label class="stat-window">
-      <span class="muted small">Window</span>
-      <select id="stats-window">
-        <option value="today" selected>Today</option>
-        <option value="weekly">Last 7 days</option>
-        <option value="monthly">Last 30 days</option>
-        <option value="3mo">Last 3 months</option>
-        <option value="6mo">Last 6 months</option>
-        <option value="yearly">Last year</option>
-        <option value="all">All time</option>
-      </select>
-    </label>
+    <select id="stats-window" class="stat-window-select" aria-label="Window">
+      <option value="today" selected>Today</option>
+      <option value="weekly">Last 7 days</option>
+      <option value="monthly">Last 30 days</option>
+      <option value="3mo">Last 3 months</option>
+      <option value="6mo">Last 6 months</option>
+      <option value="yearly">Last year</option>
+      <option value="all">All time</option>
+    </select>
   </div>
 
   <div class="users-toolbar">
