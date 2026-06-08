@@ -45,14 +45,30 @@ async def ws_job(websocket: WebSocket, job_id: int, db: Session = Depends(get_db
         return
 
     await websocket.accept()
+    # Subscribe BEFORE reading the snapshot. The job row from line 42 was
+    # loaded when the route handler created it (status=queued); by the time
+    # the WS opens, the dispatcher may have already run the job to completion
+    # and published every event. Subscribing first guarantees we catch any
+    # events that fire from this point on; db.refresh() then gives us the
+    # latest committed status (running/done/failed) instead of the stale
+    # "queued" cached on the row. Without this ordering, a fast job races
+    # past the WS and the UI sticks on "queued" forever.
     q = conv_svc.subscribe(job_id)
     try:
-        # Initial snapshot.
+        db.refresh(job)
         await websocket.send_json({
             "type": "snapshot",
             "status": job.status.value,
             "progress": job.progress,
         })
+        # If the job already reached a terminal state before we subscribed,
+        # forward anything buffered (the done/failed/cancelled event carries
+        # warnings/error the UI wants) and close. Without this, the client
+        # would sit on a dead socket waiting for an event that already fired.
+        if job.status.value in ("done", "failed", "cancelled"):
+            while not q.empty():
+                await websocket.send_json(q.get_nowait())
+            return
         while True:
             try:
                 event = await asyncio.wait_for(q.get(), timeout=30)

@@ -21,6 +21,11 @@ CAN_USE_SELF_COMPILE = "use_self_compile"
 CAN_VIEW_PROFILE = "view_profile"
 CAN_VIEW_USERS_TAB = "view_users_tab"
 CAN_VIEW_SERVER_TAB = "view_server_tab"
+# Active-transmutes admin tab — live view of queued + running conversions
+# across all users, with per-item skip / pause / stop controls and a
+# rollup of completed-transmute counts over selectable windows. Admin-tier
+# capability; custom roles can opt in via can_view_active_transmutes.
+CAN_VIEW_ACTIVE_TRANSMUTES = "view_active_transmutes"
 CAN_CREATE_USER = "create_user"
 CAN_CREATE_ADMIN = "create_admin"
 CAN_DELETE_ADMIN = "delete_admin"
@@ -64,6 +69,7 @@ _ROLE_CAPS: dict[Role, set[str]] = {
     Role.super_admin: {
         CAN_VIEW_APP, CAN_RUN_CONVERSION, CAN_USE_STONE, CAN_USE_SELF_COMPILE,
         CAN_VIEW_PROFILE, CAN_VIEW_USERS_TAB, CAN_VIEW_SERVER_TAB,
+        CAN_VIEW_ACTIVE_TRANSMUTES,
         CAN_CREATE_USER, CAN_CREATE_ADMIN, CAN_DELETE_ADMIN,
         CAN_RESET_OTHER_CREDS, CAN_RESET_ANY_CREDS,
         CAN_SUSPEND_USER, CAN_BAN_USER, CAN_SUSPEND_ADMIN, CAN_BAN_ADMIN,
@@ -76,6 +82,7 @@ _ROLE_CAPS: dict[Role, set[str]] = {
     Role.admin: {
         CAN_VIEW_APP, CAN_RUN_CONVERSION, CAN_USE_STONE, CAN_USE_SELF_COMPILE,
         CAN_VIEW_PROFILE, CAN_VIEW_USERS_TAB,
+        CAN_VIEW_ACTIVE_TRANSMUTES,
         CAN_CREATE_USER, CAN_RESET_OTHER_CREDS,
         CAN_SUSPEND_USER, CAN_BAN_USER, CAN_SUSPEND_ADMIN,
         CAN_RESTART_SERVER,
@@ -117,6 +124,7 @@ _CUSTOM_FLAG_FOR_CAP: dict[str, str] = {
     # Self-compile additionally requires stone (see fallthrough below).
     CAN_USE_SELF_COMPILE: "self_compile_enabled",
     CAN_VIEW_USERS_TAB: "can_view_users_tab",
+    CAN_VIEW_ACTIVE_TRANSMUTES: "can_view_active_transmutes",
     CAN_CREATE_USER: "can_create_user",
     CAN_SUSPEND_USER: "can_suspend_user",
     CAN_BAN_USER: "can_ban_user",

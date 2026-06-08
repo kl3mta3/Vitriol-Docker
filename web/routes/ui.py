@@ -12,7 +12,7 @@ from sqlalchemy.orm import Session
 from .. import __version__
 from ..auth import permissions as _perms
 from ..auth import email as email_svc
-from ..auth.permissions import has_capability, CAN_VIEW_USERS_TAB, CAN_VIEW_SERVER_TAB, CAN_VIEW_OWN_FILES
+from ..auth.permissions import has_capability, CAN_VIEW_USERS_TAB, CAN_VIEW_SERVER_TAB, CAN_VIEW_OWN_FILES, CAN_VIEW_ACTIVE_TRANSMUTES
 from ..deps import get_current_user_optional, get_db
 from ..models import (
     ApprovalRequest, ApprovalStatus, Role, ServerSettings, Status, Tip, TokenPurpose, User,
@@ -71,6 +71,7 @@ def _common_ctx(request: Request, user: Optional[User], db: Session) -> dict:
         "show_users_tab": user is not None and has_capability(user, CAN_VIEW_USERS_TAB),
         "show_server_tab": user is not None and has_capability(user, CAN_VIEW_SERVER_TAB),
         "show_files_tab": user is not None and has_capability(user, CAN_VIEW_OWN_FILES),
+        "show_active_tab": user is not None and has_capability(user, CAN_VIEW_ACTIVE_TRANSMUTES),
         # Single source of truth for the app version — comes from
         # web/__init__.py:__version__. Templates use this for:
         #   1. Static asset cache-busting URLs (?v={{ v }}) via base.html
@@ -179,6 +180,15 @@ def admin_users_page(request: Request, user: Optional[User] = Depends(get_curren
     if not has_capability(user, CAN_VIEW_USERS_TAB):
         return RedirectResponse(url="/")
     return templates.TemplateResponse(request, "admin_users.html", _common_ctx(request, user, db))
+
+
+@router.get("/admin/transmutes", response_class=HTMLResponse)
+def admin_transmutes_page(request: Request, user: Optional[User] = Depends(get_current_user_optional), db: Session = Depends(get_db)):
+    if user is None:
+        return RedirectResponse(url="/signin")
+    if not has_capability(user, CAN_VIEW_ACTIVE_TRANSMUTES):
+        return RedirectResponse(url="/")
+    return templates.TemplateResponse(request, "admin_transmutes.html", _common_ctx(request, user, db))
 
 
 @router.get("/admin/server", response_class=HTMLResponse)

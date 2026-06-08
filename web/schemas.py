@@ -461,6 +461,7 @@ class CustomRoleOut(BaseModel):
     can_grant_self_compile: bool
     can_restart_server: bool
     can_view_users_tab: bool
+    can_view_active_transmutes: bool = False
     can_reset_other_creds: bool
     can_view_own_files: bool = False
     can_view_others_files: bool = False
@@ -500,6 +501,7 @@ class CustomRoleCreateRequest(BaseModel):
     can_grant_self_compile: bool = False
     can_restart_server: bool = False
     can_view_users_tab: bool = False
+    can_view_active_transmutes: bool = False
     can_reset_other_creds: bool = False
     can_view_own_files: bool = False
     can_view_others_files: bool = False
@@ -531,6 +533,7 @@ class CustomRoleUpdateRequest(BaseModel):
     can_grant_self_compile: Optional[bool] = None
     can_restart_server: Optional[bool] = None
     can_view_users_tab: Optional[bool] = None
+    can_view_active_transmutes: Optional[bool] = None
     can_reset_other_creds: Optional[bool] = None
     can_view_own_files: Optional[bool] = None
     can_view_others_files: Optional[bool] = None

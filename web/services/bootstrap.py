@@ -403,6 +403,12 @@ _ADDITIVE_COLUMNS: list[tuple[str, str, str]] = [
      "ALTER TABLE server_settings ADD COLUMN allow_self_delete BOOLEAN NOT NULL DEFAULT 1"),
     ("custom_roles", "can_self_delete",
      "ALTER TABLE custom_roles ADD COLUMN can_self_delete BOOLEAN NOT NULL DEFAULT 1"),
+    # Active-transmutes admin tab — visibility into the live queue +
+    # running conversions with skip/pause/stop controls. Admin-tier
+    # custom roles opt in via this flag; built-in admin + super_admin
+    # get it automatically through _ROLE_CAPS in permissions.py.
+    ("custom_roles", "can_view_active_transmutes",
+     "ALTER TABLE custom_roles ADD COLUMN can_view_active_transmutes BOOLEAN NOT NULL DEFAULT 0"),
 ]
 
 

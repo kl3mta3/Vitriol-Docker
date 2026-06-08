@@ -63,6 +63,7 @@ def _to_out(cr: CustomRole, user_count: int) -> CustomRoleOut:
         can_grant_self_compile=cr.can_grant_self_compile,
         can_restart_server=cr.can_restart_server,
         can_view_users_tab=cr.can_view_users_tab,
+        can_view_active_transmutes=getattr(cr, "can_view_active_transmutes", False),
         can_reset_other_creds=cr.can_reset_other_creds,
         can_view_own_files=cr.can_view_own_files,
         can_view_others_files=cr.can_view_others_files,
@@ -101,7 +102,8 @@ def _enforce_admin_only_flags(payload, base: Role) -> None:
     admin_only = (
         "can_create_user", "can_suspend_user", "can_ban_user",
         "can_approve_pending", "can_grant_stone", "can_grant_self_compile",
-        "can_restart_server", "can_view_users_tab", "can_reset_other_creds",
+        "can_restart_server", "can_view_users_tab", "can_view_active_transmutes",
+        "can_reset_other_creds",
         # The *_others files caps are admin-tier — viewing/touching
         # someone else's outputs requires the base to permit it.
         "can_view_others_files", "can_download_others_files",
@@ -169,6 +171,7 @@ def create_role(
         can_grant_self_compile=req.can_grant_self_compile,
         can_restart_server=req.can_restart_server,
         can_view_users_tab=req.can_view_users_tab,
+        can_view_active_transmutes=req.can_view_active_transmutes,
         can_reset_other_creds=req.can_reset_other_creds,
         can_view_own_files=req.can_view_own_files,
         can_view_others_files=req.can_view_others_files,
@@ -210,7 +213,8 @@ def update_role(
         "stone_enabled", "self_compile_enabled",
         "can_create_user", "can_suspend_user", "can_ban_user",
         "can_approve_pending", "can_grant_stone", "can_grant_self_compile",
-        "can_restart_server", "can_view_users_tab", "can_reset_other_creds",
+        "can_restart_server", "can_view_users_tab", "can_view_active_transmutes",
+        "can_reset_other_creds",
         "can_view_own_files", "can_view_others_files",
         "can_download_others_files", "can_delete_others_files",
         "can_set_user_file_size_cap", "can_set_user_retention",

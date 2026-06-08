@@ -366,6 +366,10 @@ class CustomRole(Base):
     can_grant_self_compile = Column(Boolean, nullable=False, default=False)
     can_restart_server = Column(Boolean, nullable=False, default=False)
     can_view_users_tab = Column(Boolean, nullable=False, default=False)
+    # Grants the active-transmutes admin tab — visibility into queued +
+    # running conversions across all users, with skip / pause / stop
+    # controls and rollup stats. Admin-tier; base_role must permit it.
+    can_view_active_transmutes = Column(Boolean, nullable=False, default=False, server_default="0")
     can_reset_other_creds = Column(Boolean, nullable=False, default=False)
 
     # Files-tab permissions. own = the user's own outputs (the Files tab

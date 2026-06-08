@@ -747,7 +747,8 @@ function openRoleForm(cr) {
   f.base_role.value = cr ? cr.base_role : 'user';
   for (const flag of [
     'stone_enabled', 'self_compile_enabled',
-    'can_view_users_tab', 'can_create_user', 'can_suspend_user', 'can_ban_user',
+    'can_view_users_tab', 'can_view_active_transmutes',
+    'can_create_user', 'can_suspend_user', 'can_ban_user',
     'can_approve_pending', 'can_grant_stone', 'can_grant_self_compile',
     'can_reset_other_creds', 'can_restart_server',
     // Files-tab caps — own_files works at any base; the *_others ones
@@ -836,6 +837,7 @@ roleForm.addEventListener('submit', async (e) => {
     rate_limit_per_minute: roleForm.rate_limit_per_minute.value === '' ? null : Number(roleForm.rate_limit_per_minute.value),
     queue_weight: roleForm.queue_weight.value === '' ? null : Number(roleForm.queue_weight.value),
     can_view_users_tab: roleForm.can_view_users_tab.checked,
+    can_view_active_transmutes: roleForm.can_view_active_transmutes ? roleForm.can_view_active_transmutes.checked : false,
     can_create_user: roleForm.can_create_user.checked,
     can_suspend_user: roleForm.can_suspend_user.checked,
     can_ban_user: roleForm.can_ban_user.checked,

@@ -1,0 +1,58 @@
+{% extends "base.html" %}
+{% block title %}Active Transmutes — {{ brand_title }}{% endblock %}
+{% block content %}
+<section class="admin-page">
+  <header class="admin-head">
+    <h1 class="display">Active Transmutes</h1>
+  </header>
+
+  {# Top rollup card — completed-transmute count over the selected window.
+     Stone vs non-stone shown separately so philosopher-stone usage trends
+     are visible at a glance. Refreshes when the window dropdown changes
+     and on the same 2s tick as the active list. #}
+  <div class="transmutes-stats">
+    <div class="stat-block">
+      <span class="stat-label" id="stats-window-label">Daily transmutes</span>
+      <span class="stat-value" id="stats-total">—</span>
+      <span class="stat-sub muted small">
+        <span id="stats-stone">0</span> w/ stone ·
+        <span id="stats-non-stone">0</span> plain
+      </span>
+    </div>
+    <label class="stat-window">
+      <span class="muted small">Window</span>
+      <select id="stats-window">
+        <option value="today" selected>Today</option>
+        <option value="weekly">Last 7 days</option>
+        <option value="monthly">Last 30 days</option>
+        <option value="3mo">Last 3 months</option>
+        <option value="6mo">Last 6 months</option>
+        <option value="yearly">Last year</option>
+        <option value="all">All time</option>
+      </select>
+    </label>
+  </div>
+
+  <div class="users-toolbar">
+    <span id="active-count" class="muted small">No active transmutes.</span>
+  </div>
+
+  <table class="users-table" id="active-table">
+    <thead>
+      <tr>
+        <th>User</th>
+        <th>State</th>
+        <th>Conversion</th>
+        <th>Stone</th>
+        <th>Progress</th>
+        <th>Queued</th>
+        <th class="row-actions-col"></th>
+      </tr>
+    </thead>
+    <tbody id="active-tbody"></tbody>
+  </table>
+</section>
+{% endblock %}
+{% block scripts %}
+<script src="/static/js/admin_transmutes.js?v={{ v }}"></script>
+{% endblock %}

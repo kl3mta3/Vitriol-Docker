@@ -117,6 +117,25 @@ _queue_event = threading.Event()           # wakes the dispatcher
 _slot_semaphore = threading.Semaphore(_max_workers)
 _rr_index = 0                              # current position in rotation
 
+# Held bucket — admin-paused queued jobs. They stay out of the round-robin
+# until resume() moves them back into their user's deque. Maps job_id →
+# (user_id, weight) so resume can restore the original queue placement.
+# Pausing a *running* job isn't possible without engine cooperation (the
+# convert_file call is synchronous in a worker thread); admins get only
+# stop for those, which routes through the existing cancellation token.
+_held_jobs: dict[int, tuple[int, int]] = {}
+
+# job_id → user_id index for currently-queued jobs. Lets list_active()
+# enumerate without walking every deque on every poll. Kept in sync with
+# _user_queues by submit() / skip() / pause() / dispatcher pops.
+_queued_index: dict[int, int] = {}
+
+# job_id → user_id for jobs currently executing in the ThreadPoolExecutor.
+# Populated by _run() right after the row is loaded and removed in finally.
+# Separate from _tokens because list_active() needs the user_id for the
+# admin UI and _tokens only stores the cancellation token.
+_running_jobs: dict[int, int] = {}
+
 
 def _dispatcher() -> None:
     """Background thread — weighted round-robin across users.
@@ -139,7 +158,9 @@ def _dispatcher() -> None:
             for _ in range(weight):
                 if not _user_queues[uid]:
                     break
-                jobs_to_submit.append(_user_queues[uid].popleft())
+                jid = _user_queues[uid].popleft()
+                _queued_index.pop(jid, None)
+                jobs_to_submit.append(jid)
             
             if not _user_queues[uid]:
                 del _user_queues[uid]
@@ -177,15 +198,119 @@ def submit(job_id: int, user_id: int = 0, weight: int = 1) -> None:
     with _queue_lock:
         _user_queues.setdefault(user_id, deque()).append(job_id)
         _user_weights[user_id] = weight
+        _queued_index[job_id] = user_id
     _queue_event.set()  # wake the dispatcher
 
 
 def cancel(job_id: int) -> bool:
+    """Cancel a running job (best-effort) OR drop a queued/held job from the
+    pipeline. Returns True if either path matched something.
+
+    For queued/held jobs we also publish a `cancelled` event so subscribers
+    waiting on the websocket don't hang; the DB-row flip to `cancelled` is
+    the caller's responsibility (admin route does it, since the cancel here
+    runs in whatever thread called us and we don't want to touch the DB
+    from a non-worker thread without a fresh session).
+    """
     tok = _tokens.get(job_id)
-    if tok is None:
-        return False
-    tok.cancel()
+    if tok is not None:
+        tok.cancel()
+        return True
+    with _queue_lock:
+        uid = _queued_index.pop(job_id, None)
+        if uid is not None:
+            try:
+                _user_queues.get(uid, deque()).remove(job_id)
+            except ValueError:
+                pass
+            if uid in _user_queues and not _user_queues[uid]:
+                del _user_queues[uid]
+                _user_weights.pop(uid, None)
+            return True
+        if job_id in _held_jobs:
+            _held_jobs.pop(job_id, None)
+            return True
+    return False
+
+
+# ----------------------------------------------------- admin queue controls
+
+def skip(job_id: int) -> bool:
+    """Move a queued job to the *tail* of its user's bucket. Lower-priority
+    in the sense that everything queued after it (in that bucket) runs
+    first. No effect on running or held jobs."""
+    with _queue_lock:
+        uid = _queued_index.get(job_id)
+        if uid is None:
+            return False
+        dq = _user_queues.get(uid)
+        if dq is None:
+            _queued_index.pop(job_id, None)
+            return False
+        try:
+            dq.remove(job_id)
+        except ValueError:
+            _queued_index.pop(job_id, None)
+            return False
+        dq.append(job_id)
+        return True
+
+
+def pause(job_id: int) -> bool:
+    """Lift a queued job out of the round-robin into the held bucket.
+    No-op for running jobs (Python can't pause a synchronous worker).
+    Returns False if the job isn't currently queued."""
+    with _queue_lock:
+        uid = _queued_index.pop(job_id, None)
+        if uid is None:
+            return False
+        dq = _user_queues.get(uid)
+        if dq is not None:
+            try:
+                dq.remove(job_id)
+            except ValueError:
+                pass
+            if not dq:
+                del _user_queues[uid]
+                weight = _user_weights.pop(uid, 1)
+            else:
+                weight = _user_weights.get(uid, 1)
+        else:
+            weight = 1
+        _held_jobs[job_id] = (uid, weight)
+        return True
+
+
+def resume(job_id: int) -> bool:
+    """Put a held job back into its user's queue (at the tail)."""
+    with _queue_lock:
+        entry = _held_jobs.pop(job_id, None)
+        if entry is None:
+            return False
+        uid, weight = entry
+        _user_queues.setdefault(uid, deque()).append(job_id)
+        _user_weights[uid] = weight
+        _queued_index[job_id] = uid
+    _queue_event.set()
     return True
+
+
+def list_active() -> list[dict]:
+    """Snapshot of every job currently moving through the pipeline —
+    running, queued, or held. Each item: {job_id, user_id, state,
+    position?}. Position is only meaningful for `queued` and reflects
+    the index within the user's bucket (0 = next out)."""
+    with _queue_lock:
+        out: list[dict] = []
+        for jid, uid in _running_jobs.items():
+            out.append({"job_id": jid, "user_id": uid, "state": "running"})
+        for uid, dq in _user_queues.items():
+            for pos, jid in enumerate(dq):
+                out.append({"job_id": jid, "user_id": uid,
+                            "state": "queued", "position": pos})
+        for jid, (uid, _w) in _held_jobs.items():
+            out.append({"job_id": jid, "user_id": uid, "state": "held"})
+    return out
 
 
 def _run(job_id: int) -> None:
@@ -207,6 +332,8 @@ def _run(job_id: int) -> None:
         job: Optional[Job] = db.query(Job).get(job_id)
         if job is None:
             return
+        with _queue_lock:
+            _running_jobs[job_id] = job.user_id
         job.status = JobStatus.running
         job.started_at = datetime.utcnow()
         job.progress = 0
@@ -342,6 +469,8 @@ def _run(job_id: int) -> None:
             _publish(job_id, {"type": "failed", "error": job.error})
     finally:
         _tokens.pop(job_id, None)
+        with _queue_lock:
+            _running_jobs.pop(job_id, None)
         # Cleanup password file if any. For local sources the .pw
         # sidecar lives next to src_local; for non-local sources it
         # would have been on the original upload (also local) — best
